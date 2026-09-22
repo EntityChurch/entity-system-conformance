@@ -49,6 +49,16 @@ not a content digest, and this snapshot is the counterexample, taken the same da
 as a caveat rather than a retraction; recorded on `TRACKER-entity-system-architecture.md` as `F79`,
 because the version-hygiene question is arch's.
 
+⇒ **ROUTED 2026-09-16 (b)** as
+`ROUTING-2026-09-16-b-entity-system-architecture-the-version-header-is-declared-the-source-of-truth-and-two-documents-falsified-it.md`
+(`CQ-46`/`CQ-47`/`CQ-48`), and **the ask changed shape on contact with their tree.** Arch already run
+a proposal-first rule and an L1 gate (`entity-system-arch-tools/spec-tool/provenance.py`), and **had
+already measured and rejected keying it on the version header** — *"both changed zero version headers,
+**correctly** … a version-triggered gate is silent on precisely the class arch uses most."* So the
+packet does **not** ask for the bump. It asks **what a downstream consumer pins**, given that on this
+boundary the version header did not move **and the corpus did not either** — and it carries `CQ-47`,
+where `ENTITY-NATIVE-TYPE-SYSTEM`'s §10.2 edit fires **neither** of that gate's two triggers.
+
 ⚠ **The fixture is unchanged and is NOT currently blessed on one category.**
 `conformance-vectors.cbor` is byte-identical to the `.25` pin (`9695b1f1…`) and arch state its three
 `signature.*` vectors are **under correction** — the recompute is routed to `entity-core-go`, and the

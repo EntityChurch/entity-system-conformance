@@ -65,6 +65,37 @@ import cbordiag  # noqa: E402  — tools' OWN codec; never the suite's
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def suite_source_digest(src_files: list[Path]) -> str:
+    """sha256 over the suite source bytes actually bundled — the instrument's CONTENT identity.
+
+    ⛔ WHY THIS EXISTS, AND IT IS THE THIRD INSTANCE OF ONE CLASS IN ONE DAY. `suite_version` below
+    is `git describe --always --dirty`, and it is recorded in every verdict as the identity of the
+    code that produced it. It is neither necessary nor sufficient:
+
+      * NOT SUFFICIENT — `844a454-dirty` names a commit that does NOT contain the checks that ran.
+        The bundle measured on 2026-09-16 was built from a dirty tree whose contents were committed
+        later as `135bed9`, so a reader resolving `844a454` gets the PREVIOUS ECP-R3 check — the one
+        that passed the defect. A dirty flag says "not this commit" and nothing else.
+      * NEVER REFRESHED — `git describe` is not a file, so it is a dependency of nothing. Commit the
+        tree and the bundle does not rebuild: `make build` says "Nothing to be done" while BUILD.json
+        keeps the stale dirty string forever. **Measured, not theorised**: at `8347e95`, clean tree,
+        `make build` was a no-op and the bundle still read `844a454-dirty`.
+
+    ⇒ The same shape as the two findings routed today — `ENTITY-CBOR-ENCODING` holding version `1.7`
+    across two different documents, and keystone's `v7_version_pinned` stale on 24 of 46 peers.
+    **A commit is not a content digest, and a declaration is not the fact.** This value is computed
+    from the bytes being packaged, so it cannot go stale and cannot be bumped without the code moving.
+    `suite_version` is KEPT — it is the convenient human handle — and is no longer the only answer.
+    """
+    h = hashlib.sha256()
+    for f in sorted(src_files, key=lambda p: p.relative_to(ROOT).as_posix()):
+        h.update(f.relative_to(ROOT).as_posix().encode())
+        h.update(b"\0")
+        h.update(f.read_bytes())
+        h.update(b"\0")
+    return h.hexdigest()
+
+
 def suite_version() -> str:
     try:
         v = subprocess.run(["git", "describe", "--always", "--dirty"], cwd=ROOT,
@@ -74,7 +105,8 @@ def suite_version() -> str:
     return v or "dev"
 
 
-def build_info(req_dir: Path, ids: list[str], runtime: dict) -> tuple[dict, bytes]:
+def build_info(req_dir: Path, ids: list[str], runtime: dict,
+               src_files: list[Path] | None = None) -> tuple[dict, bytes]:
     """Returns (BUILD.json content, the canonical CBOR of the implemented set).
 
     The bytes are the artifact the instrument re-derives its per-run anchor from; their sha256 is
@@ -106,6 +138,9 @@ def build_info(req_dir: Path, ids: list[str], runtime: dict) -> tuple[dict, byte
 
     return {
         "suite_version": suite_version(),
+        # ⭐ The CONTENT identity of the code that ran. `suite_version` is a git handle and is
+        # neither necessary nor sufficient — see suite_source_digest.__doc__ for the measurement.
+        "suite_source_digest": suite_source_digest(src_files) if src_files else None,
         "requirement_digests": digests,
         "requirement_snapshots": snaps,
         # ⛔ NOT `requirement_set_digest`. That name belongs to the per-RUN anchor the instrument
@@ -192,14 +227,18 @@ def main(argv: list[str]) -> int:
     runtime = {"pyrt_sha256": a.pyrt_sha256,
                "musl_loader_sha256": hashlib.sha256(Path(a.loader).read_bytes()).hexdigest(),
                "musl_image": a.musl_image}
-    info, set_bytes = build_info(Path(a.req_dir), a.ids, runtime)
+    src_files = sorted(p for p in (ROOT / "suites" / "py-prototype").rglob("*")
+                       if p.is_file() and p.suffix in (".py", ".sh"))
+    info, set_bytes = build_info(Path(a.req_dir), a.ids, runtime, src_files)
     Path(a.requirements_out).write_bytes(set_bytes)
     info["requirements_artifact"] = Path(a.requirements_out).name
     Path(a.out).write_text(json.dumps(info, indent=2) + "\n")
     print(f"build-info: {info['implemented_set_size']} of {info['requirement_corpus_size']} "
           f"requirement(s)\n  implemented_set_digest {info['implemented_set_digest']}"
           f"\n  {Path(a.requirements_out).name}: {len(set_bytes)} bytes — the instrument re-derives "
-          f"its per-run anchor from these with its OWN codec")
+          f"its per-run anchor from these with its OWN codec"
+          f"\n  suite_source_digest {info['suite_source_digest'][:16]}… over {len(src_files)} "
+          f"source file(s) — the identity `suite_version` ({info['suite_version']}) cannot give")
     return 0
 
 

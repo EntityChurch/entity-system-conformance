@@ -59,6 +59,12 @@ help:
 	@echo "  differential    join all collected runs by requirement id -> $(OUT)/DIFFERENTIAL.md"
 	@echo "  corpus      canonical CBOR build of requirements/ -> $(OUT)/requirement-corpus.cbor + its digest"
 	@echo
+	@echo "  peers           expand the declared peer set (suites/*/PEERS.diag) — membership is a RULE, not a list"
+	@echo "  peer-identity   PEER=<name>: that peer's identity/pin, and whether it is contract-certified"
+	@echo "  the lint parts, each runnable alone and each with a --self-test:"
+	@echo "    lint-requirements lint-items lint-sources lint-spec-data lint-suite-independence"
+	@echo "    lint-suite-constants lint-peer-diversity lint-implements lint-control-set lint-ignored"
+	@echo
 	@echo "  substrate-go   build the reference image via $(SUBSTRATE_GO)'s own 'make build'"
 	@echo "  peer-up        run $(GO_IMAGE) entity-peer as $(PEER_NAME) on network $(NET)"
 	@echo "                 SEED_POLICY=<file> declares the posture; empty = bootstrap default"
@@ -253,7 +259,22 @@ differential:
 	python3 -B tools/differential.py --runs $(OUT)/runs --requirements $(REQ_DIR) --out $(OUT)/DIFFERENTIAL.md
 	@cat $(OUT)/DIFFERENTIAL.md
 
-lint: lint-ignored lint-suite-independence lint-suite-constants lint-sources lint-spec-data lint-requirements lint-items lint-peer-diversity lint-implements
+lint: lint-ignored lint-suite-independence lint-suite-constants lint-sources lint-spec-data lint-requirements lint-items lint-peer-diversity lint-implements lint-control-set
+
+# Stage 7 of docs/WORKFLOW-SUITE-BRINGUP.md — the expected-outcome set, pinned to the obligation it
+# was measured against. Operator direction 2026-09-16: a bring-up chunk must not be built against
+# requirements whose answers we do not already know, because a suite reporting FAIL everywhere and a
+# suite that is simply BROKEN produce identical output. So `fit_for_bringup` requires both a PASS and
+# a FAIL on real peers, and that is checked rather than asserted.
+#
+# ⛔ Rule 1 is the one that earned the file. The first draft recorded `ECP-R3: 3 PASS` from the 06:42
+# run — verdicts scored against requirement text that no longer existed, because ECP-R3 was
+# re-authored between that run and HEAD (9714ce72… → 08155caf…). Every row now pins the requirement's
+# sha256 and the gate recomputes it, so a moved obligation reds instead of silently invalidating the
+# expectations under it. Shown to catch that exact incident: restore the morning digest and it fires.
+lint-control-set:
+	@$(PY) tools/control-set-gate.py --self-test
+	@$(PY) tools/control-set-gate.py
 
 # F76. Every other suite-facing gate measures a DECLARATION that the suite implements an id; none
 # could see WHICH VERSION of the obligation the code implements. ECP-R57's obligation inverted and

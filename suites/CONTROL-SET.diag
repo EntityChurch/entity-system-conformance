@@ -1,0 +1,340 @@
+{
+  "header": [
+    "CONTROL-SET — the peers whose behaviour on a requirement has been OBSERVED, so that a new suite's",
+    "first run can be checked against a declared expectation instead of against somebody's memory.",
+    "",
+    "⛔⛔ THIS FILE IS NOT READABLE BY A SUITE AUTHOR. It contains the answers. An author who reads it",
+    "builds a suite that agrees with this one for reasons that have nothing to do with the protocol,",
+    "which is the exact failure this repo exists to prevent. It is the VALIDATOR's artifact, consumed",
+    "AFTER a new suite has run, never before. docs/BRIEF-SUITE-2.md lists it as forbidden.",
+    "",
+    "⛔ AND IT IS A COMPARISON SET, NEVER AN ANSWER KEY. A new suite disagreeing with a row here is",
+    "exactly one of three things — the specification was ambiguous, the peer is wrong, or ONE OF THE",
+    "TWO SUITES IS WRONG — and finding out which is the entire job. The moment a row here is treated as",
+    "the correct answer, suite 1 has become the oracle and the second suite is a slow copy of it.",
+    "",
+    "WHY IT EXISTS. Operator direction, 2026-09-16: a bring-up chunk must not be built against",
+    "requirements whose answers we do not already know, because a suite reporting FAIL everywhere and a",
+    "suite that is simply broken produce IDENTICAL OUTPUT. A requirement is fit for bring-up only when",
+    "BOTH of its outcome classes have been observed on real peers.",
+    "",
+    "⚠ THE INDEPENDENCE OF THIS DATA IS BOUNDED AND THE BOUND IS STATED PER ROW. These are one",
+    "instrument's readings of a peer's wire behaviour. The OBSERVATION (what bytes came back) is strong;",
+    "the VERDICT (whether that satisfies the obligation) carries this seat's judgement and is exactly",
+    "what a second suite exists to challenge."
+  ],
+  "version": 1,
+  "taken": "2026-09-16",
+  "instrument": {
+    "suite": "py-prototype",
+    "version": "0b82019",
+    "source_digest": "d594454c3f0c54795b7bd97b",
+    "note": [
+      "⭐ FIXED DURING THE REVIEW PASS THAT PRODUCED THIS FILE. The rows were first recorded under",
+      "`844a454-dirty`, and that string is NOT AN IDENTITY: it names a commit that does not contain the",
+      "checks that ran — the bundle was built from a dirty tree later committed as `135bed9`, so a reader",
+      "resolving it gets the PREVIOUS ECP-R3 check, the one that passed the defect. Worse, `git describe`",
+      "is a dependency of no file, so `make build` on a CLEAN tree was a no-op while BUILD.json kept the",
+      "stale dirty string — the identity could not be corrected by rebuilding.",
+      "",
+      "⇒ `source_digest` is sha256 over the 12 bundled suite source files. It cannot go stale and cannot",
+      "be bumped without the code moving. Every row below was re-measured under it.",
+      "",
+      "⚠ Note the shape: this is the THIRD instance in one day of a NAME standing in for CONTENT —",
+      "a spec version header that did not move, a per-peer version pin that went stale, and an instrument",
+      "id that named the wrong commit. Two were routed to other seats; this one was ours."
+    ]
+  },
+  "staleness": [
+    "⛔ EVERY ROW CARRIES THE sha256 OF THE REQUIREMENT FILE IT WAS MEASURED AGAINST, AND THAT IS THE",
+    "WHOLE POINT OF THE FILE. `tools/control-set-gate.py` recomputes each digest from `requirements/`",
+    "every run and FAILS when a row's obligation has moved underneath it.",
+    "",
+    "⭐ THIS RULE WAS EARNED THE SAME HOUR THE FILE WAS WRITTEN. The first draft of this control set was",
+    "built from the 06:42 run and recorded `ECP-R3: 3 PASS on the generator peers`. Those verdicts were",
+    "scored against requirement text that no longer exists — measured, not suspected: ECP-R3 was",
+    "`9714ce72…` in that run and is `08155caf…` at HEAD, and ECP-R7 and ECP-R57 had BOTH moved too.",
+    "The re-authoring of ECP-R3 landed between the two runs. ⇒ A control set that records a verdict",
+    "without the obligation's digest is AP-18 with the blast radius pointed at the validator: it would",
+    "have told a new suite that three peers pass a rule none of them had been measured against.",
+    "",
+    "⇒ EVERY PEER BELOW WAS RE-RUN AFTER THAT POINT, SO EVERY ROW SHARES ONE OBLIGATION TEXT WITH HEAD."
+  ],
+  "peers": [
+    {
+      "name": "core-go",
+      "source": "entity-core-go",
+      "pin": "image_id 5692ce8c0a277527a54f833c878e7dbbba611533bbbc1f23ff0b5784466fec59",
+      "pin_kind": "image content digest",
+      "certified_by_contract": false,
+      "posture": "bootstrap-default (no wide debug grant)",
+      "run_at": "2026-09-16 13:30"
+    },
+    {
+      "name": "python-content",
+      "source": "entity-system-generator",
+      "pin": "head ac93a1cd01947130c67ef773eff2dc941cd02d63 + diff 165481eb0a5ab90fbe63a977304263c2fa2e7d28bf2e0735e76fa9439708e0a3",
+      "pin_kind": "tree head plus a digest of the uncommitted diff under the peer's own paths",
+      "certified_by_contract": false,
+      "posture": "debug-open-grants",
+      "run_at": "2026-09-16 13:29"
+    },
+    {
+      "name": "rust-content",
+      "source": "entity-system-generator",
+      "pin": "head ac93a1cd01947130c67ef773eff2dc941cd02d63 + diff b6e06ca7784ebc2c40ef13809d552cfac0c7497ec85751285eadca9faee67543",
+      "pin_kind": "tree head plus a digest of the uncommitted diff under the peer's own paths",
+      "certified_by_contract": false,
+      "posture": "debug-open-grants",
+      "run_at": "2026-09-16 13:29"
+    },
+    {
+      "name": "typescript-content",
+      "source": "entity-system-generator",
+      "pin": "head ac93a1cd01947130c67ef773eff2dc941cd02d63 + diff 659985d1b70e335b12f2488c78dcca5683ae42ee0118df9ecdbd1848462a784c",
+      "pin_kind": "tree head plus a digest of the uncommitted diff under the peer's own paths",
+      "certified_by_contract": false,
+      "posture": "debug-open-grants",
+      "run_at": "2026-09-16 13:29"
+    }
+  ],
+  "peer_drift": [
+    "⛔⭐ THE COHORT MOVED UNDER US INSIDE ONE WORKING DAY, AND THE PIN IS WHAT MADE IT VISIBLE RATHER",
+    "THAN CONFUSING. RESOLVED AND RE-PINNED — the history is kept because it is the evidence.",
+    "",
+    "Four runs. Same obligations after 11:18; the instrument's identity was corrected at 13:29:",
+    "",
+    "  06:42  generator @ 38f961b3 dirty   ECP-R57  4 of 4 FAIL   ⚠ scored against OLD requirement text",
+    "  13:03  generator @ 38f961b3 dirty   ECP-R57  2 PASS/2 FAIL",
+    "  13:24  generator @ ac93a1cd CLEAN   ECP-R57  2 PASS/2 FAIL",
+    "  13:29  generator @ ac93a1cd dirty   ECP-R57  2 PASS/2 FAIL   ← the rows below, under the",
+    "                                                                 REBUILT instrument 0b82019",
+    "",
+    "The three generator peers sat on ONE git head (`38f961b3`) across the first two runs, so a reader",
+    "tracking the cohort by commit would have seen nothing move and would have been wrong. What",
+    "separated them was the uncommitted-diff digest:",
+    "",
+    "  python-content      dirty c7a2a0cf…   FAIL(silent_drop) → PASS(400 invalid_request)",
+    "  typescript-content  dirty 98a08a92…   FAIL(bare_close)  → PASS(400 invalid_request)",
+    "  rust-content        CLEAN             FAIL(silent_drop) → unchanged",
+    "",
+    "⇒ THE TWO PEERS WITH UNCOMMITTED EDITS IMPROVED AND THE CLEAN ONE DID NOT. That is the F50 hazard",
+    "measured instead of feared, and the same shape as the version-header finding routed to arch today:",
+    "A COMMIT IS NOT A CONTENT DIGEST.",
+    "",
+    "⛔ AND 'DURABLE' WAS THE WRONG WORD FOR ABOUT TWENTY MINUTES — CORRECTED HERE RATHER THAN QUIETLY.",
+    "At 13:24 the generator committed those edits as `ac93a1c` (their W-18), the tree was CLEAN, and",
+    "this file said every peer was now pinned to a committed artifact. By 13:29 the tree was dirty",
+    "again — nine `SYSTEM.toml` files and `tools/check-expectation.py`, which is THEM implementing the",
+    "requirement-keyed gate baselines this seat asked them for. **A counterpart's tree is not a thing",
+    "that becomes clean and stays clean**, and a control set that waits for one will never be written.",
+    "",
+    "⭐⭐ SO THE DURABILITY ARGUMENT IS REPETITION, NOT CLEANLINESS, AND IT IS THE STRONGER ONE ANYWAY.",
+    "These verdicts have now been produced FOUR TIMES across THREE DIFFERENT PEER-TREE STATES —",
+    "dirty `c7a2a0cf…`, clean `ac93a1c`, dirty `165481eb…` — and they did not move. A single clean pin",
+    "is one observation; the same answer across changing peer bytes is evidence the answer is about the",
+    "PEER and not about the moment. The pins below are recorded exactly as measured, point-in-time,",
+    "and the run that produced each one is named.",
+    "",
+    "⭐⭐ AND THE FINDING THAT CAME OUT OF IT IS ROUTABLE AND IS NOT A COMPLAINT — see `w18_blind_spot`.",
+    "",
+    "⛔ THE PRIOR MEASUREMENTS ARE GONE FROM `output/`. Each run overwrites the provenance in place, so",
+    "the 06:42 and 13:03 peer pins cannot be recovered from the tree. The before-values above survive",
+    "ONLY because this file copied them by hand. Run artifacts are not retained — filed as a gap, not",
+    "fixed, and it is a real one for a seat whose product is comparability."
+  ],
+  "w18_blind_spot": [
+    "⭐⭐ A BEHAVIOUR CHANGE LANDED ON A RULE THE CHANGE'S OWN CONTROL COULD NOT SEE. Routable to",
+    "`entity-system-generator`, and it is generous rather than accusatory: THEY NAMED THIS CLASS",
+    "THEMSELVES IN THE SAME COMMIT.",
+    "",
+    "Their `ac93a1c` (W-18) replaced nine hand-copied peer hosts with keystone's `run_host`. Their",
+    "control, quoted from the commit: *\"Pre-port reports were snapshotted before the first rebuild, then",
+    "compared per (file, category, name) across six compositions, both arms, two rounds: 0 SEVERITIES",
+    "MOVED OF 20,280 OBSERVATIONS, with identical check sets — nothing appeared and nothing vanished.\"*",
+    "",
+    "⛔ BUT ECP-R57 AND ECP-R3 ARE **ORACLE BLIND** — verified in `output/DIFFERENTIAL.md` on all four",
+    "peers, regenerated 2026-09-16 13:30: `validate-peer` executes NO check that joins either",
+    "requirement, so a 20,280-observation severity diff over its reports CANNOT CONTAIN A ROW FOR",
+    "EITHER. Their control is correct within its instrument and its instrument is blind here.",
+    "",
+    "⚠ WHAT WE CAN AND CANNOT ATTRIBUTE, STATED PRECISELY BECAUSE THE TEMPTATION IS TO OVERCLAIM:",
+    "",
+    "  ESTABLISHED  two generator peers changed ECP-R57 behaviour inside the window of their change,",
+    "               measured both before and after, and the only edit in that window was W-18's.",
+    "  ESTABLISHED  a severity diff over validate-peer reports could not have seen it either way.",
+    "  NOT ESTABLISHED  that W-18 CAUSED it. Their own message says `rust` was ported to `run_host` on",
+    "               2026-09-13 — three days before — AND RUST DID NOT MOVE. If the port were sufficient,",
+    "               rust should also have moved. Their message names a per-substrate difference in",
+    "               rust's integration, which is consistent with this and does not prove it. THE BISECT",
+    "               IS THEIRS; we can say when it moved, not why.",
+    "",
+    "⭐ THE REASON TO SEND IT: their own commit already says *\"the severity diff is structurally blind to",
+    "what nearly broke … a silent loss would have moved no severity and failed no gate\"* — they found",
+    "one instance of that class themselves and re-hooked it. THIS IS A SECOND INSTANCE OF THE SAME",
+    "CLASS, found from outside, on the conformance surface itself. A change that improves a peer is the",
+    "friendly version of the finding; the same blind spot passes a regression."
+  ],
+  "durable_means": [
+    "⭐ `durable: true` ON AN EXPECTATION MEANS THE VERDICT HAS BEEN REPRODUCED ACROSS DIFFERENT PEER",
+    "BYTES — not that the peer is pinned to a commit. The generator's tree is under active development",
+    "and will be dirty most times you look at it; waiting for a clean pin is waiting forever. Every",
+    "expectation below was produced FOUR TIMES across THREE peer-tree states and did not move.",
+    "",
+    "⛔ WHAT IT DOES NOT MEAN: that the verdict will hold tomorrow. Two of these peers changed behaviour",
+    "on ECP-R57 THIS MORNING. Re-run before trusting a row that matters, and if a row moves, that is",
+    "data about the peer — not a reason to edit this file quietly."
+  ],
+  "rows": [
+    {
+      "requirement": "ECP-R3",
+      "requirement_digest": "08155caf12e17855",
+      "obligation": "a received EXECUTE whose root entity's content_hash does not match its {type, data} is refused with a coded EXECUTE_RESPONSE; the code is NOT asserted",
+      "fit_for_bringup": true,
+      "why_fit": "both outcome classes observed on real peers in one run: 3 conformant, 1 non-conformant",
+      "expectations": [
+        {
+          "peer": "core-go",
+          "expect": "FAIL",
+          "class": "bare_close",
+          "observed": "EOF after 0 of 4 bytes, no coded frame",
+          "durable": true
+        },
+        {
+          "peer": "python-content",
+          "expect": "PASS",
+          "class": "coded_response",
+          "observed": "400 hash_mismatch",
+          "durable": true
+        },
+        {
+          "peer": "rust-content",
+          "expect": "PASS",
+          "class": "coded_response",
+          "observed": "400 non_canonical_ecf",
+          "durable": true
+        },
+        {
+          "peer": "typescript-content",
+          "expect": "PASS",
+          "class": "coded_response",
+          "observed": "400 hash_mismatch",
+          "durable": true
+        }
+      ],
+      "note": [
+        "⭐ THE TWO PASSING CODES DIFFER (`hash_mismatch` vs `non_canonical_ecf`) AND BOTH ARE SCORED PASS,",
+        "WHICH IS CORRECT AND IS THE MOST INSTRUCTIVE ROW HERE. This requirement asserts the FRAME and",
+        "leaves the code unasserted, because no section of the specification assigns one for this cause and",
+        "inventing one is prohibition 2. A second suite that scores these two peers differently from each",
+        "other has almost certainly pinned a code — and that disagreement is worth more than agreement."
+      ]
+    },
+    {
+      "requirement": "ECP-R57",
+      "requirement_digest": "7d115c982b171a67",
+      "obligation": "a message whose root is neither EXECUTE nor EXECUTE_RESPONSE is answered with a coded refusal before closing; a silent drop and a bare close are DISTINCT non-conformances",
+      "fit_for_bringup": true,
+      "why_fit": "both outcome classes observed, AND the non-conformant side splits into its two required sub-classes across different peers",
+      "became_fit": "2026-09-16 13:03. At 06:42 this requirement was 4 of 4 FAIL and was NOT fit — no positive result was obtainable. It became fit because two peers were fixed under us, not because anything here changed.",
+      "expectations": [
+        {
+          "peer": "core-go",
+          "expect": "FAIL",
+          "class": "silent_drop",
+          "observed": "no response and no close, 0 of 4 bytes after 10s",
+          "durable": true
+        },
+        {
+          "peer": "python-content",
+          "expect": "PASS",
+          "class": "coded_response",
+          "observed": "400 invalid_request, control: valid root answered 200",
+          "durable": true
+        },
+        {
+          "peer": "rust-content",
+          "expect": "FAIL",
+          "class": "silent_drop",
+          "observed": "no response and no close, 0 of 4 bytes after 10s",
+          "durable": true
+        },
+        {
+          "peer": "typescript-content",
+          "expect": "PASS",
+          "class": "coded_response",
+          "observed": "400 invalid_request, control: valid root answered 200",
+          "durable": true
+        }
+      ],
+      "note": [
+        "⭐ THIS ROW IS THE BEST VALIDATION TARGET IN THE FILE AND IT IS WORTH SAYING WHY. It carries a PASS,",
+        "a FAIL, and — on the non-conformant side — the sub-class distinction the specification requires be",
+        "scored separately. A suite that collapses `silent_drop` and `bare_close` into one FAIL still gets",
+        "the top-line verdict right on all four peers, so ONLY a control set that records the CLASS can",
+        "catch it. The specification's own words: collapsing them is how a peer gets credit for the wrong fix."
+      ]
+    },
+    {
+      "requirement": "ECP-R7",
+      "requirement_digest": "c55374e48f9cd37a",
+      "obligation": "WITNESS ONLY — 0.8.2.26 rules a check MUST NOT assert a refusal on an unreferenced included entry",
+      "fit_for_bringup": false,
+      "why_unfit": "produces no verdict on any peer, so it cannot validate anything",
+      "expectations": [
+        {
+          "peer": "core-go",
+          "expect": "SKIP",
+          "class": "bare_close",
+          "observed": "EOF after 0 of 4 bytes",
+          "durable": true
+        },
+        {
+          "peer": "python-content",
+          "expect": "SKIP",
+          "class": "coded_conformant",
+          "observed": "400 hash_mismatch",
+          "durable": true
+        },
+        {
+          "peer": "rust-content",
+          "expect": "SKIP",
+          "class": "coded_response_wrong_code",
+          "observed": "400 non_canonical_ecf",
+          "durable": true
+        },
+        {
+          "peer": "typescript-content",
+          "expect": "SKIP",
+          "class": "coded_conformant",
+          "observed": "400 hash_mismatch",
+          "durable": true
+        }
+      ],
+      "note": [
+        "⭐ THE RE-SCOPE REACHED THE INSTRUMENT, AND THIS RUN IS THE EVIDENCE. At 06:42 this check emitted",
+        "FAIL on the three generator peers. At 13:03 it emits SKIP/witness on all four, which is what",
+        "0.8.2.26 requires. The obligation moved, the code followed, and the verdict changed — the thing",
+        "that did NOT happen twice this week and cost a void measurement both times.",
+        "",
+        "⚠ The observations are retained deliberately even though nothing is scored: three peers refuse a",
+        "self-inconsistent unreferenced included entity and one bare-closes. That is real cohort data about",
+        "a mechanism choice the specification blesses both ways, and it is the raw material for the",
+        "re-scoped REFERENCED-entry form, which is designed and not built."
+      ]
+    }
+  ],
+  "not_in_this_file": [
+    "THE OTHER 47 REQUIREMENTS. 25 more are implemented by suite 1 and were run against these same four",
+    "peers, and their verdicts are NOT recorded here. That is deliberate: they are not in ADR-0003 shape,",
+    "so no second suite can be built against them, so a control set for them would be data nobody can use.",
+    "",
+    "THE 36 DECLARED KEYSTONE PEERS. Unrun — their tree was held. Every row above is FOUR PEERS, three of",
+    "which share ONE generation lineage. ⛔ That is cohort consistency, not independent convergence, and a",
+    "control set of four is a starting point rather than a census.",
+    "",
+    "ANY VERDICT FROM THE REFERENCE ORACLE. It executes no check citing the sections these three",
+    "requirements cite — they are ORACLE BLIND, which is why they are interesting and also why this file",
+    "cannot cross-check itself against it."
+  ]
+}

@@ -68,7 +68,8 @@ def build_info() -> dict:
         f = reqs / f"{rid}.diag"
         digests[rid] = hashlib.sha256(f.read_bytes()).hexdigest() if f.is_file() else "unavailable"
         snaps[rid] = _snapshot_of(f) if f.is_file() else "unavailable"
-    return {"suite_version": "source-tree", "requirement_digests": digests, "requirement_snapshots": snaps,
+    return {"suite_version": "source-tree", "suite_source_digest": None,
+            "requirement_digests": digests, "requirement_snapshots": snaps,
             "implemented_set_digest": "unavailable (source tree, unbuilt)",
             "from": "source tree (unbuilt)"}
 
@@ -239,10 +240,17 @@ def main(argv: list[str]) -> int:
     suite_defects = [r.requirement_id for r in results if r.suite_check == "suite-error"]
 
     report = {
-        "suite": {"name": SUITE, "version": info.get("suite_version"), "runtime": sys.version.split()[0], "build": info.get("from")},
+        # ⛔ `version` is `git describe --always --dirty` and is NOT an identity — it names a commit
+        # that need not contain the code that ran, and it is never refreshed because git describe is
+        # a dependency of no file. `source_digest` is sha256 over the bundled suite sources and is
+        # the half a reader can actually resolve. Both are emitted; only one is a fact.
+        "suite": {"name": SUITE, "version": info.get("suite_version"),
+                  "source_digest": info.get("suite_source_digest"),
+                  "runtime": sys.version.split()[0], "build": info.get("from")},
         "spec": spec_field(info, selected),
         # ⭐ GUIDE-CONFORMANCE §3.1 item 7's half of the dual anchor, over what THIS RUN asserted.
-        # The other half is `suite.version`. A match on only one is not a match.
+        # The other half is the instrument's identity — `suite.source_digest`, NOT `suite.version`,
+        # for the reason above. A match on only one is not a match.
         "anchor": anchor,
         "profile": a.profile,
         "requirement_digests": {r: info["requirement_digests"].get(r) for r in selected},

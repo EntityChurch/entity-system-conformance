@@ -41,7 +41,7 @@
     "§9.1 ('Envelope structure with per-entity hash validation (§3.1)' — the floor row this id binds)",
     "§9 CORE-PREADMISSION-REFUSAL-1 arm (d) (the conformance item, 0.8.2.25 — we do NOT author it)"
   ],
-  "snapshot": "entity-core-protocol/v0.8.2.25",
+  "snapshot": "entity-core-protocol/v0.8.2.26",
   "level": "MUST",
   "level_basis": "keyword",
   "profile": [
@@ -152,12 +152,53 @@
     "no posture. §4.11 reaches it because a pre-admission refusal is defined by the frame not yet being",
     "an admitted request, which is true of a hello by construction."
   ],
+  "scope_correction": [
+    "⛔⛔ RE-SCOPED 2026-09-16, THE SAME DAY IT WAS RE-AUTHORED AND RUN — AND THE RULING PREDATES THE RUN.",
+    "",
+    "0.8.2.26 §1.8 item 1 added, and it lands directly on this file's probe:",
+    "",
+    "  \"A uniform verdict on an UNREFERENCED `included` entry is mechanism-shaped and MUST NOT be",
+    "  required [MUST] (0.8.2.26). Mechanism (a) inspects every entry as the map is accepted, so an",
+    "  unreferenced mis-keyed entry is refused; mechanism (b) has no wire key to inspect and no entry to",
+    "  reach, so the same input is NOT REPRESENTED AT ALL in the peer's decoded form. Both are",
+    "  conformant, and the observable difference is a property of the mechanism rather than of the",
+    "  peer's correctness. A conformance check MUST NOT assert a refusal on this input: asserting one",
+    "  votes mechanism (a) and makes (b) — which this item blesses — unimplementable.\"",
+    "",
+    "⛔ THIS FILE'S PROBE IS THAT INPUT, BY DESIGN. Its own reading says so in terms: 'the probe includes",
+    "an entity the hello has no use for'. Being unreferenced was the POINT — it was how we reached §3.1's",
+    "'each' rather than the weaker 'each one the handler uses'. 0.8.2.26 rules that the observable",
+    "difference on that input is a property of the MECHANISM, not of the peer's correctness.",
+    "",
+    "⇒ THE 2026-09-16 RUN'S FOUR FAIL VERDICTS ARE NOT SCOREABLE AND ARE DEMOTED TO WITNESSES. They were",
+    "held unrouted pending a wider census, which is the only reason the damage is zero — the same",
+    "restraint that saved F75's 34 peers.",
+    "",
+    "⚠ AND THE TIMING IS THE FINDING RATHER THAN THE ERROR. 0.8.2.26 landed at 09:25 and the run was",
+    "taken at ~11:45. THE RULING EXISTED BEFORE THE MEASUREMENT and nobody here had read it, because",
+    "arch's packet was not enumerated — AP-17 a third time in two days. The re-authoring was correct",
+    "against the snapshot it declared and wrong about the world. ⇒ READ THE INBOX BEFORE AUTHORING.",
+    "",
+    "WHAT SURVIVES, STATED PRECISELY. The OBSERVATION stands and is real cohort data: three generator",
+    "peers answer `400 non_canonical_ecf` and core-go bare-closes on a self-inconsistent included entity.",
+    "What does NOT survive is SCORING it — on an unreferenced entry this file may not require any refusal",
+    "at all, so neither the code nor the frame obligation is assertable there.",
+    "",
+    "THE RE-SCOPE ARCH ASKED FOR ('re-scope rather than re-score'): the obligation is restated over a",
+    "REFERENCED entry — one the peer must resolve to do its job — where BOTH mechanisms must reach it.",
+    "Mechanism (b) addresses entities by a content_hash validated under item 1's first half, so a",
+    "referenced self-inconsistent entity fails for it exactly as for mechanism (a). ⬜ THE PROBE FOR THAT",
+    "IS NOT BUILT, AND IT IS NOT A RENAME OF THE CURRENT ONE: a hello's `included` map may carry no entry",
+    "the peer is OBLIGED to resolve, so the referenced surface may need an authenticated EXECUTE rather",
+    "than a hello — which reintroduces the posture confound the hello was chosen to avoid. A real design",
+    "question, left open rather than guessed at."
+  ],
   "conformant": [
     {
       "outcome": "coded_response",
       "status": 400,
       "code": "hash_mismatch",
-      "why": "§4.11's cause table row 3, stated at §5.2a corollary 1 and pinned since 0.8.2.24. Whether the peer closes afterwards is its own choice (§4.11) and neither shape is preferred."
+      "why": "§4.11's cause table row 3, stated at §5.2a corollary 1 and pinned since 0.8.2.24. Whether the peer closes afterwards is its own choice (§4.11) and neither shape is preferred. ⛔ SCOPE (0.8.2.26): this holds for a REFERENCED included entry. On an UNREFERENCED one §1.8 item 1 forbids a check requiring any refusal, so nothing below is scoreable there — see `scope_correction`."
     }
   ],
   "non_conformant": [

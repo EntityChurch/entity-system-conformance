@@ -27,7 +27,7 @@ ECP-R6                                                    unreviewed
 ECP-R9                                                    unreviewed
 ECP-R44                                                   unreviewed
 ECP-R45                                                   unreviewed
-ECP-R57                                                   entity-core-protocol/v0.8.2.25
+ECP-R57                                                   entity-core-protocol/v0.8.2.26
 UNALLOCATED-no-unsolicited-leg3-authenticate              unreviewed
 UNALLOCATED-key-type-mutual-verifiability                 unreviewed
 UNALLOCATED-error-response-carries-code                   unreviewed
@@ -42,8 +42,8 @@ ECP-R7-pending-b                                          unreviewed
 UNALLOCATED-emitted-frames-are-canonical-ecf              unreviewed
 UNALLOCATED-emitted-entities-conform-to-protocol-types    unreviewed
 UNALLOCATED-emitted-optional-fields-absent-not-null       unreviewed
-ECP-R3                                                    unreviewed
-ECP-R7                                                    entity-core-protocol/v0.8.2.25
+ECP-R3                                                    entity-core-protocol/v0.8.2.26
+ECP-R7                                                    entity-core-protocol/v0.8.2.26
 UNALLOCATED-cbor-tag-rejected                             unreviewed
 UNALLOCATED-duplicate-map-key-rejected                    unreviewed
 ECP-R4-pending-b                                          unreviewed

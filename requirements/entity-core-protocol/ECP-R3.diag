@@ -1,35 +1,64 @@
 {
   "header": [
-    "ECP-R3 — a received entity whose content_hash does not match {type, data} is rejected.",
+    "ECP-R3 — a received entity whose content_hash does not match {type, data} is rejected, and the",
+    "rejection is a coded response rather than a drop or a bare close.",
     "",
     "Batch 3. Probed on the EXECUTE ROOT entity, pre-authorization. The included-map surface is ECP-R7's",
-    "and the tree:put surface is ECP-R40's (which pins a code); both are cross-referenced, not re-scored."
+    "and the tree:put surface is ECP-R40's (which pins a code); both are cross-referenced, not re-scored.",
+    "",
+    "SPLIT AND RE-AUTHORED 2026-09-16 against 0.8.2.26 — the THIRD file through ADR-0003. The arms,",
+    "preconditions and surface that used to live here are now a suite-authored ITEM. This file states the",
+    "obligation and stops.",
+    "",
+    "⛔ WHY IT WAS RE-AUTHORED: IT WAS PASSING PEERS IT SHOULD NOT HAVE (F77). On 2026-09-16 this file",
+    "scored PASS on all four peers of the run — core-go bare-closed and three generator peers answered",
+    "`400 non_canonical_ecf` — while ECP-R7 scored FAIL on the SAME peers answering the SAME way. The",
+    "peers were consistent; our two files were not, because this one accepted 'any refusal, close",
+    "included' and nothing here had re-read it since .21 (AP-18: it was one of the 26 `unreviewed`).",
+    "",
+    "⭐ THE QUESTION THAT FIXED IT WAS ROUTED RATHER THAN ANSWERED HERE, AND THAT IS WHY IT IS FIXED.",
+    "We declined to re-score this file to stop it contradicting ECP-R7, and asked instead (CQ-45).",
+    "Arch ruled it in 0.8.2.26 and folded the answer into §4.11's own text. Re-scoring would have made",
+    "the two files agree and buried the question — the CHECK-BUG horn of our own three-way table.",
+    "",
+    "Read range for this re-authoring: §1.8 whole, §7.2, §6.5, §4.11 whole, §3.4, §4.7, §9.1's row."
   ],
   "id": "ECP-R3",
   "id_status": "allocated",
-  "title": "A received EXECUTE whose root entity's content_hash does not equal the hash of its {type, data} is not processed",
+  "title": "A received EXECUTE whose root entity's content_hash does not equal the hash of its {type, data} is not processed, and is refused with a coded EXECUTE_RESPONSE",
   "spec": "ENTITY-CORE-PROTOCOL §1.8 item 1",
   "spec_also": [
     "§7.2 (NORMATIVE: 'if not hash_equals(expected, received_entity.content_hash): REJECT')",
-    "§6.5 dispatch chain ('Validate root entity hash')",
+    "§6.5 dispatch chain ('Validate root entity hash', first step after decode)",
+    "§4.11 (Pre-admission refusals — the class this refusal belongs to, 0.8.2.25/0.8.2.26)",
     "§3.4 (params: SHOULD, may defer — see scope)",
+    "§4.7 (the connection-error registry — and it has no row for this)",
     "ENTITY-CBOR-ENCODING §5.2 ('Receivers MUST validate content hashes by re-encoding to ECF')",
     "§9.1 (the floor row this id binds)"
   ],
-  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "snapshot": "entity-core-protocol/v0.8.2.26",
   "level": "MUST",
+  "level_basis": "keyword",
   "profile": [
     "core"
   ],
-  "surface": "wire",
   "status": "draft",
-  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F24",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F24, F77",
+  "ruled": "CQ-45 RULED in 0.8.2.26 — §4.11's cause table assigns CODES and does not define the CLASS, so this refusal carries the frame obligation even though its cause has no table row. ⚠ The (status, code) remains CQ-37's and is NOT pinned here.",
   "reading": [
-    "§1.8: \"Implementations MUST maintain fidelity throughout the system: 1. Validate on receipt: Compute",
-    "expected hash from `{type, data}`, compare with `content_hash`, reject on mismatch.\" §7.2 gives the",
-    "algorithm as NORMATIVE and ends in REJECT. §6.5's dispatch chain places it before anything else a",
-    "frame does: \"Decode CBOR frame → envelope / Validate root entity hash / Validate each included entity",
-    "hash / Root is EXECUTE? ...\". ECF §5.2: \"never trust a claimed hash without verification.\"",
+    "§1.8 item 1: \"Implementations MUST maintain fidelity throughout the system: 1. Validate on receipt:",
+    "Compute expected hash from `{type, data}`, compare with `content_hash`, reject on mismatch.\" §7.2",
+    "gives the algorithm as NORMATIVE and ends in REJECT. §6.5's dispatch chain places it before anything",
+    "else a frame does: \"Decode CBOR frame → envelope / Validate root entity hash / Validate each included",
+    "entity hash / Root is EXECUTE? ...\". ECF §5.2: \"never trust a claimed hash without verification.\"",
+    "",
+    "⭐ §1.8 MOVED AT 0.8.2.26 AND THE CHANGE DOES NOT REACH THIS FILE — CHECKED, NOT ASSUMED. The added",
+    "paragraph is about an UNREFERENCED `included` entry, where mechanism (b) 'has no wire key to inspect",
+    "and no entry to reach'. THE ROOT IS NEVER UNREFERENCED: it IS the message, every peer must resolve it",
+    "to dispatch at all, and §6.5 names validating it as the first step after decode. So both §1.8",
+    "mechanisms reach this input and the mechanism-shaped carve-out does not apply. ⛔ That carve-out DOES",
+    "void the scoring half of ECP-R7, whose probe is unreferenced by design — the two files are adjacent",
+    "and the ruling separates them.",
     "",
     "WHICH RECEIVED ENTITIES — THE TEXT DOES NOT AGREE WITH ITSELF, SO THE PROBE PICKS THE SURFACE IT DOES",
     "NOT DISPUTE. §3.4 says of `params` and `result`: \"Implementations SHOULD validate `params.content_hash`",
@@ -43,114 +72,62 @@
     "grant. A hello needs no author, no capability, no signature — so a refusal of a mis-hashed hello can",
     "only be about the hash, and an answered one proves the hash was not checked.",
     "",
-    "WHAT A REJECTION LOOKS LIKE IS NOT PINNED, SO IT IS NOT ASSERTED. No code is assigned to a root-hash",
-    "mismatch outside `tree:put` (§6.3: `400 hash_mismatch`). §4.7's MUST-emit table covers handshake",
-    "failures, and a hash mismatch is not one of its rows. So any refusal — a coded error response of any",
-    "status and code, or a close — satisfies the row. The failure is the peer ANSWERING the hello as a",
-    "hello. Status and code are witnessed: they are what F24 asks arch to pin."
+    "⛔⭐ WHAT CHANGED AT 0.8.2.26, AND IT IS THE WHOLE REASON THIS FILE WAS RE-AUTHORED. The .21 text of",
+    "this reading said: \"any refusal — a coded error response of any status and code, OR A CLOSE —",
+    "satisfies the row.\" That sentence is now wrong, and it is wrong in the direction that PASSES a",
+    "defect. §4.11:",
+    "",
+    "  \"A peer that refuses a frame pre-admission MUST put a coded EXECUTE_RESPONSE on the wire [MUST] —",
+    "  correlated by `request_id` where the id is available, and otherwise as a best-effort coded frame",
+    "  carrying no correlation. Whether the peer closes the connection afterwards is its own choice.\"",
+    "",
+    "  \"Two behaviours are non-conformant, and they are distinct failures rather than one\" — dropping the",
+    "  frame, and closing with no coded frame.",
+    "",
+    "⭐ AND THE RULING THAT MAKES §4.11 REACH THIS FILE, which is the part CQ-45 asked for. §4.11 at",
+    "0.8.2.26: \"The table assigns CODES; it does not define the CLASS [MUST] (0.8.2.26). Membership is",
+    "decided by the boundary in this section's first sentence — the refusal of an inbound frame before it",
+    "becomes an admitted request — and EVERY MEMBER CARRIES THE FRAME OBLIGATION WHETHER OR NOT ITS CAUSE",
+    "HAS A ROW HERE. A cause absent from this table is a cause whose code is assigned by its own section.\"",
+    "§6.5 restates it in the dispatch chain: \"This list assigns CODES; it is not the membership list of",
+    "the class.\" ⇒ A mis-hashed root hello is refused before the frame becomes an admitted request. It is",
+    "a member. The frame obligation binds it.",
+    "",
+    "⚠ THE CODE IS STILL NOT PINNED, AND THIS FILE MUST NOT INVENT ONE (prohibition 2). §4.11's cause",
+    "table has no root-hash row and arch's ruling says so deliberately: a cause absent from the table has",
+    "its code assigned by its own section, and §1.8/§7.2 assign none. §4.7's registry covers handshake",
+    "failures and a hash mismatch is not one of its rows. `400 hash_mismatch` is §5.2a's RESOLUTION-",
+    "INTEGRITY code and .25 scoped it explicitly — 'it is the wrong answer for bytes that were never",
+    "hashed' — which is a different arm, and CQ-37 ruled the pin does not reach the root. ⇒ ANY status",
+    "and code satisfies this file; the FRAME is what is asserted. Status and code stay witnessed (F24).",
+    "",
+    "⇒ THE NET CHANGE IN ONE SENTENCE: a close moves from ACCEPT to REFUSE, a silence moves from",
+    "unclassified to REFUSE, and the coded frame — previously one of two acceptable shapes — becomes the",
+    "obligation. The code remains unasserted."
   ],
-  "preconditions": {
-    "grants": [],
-    "identities": [
-      "caller"
-    ],
-    "handlers": [],
-    "posture_axes": [
-      "seed_policy",
-      "close_wait_bound"
-    ],
-    "note": "pre-authorization surface; no grant can be a confound. `close_wait_bound` is how long the run waits to tell a close from a slow answer — recorded."
-  },
-  "arm": [
+  "conformant": [
     {
-      "name": "root-hash-mismatch",
-      "kind": "conformant",
-      "given": "a fresh connection; a well-formed hello EXECUTE, correctly framed, whose root `content_hash` has its last digest byte flipped; `params` hash correct",
-      "why": "§1.8 item 1 / §7.2 on the surface §6.5 names first.",
-      "step": [
-        {
-          "op": "send_hello",
-          "capture": "mismatched",
-          "corrupt": "root.content_hash: flip the final digest byte"
-        }
-      ],
-      "accept": [
-        {
-          "outcome": "coded_response",
-          "why": "any non-200 EXECUTE_RESPONSE: the row requires rejection and pins no code."
-        },
-        {
-          "outcome": "close",
-          "why": "a close is a rejection. Not the §4.7 connect-auth rule, which requires a coded frame first — this is not one of its rows."
-        }
-      ],
-      "refuse": [
-        {
-          "outcome": "hello_answered",
-          "why": "THE FAILURE: a 200 hello response means the root was processed without its hash being validated."
-        }
-      ],
-      "witness": [
-        {
-          "field": "status_and_code",
-          "why": "unpinned today; F24 asks for a code. Cohort data, never scored."
-        }
-      ]
+      "outcome": "coded_response",
+      "why": "§4.11's class obligation: a coded EXECUTE_RESPONSE on the wire, correlated by `request_id` where available and otherwise best-effort. ⚠ ANY (status, code) — the code is NOT pinned for this cause (CQ-37, and §4.11's table has no root-hash row by arch's deliberate design). Whether the peer closes afterwards is its own choice and neither shape is preferred."
+    }
+  ],
+  "non_conformant": [
+    {
+      "outcome": "silent_drop",
+      "why": "§4.11's FIRST named failure. No response and no close: the caller learns nothing until its own §6.11(c) deadline, and the refusal is unobservable to every instrument. SCORED SEPARATELY from the bare close."
     },
     {
-      "name": "params-hash-mismatch",
-      "kind": "conformant",
-      "given": "the same hello with the ROOT hash correct and the `params` entity's content_hash last byte flipped (root recomputed over the corrupted params bytes)",
-      "why": "WITNESS-ONLY ARM. §3.4 makes params validation SHOULD with deferral permitted, so either outcome is conformant today. Recorded because it is the input that discriminates the two readings F24 routes.",
-      "step": [
-        {
-          "op": "send_hello",
-          "capture": "params_mismatched",
-          "corrupt": "params.content_hash: flip the final digest byte; recompute root over the result"
-        }
-      ],
-      "witness": [
-        {
-          "field": "outcome",
-          "why": "answered or refused, with code. Never scored until F24 is ruled."
-        }
-      ]
+      "outcome": "bare_close",
+      "why": "§4.11's SECOND named failure. Indistinguishable from a network fault (§4.6); on a multiplexed connection it destroys unrelated ADMITTED requests, which §4.9(c) forbids for each of them. SCORED SEPARATELY from the silent drop. ⛔ THIS FILE ACCEPTED THIS OUTCOME UNTIL 2026-09-16 and passed core-go on it (F77)."
     },
     {
-      "name": "control",
-      "kind": "negative-control",
-      "given": "a fresh connection; the identical hello construction with every hash correct",
-      "why": "MANDATORY ANTI-VACUITY. The corrupted and control hellos share one construction path and differ in one byte, so a refusal in the probe is attributable to that byte and not to the suite's hello, its framing, or a peer that refuses every hello built this way.",
-      "step": [
-        {
-          "op": "send_hello",
-          "capture": "correct"
-        }
-      ],
-      "accept": [
-        {
-          "outcome": "hello_answered",
-          "why": "the control's subject is the byte, not hello validity in general."
-        }
-      ],
-      "refuse": [
-        {
-          "outcome": "close",
-          "why": "a close on the correct hello means the probe's refusal proves nothing about the hash."
-        }
-      ]
-    },
-    {
-      "name": "non-conformant-witness",
-      "kind": "non-conformant",
-      "given": "a peer that trusts the wire-supplied content_hash and uses it as the entity's identity",
-      "expect": "the mis-hashed hello is answered; later, an entity stored under a hash its bytes do not produce is served to another peer, which rejects it",
-      "why": "§1.8 item 2's 'Trust validated hash' is only safe if item 1 ran. This is the shape §4.6's Hardening SHOULD warns about on the authenticate surface."
+      "outcome": "hello_answered",
+      "why": "THE FAILURE the row exists for: a 200 hello response means the root was processed without its hash being validated. §1.8 item 1's MUST is on the validation; §4.11 governs only the shape of the refusal."
     }
   ],
   "notes": {
     "peer_attributable": true,
     "oracle_check": "",
-    "oracle_note": "no `encoding` reference check cites §1.8 or §7.2. Whether one in another category measures root-hash validation is unsearched — bounded: the six encoding checks' citations only."
+    "oracle_note": "no `encoding` reference check cites §1.8 or §7.2. Whether one in another category measures root-hash validation is unsearched — bounded (D15): the six encoding checks' citations only. The 2026-09-16 differential lists five executed checks citing a section this file cites, none of them a join."
   }
 }

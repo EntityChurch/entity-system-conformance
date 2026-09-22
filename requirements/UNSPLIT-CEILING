@@ -1,4 +1,4 @@
-48
+47
 # Requirement files still in the PRE-ADR-0003 shape — obligation and probe fused in one file.
 #
 # A RATCHET, exactly like UNEXECUTED-CEILING and SOURCES-CITATION-DEBT. `make lint` counts the

@@ -1,0 +1,162 @@
+{
+  "header": [
+    "ECP-R3-P1 — a hello whose ROOT entity's content_hash is one byte wrong, driven over the wire.",
+    "",
+    "THIRD ITEM IN THIS TREE (ADR-0003). The arms below lived inside",
+    "requirements/entity-core-protocol/ECP-R3.diag until 2026-09-16.",
+    "",
+    "⚠ THE ID FORM DEVIATES FROM SPECIFICATION-FORMAT §8.5a AND IT IS ROUTED, NOT SILENT — same as",
+    "ECP-R57-P1 and ECP-R7-P1. `<requirement-id>-P<k>`, DERIVED, because D18 says a name that appears in",
+    "an id is TAKEN, NEVER COINED.",
+    "",
+    "⛔ WHAT THIS PROBE ASSERTED UNTIL TODAY, AND WHY IT PASSED A DEFECT. The old arms accepted a CLOSE as",
+    "a conformant rejection: 'a close is a rejection'. Under 0.8.2.26 §4.11 a bare close is one of the two",
+    "NAMED non-conformances. On 2026-09-16 that arm passed core-go, which bare-closes, while ECP-R7 failed",
+    "the same peer for the same shape on the adjacent surface (F77). ⇒ The close moves from ACCEPT to",
+    "REFUSE and the silence from unclassified to REFUSE.",
+    "",
+    "⭐ WHY THE ROOT AND NOT AN INCLUDED ENTITY — this is the distinction that keeps this item scoreable",
+    "while ECP-R7-P1's is not. §1.8 item 1 at .26 rules a verdict on an UNREFERENCED included entry",
+    "mechanism-shaped and forbids a check asserting a refusal on it. THE ROOT IS NEVER UNREFERENCED: it is",
+    "the message, §6.5 names validating it as the first step after decode, and every peer must resolve it",
+    "to dispatch at all. Both §1.8 mechanisms reach it."
+  ],
+  "id": "ECP-R3-P1",
+  "author": "py-prototype",
+  "class": "validate-peer check",
+  "class_basis": [
+    "GUIDE-CONFORMANCE §7.0 via SPECIFICATION-FORMAT §8.5: 'behavioral, driven over the wire against a",
+    "running peer'. §7.0's row bundles an AUTHOR into the class definition and names entity-core-go; arch",
+    "ruled 2026-09-15 that the author is a fact about the estate on a date and NOT a property of the class",
+    "(CQ-40). This item is that class by its NATURE and is authored by a neutral seat."
+  ],
+  "drives": [
+    "entity-core-protocol/ECP-R3"
+  ],
+  "spec_item": "No §9 conformance item names this cause. CORE-PREADMISSION-REFUSAL-1 enumerates five causes and a root-hash mismatch is not among them — which 0.8.2.26 makes deliberate rather than an omission: '§4.11's table assigns CODES; it does not define the CLASS ... a cause absent from this table is a cause whose code is assigned by its own section.' ⚠ WE DO NOT AUTHOR §9 ITEMS and do not propose one here.",
+  "snapshot": "entity-core-protocol/v0.8.2.26",
+  "surface": "wire",
+  "status": "draft",
+  "preconditions": {
+    "grants": [],
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "posture_axes": [
+      "seed_policy",
+      "response_wait_bound"
+    ],
+    "note": "⛔ PRE-AUTHORIZATION SURFACE: no grant can be a confound. §4.2 puts `system/protocol/connect` before any grant, so a hello needs no author, no capability and no signature. ⚠ `close_wait_bound` is GONE and its replacement is not a rename: under .21 the probe treated a close as a PASS and the bound decided how long to wait for one; under .26 the probe waits for a coded RESPONSE and the close is a failure. A run carrying the old axis would be waiting for the wrong event."
+  },
+  "arm": [
+    {
+      "name": "root-hash-mismatch",
+      "kind": "conformant",
+      "given": "a fresh connection; a well-formed hello EXECUTE, correctly framed, whose root `content_hash` has its last digest byte flipped; `params` hash correct",
+      "why": "§1.8 item 1 / §7.2 on the surface §6.5 names first. One byte, so the refusal is attributable to the hash and to nothing else about the frame.",
+      "step": [
+        { "op": "connect" },
+        {
+          "op": "send_hello",
+          "capture": "mismatched",
+          "corrupt": "root.content_hash: flip the final digest byte"
+        },
+        { "op": "await_response_or_bound", "capture": "refusal" }
+      ],
+      "accept": [
+        {
+          "outcome": "coded_response",
+          "why": "⭐ THE OBLIGATION, and it is the FRAME rather than the code. §4.11's class obligation reaches this cause by 0.8.2.26's 'the table assigns CODES; it does not define the CLASS'. ANY (status, code) holds — the code is not pinned for this cause and this item MUST NOT invent one. Whether the peer closes after the frame does not change the verdict."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "silence",
+          "why": "§4.11's FIRST named failure — no response and no close. Scored as `silent_drop`, NOT merged with the bare close."
+        },
+        {
+          "outcome": "close",
+          "why": "§4.11's SECOND named failure — closed with no coded frame. Scored as `bare_close`, NOT merged with the drop. ⛔ UNDER .21 THIS OUTCOME WAS AN ACCEPT, and it is what passed core-go on 2026-09-16 (F77)."
+        },
+        {
+          "outcome": "hello_answered",
+          "why": "THE FAILURE: a 200 hello response means the root was processed without its hash being validated."
+        }
+      ],
+      "witness": [
+        {
+          "field": "status_and_code",
+          "why": "NOT SCORED and deliberately so — the code is unpinned for this cause (CQ-37) and asserting one would be authoring the spec (prohibition 2). The distribution is what F24 asked arch to pin, and the 2026-09-16 run witnessed `400 non_canonical_ecf` on three generator peers."
+        },
+        {
+          "field": "preadmission_class",
+          "why": "which of §4.11's classes the outcome fell in. Recorded per peer because §4.11 requires the drop and the bare close to be scored separately — a verdict saying only FAIL cannot tell them apart, and their remedies are opposite."
+        },
+        {
+          "field": "closed_after",
+          "why": "whether the peer closed after emitting the coded frame. NOT SCORED — §4.11 leaves it to the peer."
+        }
+      ]
+    },
+    {
+      "name": "params-hash-mismatch",
+      "kind": "conformant",
+      "given": "the same hello with the ROOT hash correct and the `params` entity's content_hash last byte flipped (root recomputed over the corrupted params bytes)",
+      "why": "WITNESS-ONLY ARM, and it decides nothing. §3.4 makes params validation a SHOULD with deferral permitted, against §1.8's unconditional MUST, so either outcome is conformant today. Recorded because it is the input that discriminates the two readings F24 routes.",
+      "step": [
+        { "op": "connect" },
+        {
+          "op": "send_hello",
+          "capture": "params_mismatched",
+          "corrupt": "params.content_hash: flip the final digest byte; recompute root over the result"
+        }
+      ],
+      "witness": [
+        {
+          "field": "outcome",
+          "why": "answered or refused, with code. Never scored until F24 is ruled — a requirement that scores an arm its own open question owns is the check bug in the three-way table."
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "a fresh connection; the identical hello construction with every hash correct",
+      "why": "MANDATORY ANTI-VACUITY. The corrupted and control hellos share one construction path and differ in ONE BYTE, so a refusal in the probe is attributable to that byte and not to the suite's hello, its framing, or a peer that refuses every hello built this way.",
+      "step": [
+        { "op": "connect" },
+        { "op": "send_hello", "capture": "correct" }
+      ],
+      "accept": [
+        {
+          "outcome": "hello_answered",
+          "why": "200: the control's subject is the byte, not hello validity in general."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "close",
+          "why": "a close on the correct hello means the probe's refusal proves nothing about the hash."
+        },
+        {
+          "outcome": "silence",
+          "why": "as the close — the probe's refusal would not be attributable to the corrupted byte."
+        }
+      ],
+      "witness": [
+        {
+          "field": "outcome_if_coded_refusal",
+          "why": "a coded refusal of a CORRECT hello is not this row's subject and makes the probe unscoreable rather than passed. Recorded so that state is visible instead of being read as a control that held."
+        }
+      ]
+    },
+    {
+      "name": "trusts-wire-hash",
+      "kind": "non-conformant",
+      "given": "a peer that trusts the wire-supplied content_hash and uses it as the entity's identity",
+      "expect": "the mis-hashed hello is answered 200; later, an entity stored under a hash its bytes do not produce is served to another peer, which rejects it",
+      "why": "§1.8 item 2's 'Trust validated hash' is only safe if item 1 ran. This is the shape §4.6's Hardening SHOULD warns about on the authenticate surface, and it is why the probe corrupts the hash rather than the data."
+    }
+  ]
+}

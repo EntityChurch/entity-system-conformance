@@ -28,7 +28,7 @@
     "entity-core-protocol/ECP-R57"
   ],
   "spec_item": "CORE-PREADMISSION-REFUSAL-1 arm (b) — 'a frame whose root entity is a third type -> 400 invalid_request' (ENTITY-CORE-PROTOCOL §9, 0.8.2.25). ⚠ WE DO NOT AUTHOR THAT ITEM. This probe implements arm (b) only; arms (a), (c), (d), (e) and (f) are other requirements' surfaces and (f) is unreached by anything in this tree.",
-  "snapshot": "entity-core-protocol/v0.8.2.25",
+  "snapshot": "entity-core-protocol/v0.8.2.26",
   "surface": "wire",
   "status": "draft",
   "preconditions": {

@@ -19,7 +19,22 @@
     "finding against `io` and `sql` on exactly that ground. That exemption does NOT reach this probe:",
     "mechanism (b) is admissible only because the validation pass runs at EVERY ingress, so a",
     "mechanism-(b) peer is obliged to catch this one by the check its own mechanism depends on.",
-    "⇒ The exemption lands on ECP-R7-pending-b, whose surface IS the key."
+    "⇒ The exemption lands on ECP-R7-pending-b, whose surface IS the key.",
+    "",
+    "⛔⛔ AND THE PARAGRAPH ABOVE IS WRONG AT 0.8.2.26 — KEPT, NOT DELETED, BECAUSE A RUN WAS TAKEN",
+    "AGAINST IT. It argued the mechanism-(b) exemption does not reach this probe because the validation",
+    "pass 'runs at EVERY ingress'. §1.8 item 1 at .26 settles it the other way FOR AN UNREFERENCED ENTRY:",
+    "mechanism (b) 'has no wire key to inspect and NO ENTRY TO REACH, so the same input is not",
+    "represented at all in the peer's decoded form'. An entity the peer never resolves is an entity it",
+    "never validates, whichever half of item 1 you appeal to. ⇒ My argument assumed the validation pass",
+    "sweeps the whole included map; for mechanism (b) it runs where an entity is ADDRESSED, and this one",
+    "never is.",
+    "",
+    "WHAT THIS ARM ASSERTED ON 2026-09-16, RECORDED SO THE RUN STAYS READABLE: accept",
+    "`coded_response 400 hash_mismatch`; refuse `silence` / `close` / `coded_response_other` /",
+    "`hello_answered`. All four refusals asserted that SOME refusal is owed, which is what .26 forbids",
+    "requiring here. Four peers were scored FAIL against them; those verdicts are demoted to witnesses",
+    "and were never routed."
   ],
   "id": "ECP-R7-P1",
   "author": "py-prototype",
@@ -36,7 +51,7 @@
     "entity-core-protocol/ECP-R7"
   ],
   "spec_item": "CORE-PREADMISSION-REFUSAL-1 arm (d) — 'a mis-keyed `included` entry -> 400 hash_mismatch' (ENTITY-CORE-PROTOCOL §9, 0.8.2.25). ⚠ WE DO NOT AUTHOR THAT ITEM. This probe implements arm (d) only; arms (a), (b), (c), (e) are other requirements' surfaces and (f) — the multiplexed arm the spec says cannot be inferred from the others — is unreached by anything in this tree.",
-  "snapshot": "entity-core-protocol/v0.8.2.25",
+  "snapshot": "entity-core-protocol/v0.8.2.26",
   "surface": "wire",
   "status": "draft",
   "preconditions": {
@@ -66,30 +81,10 @@
         },
         { "op": "await_response_or_bound", "capture": "refusal" }
       ],
-      "accept": [
+      "inconclusive": [
         {
-          "outcome": "coded_response",
-          "status": 400,
-          "code": "hash_mismatch",
-          "why": "⭐ THE OBLIGATION. §4.11's cause table row 3, stated at §5.2a corollary 1, pinned since 0.8.2.24. Whether the peer closes afterwards does not change the verdict — §4.11 makes the close its own choice."
-        }
-      ],
-      "refuse": [
-        {
-          "outcome": "silence",
-          "why": "§4.11's FIRST named failure — dropped, no response and no close. Scored as `silent_drop`, NOT merged with the bare close. ⛔ UNDER .21 AND .24 THIS OUTCOME WAS PARKED AS `inconclusive` pending CQ-34, which is now ruled."
-        },
-        {
-          "outcome": "close",
-          "why": "§4.11's SECOND named failure — closed with no coded frame. Scored as `bare_close`, NOT merged with the drop. ⛔ UNDER .21 AND .24 THIS WAS `inconclusive` pending CQ-35, which is now ruled."
-        },
-        {
-          "outcome": "coded_response_other",
-          "why": "§4.11 pins the code to the CAUSE. ⛔ `400 non_canonical_ecf` is non-conformant in terms (ECF §5.4 scopes it to tag-policy violations; this frame is canonical and carries no tag) and is the code this file PREDICTS the cohort answers. `400 invalid_request` is also wrong: §5.2a's .25 scoping assigns that to the FRAMING arm, for bytes that never become an Envelope, and this frame decodes."
-        },
-        {
-          "outcome": "hello_answered",
-          "why": "THE FAILURE: the envelope was processed with an unvalidated included entity."
+          "outcome": "any",
+          "why": "⛔⛔ THIS ARM SCORES NOTHING AT 0.8.2.26, AND THE ARMS IT REPLACED ARE KEPT BELOW SO THE CHANGE IS READABLE. §1.8 item 1: 'A uniform verdict on an UNREFERENCED `included` entry is mechanism-shaped and MUST NOT be required [MUST] … A conformance check MUST NOT assert a refusal on this input: asserting one votes mechanism (a) and makes (b) — which this item blesses — unimplementable.' This probe's entity is unreferenced BY DESIGN, which was how it reached §3.1's 'each' rather than the weaker 'each one the handler uses'. ⇒ Every outcome is witnessed and none decides a verdict. The scoreable form needs a REFERENCED entry and is NOT built — see the requirement's `scope_correction`."
         }
       ],
       "witness": [

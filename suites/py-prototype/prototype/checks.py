@@ -718,6 +718,34 @@ def _preadmission(name: str, o: wire.Outcome, status: int, code: str,
     return Arm("conformant", name, None, f"could not look: {o.brief()}"), "could_not_look"
 
 
+def _preadmission_any_code(name: str, o: wire.Outcome,
+                           admitted_detail: str = "the frame was processed rather than refused") -> tuple[Arm, str]:
+    """§4.11 where the FRAME is owed but the CODE is not pinned for the cause.
+
+    ⛔ THE DISTINCTION IS THE WHOLE POINT AND 0.8.2.26 STATES IT: *"The table assigns CODES; it does
+    not define the CLASS [MUST] … every member carries the frame obligation whether or not its cause
+    has a row here. A cause absent from this table is a cause whose code is assigned by its own
+    section."* A root-hash mismatch has no row and no section assigning it a code, so a check that
+    asserted one would be authoring the specification (prohibition 2). Any coded response holds;
+    a drop and a bare close do not.
+    """
+    if o.kind == "response" and o.status != 200:
+        return (Arm("conformant", name, True,
+                    f"coded {o.status} {o.code or '-'} — the frame obligation holds; the code is not "
+                    f"pinned for this cause (CQ-37) and is witnessed, not asserted"), "coded_conformant")
+    if o.kind == "response":
+        return Arm("conformant", name, False, f"{admitted_detail} (200)"), "admitted"
+    if o.kind == "close":
+        return (Arm("conformant", name, False,
+                    f"bare close, no coded frame ({o.detail or 'no detail'}) — §4.11's SECOND named "
+                    f"failure. ⛔ This outcome was an ACCEPT under .21"), "bare_close")
+    if o.kind == "timeout":
+        return (Arm("conformant", name, False,
+                    f"silent drop, no response and no close ({o.detail or 'no detail'}) — §4.11's "
+                    f"FIRST named failure"), "silent_drop")
+    return Arm("conformant", name, None, f"could not look: {o.brief()}"), "could_not_look"
+
+
 def _not_code_control(o: wire.Outcome, code: str, label: str) -> Arm:
     if o.kind != "response":
         return Arm("negative-control", "control", None, f"could not look: {label}: {o.brief()}")
@@ -1056,11 +1084,26 @@ def _hello_answered_control(o: wire.Outcome) -> Arm:
 
 
 def check_r3(ctx: Ctx) -> Result:
-    res = Result("ECP-R3", "encoding/r3_root_hash_mismatch_not_processed", "ENTITY-CORE-PROTOCOL §1.8, §7.2, §6.5")
-    res.witnesses["close_wait_bound_s"] = ctx.timeout
+    """⛔ RE-AUTHORED TO 0.8.2.26, 2026-09-16. This scored `_refused_any` — any non-200 OR A CLOSE —
+    which is the 0.8.2.21 reading, and it PASSED A DEFECT: on 2026-09-16 it passed core-go, which
+    bare-closes, while `check_r7` FAILED the same peer for the same shape one surface over (`F77`).
+
+    `CQ-45` asked whether §4.11's frame obligation reaches this cause, given `CQ-37` ruled its CODE
+    does not. `0.8.2.26` answers yes, in §4.11's own text: *"The table assigns CODES; it does not
+    define the CLASS [MUST] … every member carries the frame obligation whether or not its cause has
+    a row here."* ⇒ A close moves from ACCEPT to REFUSE; a silence from unclassified to REFUSE.
+
+    ⚠ THE CODE IS STILL NOT ASSERTED and must not be. No section assigns one to a root-hash mismatch,
+    so `_preadmission` is called with the code unpinned: the FRAME is the obligation here, not its
+    contents. Asserting a code nobody wrote would be authoring the spec (prohibition 2).
+    """
+    res = Result("ECP-R3", "encoding/r3_root_hash_mismatch_not_processed",
+                 "ENTITY-CORE-PROTOCOL §1.8, §4.11, §6.5, §7.2")
+    res.witnesses["response_wait_bound_s"] = ctx.timeout
     o = _raw_hello(ctx, wire.hello_probe(Identity(), corrupt_root=True))
     res.witnesses["status_and_code"] = o.brief()
-    conformant = _refused_any("root-hash-mismatch", o)
+    conformant, klass = _preadmission_any_code("root-hash-mismatch", o)
+    res.witnesses["preadmission_class"] = klass
     # WITNESS-ONLY (F24): §3.4 lets params validation be deferred, so either outcome is conformant today.
     res.witnesses["params_hash_mismatch"] = _raw_hello(ctx, wire.hello_probe(Identity(), corrupt_params=True)).brief()
     t = _raw_hello(ctx, wire.hello_probe(Identity()))
@@ -1089,11 +1132,23 @@ def check_r7(ctx: Ctx) -> Result:
     bad = dict(good, data={"x": 2})  # key and carried hash still agree with each other: not ECP-R7-pending-b's defect
     o = _raw_hello(ctx, wire.hello_probe(Identity(), included={bad["content_hash"]: bad}))
     res.witnesses["status_and_code"] = o.brief()
-    # §4.11's cause table, row 3: resolution integrity -> 400 hash_mismatch, stated at §5.2a.
-    conformant, klass = _preadmission("unused-included-mismatch", o, 400, "hash_mismatch",
-                                      admitted_detail="answered as a hello — the envelope was "
-                                                      "processed with an unvalidated included entity")
+    # ⛔ NOT SCORED (0.8.2.26 §1.8 item 1). This probe's entity is UNREFERENCED — deliberately, to
+    # reach §3.1's "each" rather than "each one the handler uses" — and .26 rules that input
+    # mechanism-shaped: mechanism (b) discards wire keys and never reaches the entry at all, so
+    # "A conformance check MUST NOT assert a refusal on this input: asserting one votes mechanism (a)
+    # and makes (b) — which this item blesses — unimplementable."
+    #
+    # The outcome is still WITNESSED, because the distribution is real cohort data and it is what
+    # this file predicted about. It just cannot decide a verdict on this surface. The scoreable form
+    # needs a REFERENCED entry and is not built — see the requirement's `scope_correction`.
+    _, klass = _preadmission("unused-included-mismatch", o, 400, "hash_mismatch")
     res.witnesses["preadmission_class"] = klass
+    res.witnesses["not_scored_reason"] = (
+        "0.8.2.26 §1.8 item 1: an UNREFERENCED included entry has no uniform verdict and a check MUST "
+        "NOT assert a refusal on it. Witnessed, never scored, until the referenced-entry probe exists.")
+    conformant = Arm("conformant", "unused-included-mismatch", None,
+                     f"WITNESS ONLY — {klass}: {o.brief()}. Not scoreable on an unreferenced entry "
+                     f"(0.8.2.26 §1.8 item 1); this is a could-not-look, NOT a pass and NOT a fail.")
     t = _raw_hello(ctx, wire.hello_probe(Identity(), included={good["content_hash"]: good}))
     res.witnesses["control"] = t.brief()
     control = _hello_answered_control(t)

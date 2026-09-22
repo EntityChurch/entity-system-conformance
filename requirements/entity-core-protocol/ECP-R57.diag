@@ -31,7 +31,7 @@
     "§4.9(c) (deliver-or-signal — scoped to ADMITTED requests, so it does NOT reach this class)",
     "§9.1 ('Pre-admission refusal emission' — the floor row this id binds, REPLACED at 0.8.2.25)"
   ],
-  "snapshot": "entity-core-protocol/v0.8.2.25",
+  "snapshot": "entity-core-protocol/v0.8.2.26",
   "level": "MUST",
   "level_basis": "keyword",
   "profile": [

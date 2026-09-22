@@ -18,11 +18,14 @@
 #            recorded prediction could not have fired: the instrument passed every peer the
 #            prediction was about.
 #
-# 26 at 2026-09-16, the first measurement, over 28 implemented requirements. Reviewed so far:
-#   ECP-R7   entity-core-protocol/v0.8.2.25   (re-authored and re-implemented 2026-09-16)
-#   ECP-R57  entity-core-protocol/v0.8.2.25   (re-implemented 2026-09-16; file re-authored 09-15)
+# 26 at 2026-09-16 (first measurement, over 28), then 25. Reviewed so far, all at v0.8.2.26:
+#   ECP-R7   re-authored + re-implemented, then RE-SCOPED the same day when .26 ruled its probe's
+#            input mechanism-shaped. Now witness-only; the scoreable form is not built.
+#   ECP-R57  re-implemented 2026-09-16; file re-authored 09-15 after its obligation inverted.
+#   ECP-R3   re-authored + re-implemented 2026-09-16. It had been PASSING a defect: it accepted a
+#            bare close, which .26 4.11 names as one of two non-conformances (F77).
 #
 # ⚠ 26 is not a claim that 26 checks are WRONG. It is the claim that nothing here has established
 # which version of the rule they implement, which is the D15-honest statement and is why the
 # number is worth printing every run rather than discovering twice more.
-26
+25

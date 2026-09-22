@@ -140,10 +140,24 @@ smoothed over. **Where a claim here is unverified, it says so.**
 The host needs **`make`, `podman` and `python3`** — nothing else, and nothing is installed on it.
 
 ```
-make check      # build + test + lint
+make help       # every target, printed from the Makefile itself
+make check      # build + test + lint — the single verb to run before believing anything
 make build      # suite 1 -> output/bin/py-prototype (pinned interpreter, bundled)
 make test       # the codec against the specification's own vector corpus; Ed25519 against RFC 8032
 ```
+
+`make check` on a fresh clone takes about ten seconds and needs no other repository present.
+
+⚠ **The first `make build` reaches the network once** — it fetches a pinned standalone CPython and
+a pinned base image, and caches both under `output/cache/`; every later build is offline. The
+interpreter is pinned to `x86_64-unknown-linux-musl`, so on another architecture override
+`PYRT_URL`.
+
+⚠ **`make help` opens with a `COULD NOT LOOK` line about a peer roster.** That is correct and
+deliberate: the peer set is expanded against a live roster in a neighbouring repository, and an
+absent roster has to say *could not look* rather than quietly resolve to an empty set that reads
+like a real answer. Nothing is wrong, and `build`, `test`, `lint` and `check` all run without it.
+Only the targets that drive real peers need those repositories.
 
 `docs/CLI.md` has the run path: pointing a suite at peers, and joining two instruments' results by
 requirement id.

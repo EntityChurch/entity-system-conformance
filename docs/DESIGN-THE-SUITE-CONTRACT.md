@@ -56,7 +56,7 @@ Two consequences, and the second is the tell:
 - `[ADR-0012]`'s citation form is specified as *"derived from this document, not typed by hand."*
   **It cannot be. The inputs are absent.**
 - **The consumer built the producer's identity in its own tree.** `entity-core-keystone` ships
-  `core_executed_check_set_digest` and a `tools/check-set-gate.py` that refuses to place two peers
+  `core_executed_check_set_digest` and, in **its** tooling rather than ours, a check-set gate that refuses to place two peers
   in one column unless both reports carry it. *When a consumer has to reconstruct a producer's
   identity to compare two of its outputs, the missing field is a specification defect — not a
   downstream inconvenience.*

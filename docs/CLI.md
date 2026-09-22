@@ -19,7 +19,21 @@ own toolchain, which is faster and less reproducible — the container answer is
 | `make test` | runs suite 1's codec against the specification's own encoding-vector corpus, and its Ed25519 against RFC 8032's test vectors, inside the pinned interpreter |
 | `make lint` | the gate family below, in a pinned container |
 | `make lint-native` | the same on the host's `python3` (unpinned interpreter version) |
+| `make fmt` | **reformats nothing, and prints the complete list of why.** There is no formatter in this repository |
 | `make clean` | removes `output/` |
+
+⚠ **The first `make build` on a fresh clone reaches the network**, once: it fetches the pinned
+standalone interpreter and the pinned base image, and caches both under `output/cache/`. Every
+later build is offline. The interpreter is pinned to `x86_64-unknown-linux-musl`; on another
+architecture, override `PYRT_URL`.
+
+**On `fmt` being empty.** It is a real answer rather than a stub, and it says so out loud instead of
+exiting quietly — a verb that prints nothing and succeeds cannot be told apart from one that ran
+and found no work. Suite 1 is standard-library-only by rule, so a formatter would be the one shared
+dependency the suite exists not to have; any other suite is delivered rather than built here and is
+its author's to format; and the requirement corpus is **canonical CBOR, which is gated rather than
+formatted** — re-encoding those files would move the obligation digests that recorded verdicts were
+scored against.
 
 ⛔ **`build` knows exactly one suite.** A suite that is not suite 1 is **delivered, not built here**:
 drop its executable at `output/bin/<name>` (plus `output/bin/<name>.d/` if it needs a bundle

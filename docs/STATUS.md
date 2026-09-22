@@ -48,7 +48,9 @@ by doing the work, never by editing the number.**
   codec independence are gated and have fired. Context independence is not, and is currently
   breached by the agent harness that injects this repo's operating guide before an author's first
   instruction. Measured exposure for suite 2 was small and is written up; the boundary was still
-  breached, and the remedy — an injected guide that carries no recorded results — is ours.
+  breached. **The remedy — an injected guide carrying no recorded results — has now landed**, and
+  it is a constraint on a file rather than a check: nothing enforces it, so it holds only as long
+  as each session honours it.
 - ⛔ **A verdict is only evidence with the digest of the obligation it scored.** One requirement's
   text moved twice in a single day, and three peers' recorded passes were against text that no
   longer existed. Every verdict now pins that digest.
@@ -79,10 +81,22 @@ one refused the author's declaration of what they had *not* read, one flagged a 
 generated output, and one applied a per-suite row floor that let a deliberately small second suite
 drag the first below it. **No amount of reasoning about one suite would have found any of them.**
 
+**The operating guide no longer carries recorded results, and the instrument that finds inbound
+work was lying.** The guide that an agent harness injects before an author's first instruction was
+also, historically, this repository's findings log — so a suite author was handed measured outcomes
+before their first line of code. The measurements moved out to a companion set read on demand, and
+the guide now carries rules and pointers: no requirement id, no verdict, no expected value, no
+obligation digest. Separately, the tool that enumerates documents other seats have addressed to us
+was scanning one directory and reporting a clean result over another that held 130 of them —
+**"none addressed to us" and "I could not see where they write" printed the same sentence.** Both
+were found by adopting a project-wide documentation standard and actually running its steps rather
+than reading them.
+
 ## Open, in priority order
 
-1. **Strip recorded results out of the auto-injected operating guide** — the author-independence
-   remedy, and it is not a gate.
+1. **Rewrite the moved-out guidance for an outside reader.** It is a straight move today, so it
+   still speaks in this project's internal shorthand and is deliberately not published; a file that
+   becomes a clean read for a stranger gets published as it is rewritten.
 2. **Re-author the contested requirement against the current snapshot and re-measure it** on the
    peers that scored it.
 3. **One requirement was measured before the handshake** rather than on an established connection

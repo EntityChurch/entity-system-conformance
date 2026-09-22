@@ -34,8 +34,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   against the obligation they measure. They are lowered by doing the work, never by editing the
   number.
 - **`docs/CLI.md`** — the build, run and comparison interface.
+- **`make fmt`** — a Tier-1 verb that reformats nothing and prints the complete list of why. It
+  says so out loud rather than exiting quietly, because a verb that prints nothing and succeeds
+  cannot be told apart from one that ran and found no work.
 
 ### Changed
+
+- **`AGENTS.md` is now orientation, and what this project has learned moved to `docs/agents/memory/`**
+  behind an index, read on demand rather than in full. The file had grown past the point where
+  every session pays to load it; the content was moved rather than cut.
+- **Routing documents sent to another repository now live in `docs/outbox/`.** Discovery used to
+  mean grepping filenames for your own name, which silently misses a document that named you
+  differently and never finds one where you are only copied in.
 
 - `requirements/<spec>/` and `spec-data/<spec>/` now mirror each other name-for-name, keyed to the
   specification's own name. The previous abbreviation collided with an unrelated term of art in the
@@ -44,6 +54,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The instrument that enumerates inbound documents was scanning one directory and reporting a
+  clean result over the other.** When a counterpart moved their sent documents to a new location,
+  the scan returned "none addressed to us" — which is byte-identical to a genuine clean scan — while
+  that counterpart held 130. It now reads both locations, names any counterpart it could not scan
+  rather than counting them as zero, and takes a list of search roots instead of one. Its self-test
+  now plants a document in each location; every existing control had held, because the addressee
+  parser was never the broken half.
 - The canonical-CBOR map-key ordering rule in one of the two encoders (length-first, RFC 8949
   §4.2.3, not bytewise §4.2.1). Latent — every key in the corpus is text, where the two orderings
   provably coincide — and found by comparing the two implementations rather than by either one's

@@ -31,6 +31,56 @@ executed against real peers, two suites. The numbers this repo publishes about i
 ratcheted and are lowered by doing the work, never by editing the number.
 """
 
+# ── What each directory IS ────────────────────────────────────────────────────────
+# Declared rather than inferred from a path name. Longest path wins.
+
+[[area]]
+path      = "docs/status"
+kind      = "status"       # dated, episodic, ages out. Written for the next session, not a reader
+publishes = false
+
+[[area]]
+path      = "docs/outbox"
+kind      = "outbox"       # packets we have SENT. Routing is internal and never publishes
+publishes = false
+
+[[area]]
+path      = "docs/archive"
+kind      = "archive"      # dated BY DESIGN and does not age out; closed docs keep their date
+publishes = false
+
+[[area]]
+path      = "docs/adr"
+kind      = "adr"          # this repo's own decisions. Cited by number from anywhere; not published
+publishes = false
+
+[[area]]
+path      = "docs/agents/memory"
+kind      = "memory"       # durable, indexed, edited in place — see the note on `internal` below
+publishes = false
+
+# ── Living documents — durable, rewritten in place, and not all of them publish ────
+
+[[living]]
+path = "docs/STATUS.md"    # the rolling status. Declared as a [[doc]] below: this one DOES publish
+
+[[living]]
+glob     = "docs/status/TRACKER-*.md"
+internal = true            # durable AND must never publish: what is open with one counterpart
+
+[[living]]
+glob     = "docs/agents/memory/*.md"
+internal = true
+# ⚠ WHY MEMORY IS INTERNAL HERE, stated because the standard's example publishes it and we do not.
+# These files are a straight MOVE out of AGENTS.md — the standard's own instruction, and the right
+# one — and they have not been rewritten for an outside reader. They still carry finding ids,
+# packet stems, sibling-repo paths and the names of internal gates, which this repo's publication
+# rule says do not belong in a declared document. Publishing them unscrubbed would leak ecosystem
+# operations; DELETING the material to make them publishable is the exact mistake the standard
+# opens by naming. So they are declared and held internal, and the scrub is the next pass: a file
+# that becomes a clean read for a stranger moves to [[doc]] and publishes. The half of this
+# material that IS written for an outside reader already publishes, as docs/PROCESS.md.
+
 # ── Overview ──────────────────────────────────────────────────────────────────────
 
 [[doc]]
@@ -56,6 +106,36 @@ path  = "docs/CLI.md"
 title = "Command-line tools"
 blurb = "Every make target — build, test, lint, run against peers, compare two instruments — and the suite executable's own flags."
 group = "Tools"
+
+# ── Working in this repository ────────────────────────────────────────────────────
+# ⛔ THESE ARE LOOSE TOP-LEVEL PROSE AND ARE DELETED FROM THE PUBLIC TREE IF UNDECLARED.
+# That is how a repository ends up public with no AGENTS.md without anyone deleting one. They are
+# also the first four files a contributor — human or agent — opens, so they belong in the
+# published set on their own merits, not only to satisfy the floor.
+
+[[doc]]
+path  = "AGENTS.md"
+title = "Working in this repository"
+blurb = "What this seat is for, the three prohibitions that protect it, the rules a change is held to, and where to look next. Read first, by anyone."
+group = "Working here"
+
+[[doc]]
+path  = "CLAUDE.md"
+title = "Agent entry point"
+blurb = "A shim. Guidance lives in AGENTS.md and AGENTS-STANDARD.md; this file only points at them, so there is one source of truth rather than two that drift."
+group = "Working here"
+
+[[doc]]
+path  = "AGENTS-STANDARD.md"
+title = "Shared conventions across the project"
+blurb = "The conventions every repository in this project shares — history, build interface, contribution, honesty about conformance numbers. Identical wherever it appears."
+group = "Working here"
+
+[[doc]]
+path  = "METHODOLOGY.md"
+title = "Methodology — disciplines, doctrines and the ratchet"
+blurb = "How a rule earns the right to exist here, and how what a piece of work taught gets fed back. Carried in every repository; opened when something points at it, not read up front."
+group = "Working here"
 
 # ── How the work is done ──────────────────────────────────────────────────────────
 # The method is most of the deliverable here: an instrument is only as good as the

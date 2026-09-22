@@ -29,7 +29,7 @@ This is the whole brief. Everything else is detail.
 | `entity-core-go`'s `validate-peer` source | prohibition 3. It is a source of *coverage questions*, never of expected values |
 | ⛔⭐ **`suites/CONTROL-SET.diag`** | **it contains the answers.** The expected verdict for every peer on every requirement you are about to implement. Reading it does not help you build a suite — it lets you write one that agrees, which is worth nothing. **It is read by whoever validates your work, after you have run.** |
 | ⛔ **`docs/WORKFLOW-SUITE-BRINGUP.md`** and **`docs/status/HANDOFF-*`** | the operator's and validator's documents. They name which requirements are expected to pass, which implementations fail and how, and what the validator will check you against. **Same problem as the line above, in prose.** |
-| `docs/STATUS.md`, `docs/status/RUN-*`, `docs/status/ROUTING-*` | recorded results. You would be reading the answers with extra steps |
+| `docs/STATUS.md`, `docs/status/RUN-*`, `docs/outbox/ROUTING-*` | recorded results. You would be reading the answers with extra steps |
 
 ⚠ **If you have already read any of these, say so before you write a line of code.** It is not a
 failure and nothing bad happens — **you stop being the author and become the validator**, and

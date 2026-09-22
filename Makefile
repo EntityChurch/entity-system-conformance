@@ -11,7 +11,7 @@
 # (`entity-system-generator` ADR-0001): host python is stdlib-only; anything needing a third-party
 # library runs in a container. `lint` stays containerised so the interpreter version is pinned.
 
-.PHONY: help build corpus test lint lint-native lint-ignored lint-sources lint-spec-data lint-requirements lint-items check clean \
+.PHONY: help build corpus test fmt lint lint-native lint-ignored lint-sources lint-spec-data lint-requirements lint-items check clean \
         install-probe require-suite require-peers peers peer-identity inbox lint-inbox lint-suite-slot lint-codec-agreement \
         keystone-suite generator-suite core-go-suite \
         keystone-s1 keystone-oracle generator-s1 generator-oracle core-go-s1 core-go-oracle differential \
@@ -54,6 +54,8 @@ help:
 	@echo "  build       suite 1 ($(S1)) -> $(S1_BIN) + $(S1_BIN).d (pinned interpreter, requirement digests)"
 	@echo "              ⛔ builds ONE suite. Any other suite is DELIVERED as an executable, not built here."
 	@echo "  test        suite 1's codec vs the ECF corpus, Ed25519 vs RFC 8032, in the pinned interpreter"
+	@echo "  fmt         reformats NOTHING, and prints the whole list of why — there is no formatter here"
+	@echo "  clean       remove $(OUT)/ and scratch/"
 	@echo
 	@echo "  ⭐ the run path takes SUITE=<name> (default $(SUITE)); see require-suite for what a suite must supply"
 	@echo "  keystone-suite  SUITE on KEYSTONE_PEERS via keystone census --probe  (default set: $(KEYSTONE_PEERS))"
@@ -215,9 +217,16 @@ peer-identity:
 # with no sibling repo present; an inbox gate that cannot see the siblings would report an empty
 # inbox, and an empty inbox and an unread one print the same thing. So the live pull is this target,
 # run by a person, and `lint-inbox` gates only the PARSER — which is the half a container can see.
+#
+# ⛔ THE ROOTS ARE A LIST, AND ONE OF THEM WAS MISSING FOR THIS TARGET'S WHOLE LIFE. A single root
+# bounds the counterpart set to one parent directory: a counterpart whose tree sits two levels up is
+# unreachable by construction, so a packet it addressed to us could not appear in this count no
+# matter how carefully it was written. AP-1's bounded negative, pointed at the counterpart list.
+# Both roots are passed; a root that does not resolve is reported and exits 2, never skipped.
+SIBLING_ROOTS ?= $(dir $(abspath $(KEYSTONE))) $(abspath $(dir $(abspath $(KEYSTONE)))/../..)
 inbox:
 	@python3 -B tools/inbox.py --self-test
-	@python3 -B tools/inbox.py --siblings $(dir $(abspath $(KEYSTONE)))
+	@python3 -B tools/inbox.py $(addprefix --siblings ,$(SIBLING_ROOTS))
 
 # ⛔ THE FLOOR ON THE SUITE SIDE, the twin of require-peers. A missing instrument must say WHICH
 # artifact is absent and how it gets there, because the failure it replaces — make's "no rule to
@@ -503,6 +512,29 @@ lint-items:
 lint-native:
 	@echo "lint-native: host python3 — sanctioned, but the interpreter version is not pinned; reports cite make lint." >&2
 	@$(MAKE) --no-print-directory lint PY=python3
+
+# ── fmt ───────────────────────────────────────────────────────────────────────────────────────
+# Tier-1 verb, and it REFORMATS NOTHING. That is a real answer, not a stub, and it says so out loud
+# rather than exiting 0 in silence — a verb that prints nothing and succeeds is indistinguishable
+# from one that ran and found nothing to do, which is the fail-open shape this repo refuses.
+#
+#   suite 1      Python 3.12 STDLIB ONLY, and every target is container-default. Adding a
+#                formatter means adding a third-party dependency to the one thing whose whole
+#                claim is that it shares no library with anybody.
+#   suite 2      DELIVERED, not built here. Its tree is formatted by its author, in their toolchain.
+#   requirements canonical CBOR is not a style. `make corpus` re-derives the artifact and its digest
+#                MOVES on any content change, so the shape of these files is gated, not formatted.
+#                A formatter here would silently re-encode obligations and move digests under
+#                verdicts that were scored against them.
+#   tools/       stdlib python, checked by `make lint`, which is where a style rule would go.
+fmt:
+	@echo "fmt: nothing to reformat, deliberately — and this is the whole list:"
+	@echo "  suites/py-prototype  stdlib-only by rule; a formatter is a shared dependency (make lint-suite-independence)"
+	@echo "  suites/*             any suite that is not suite 1 is DELIVERED; its tree is its author's"
+	@echo "  requirements/*.diag  canonical CBOR is GATED, not formatted — re-encoding here moves digests"
+	@echo "                       under verdicts already scored against them (make corpus, make lint-requirements)"
+	@echo "  tools/               stdlib python; style belongs in 'make lint'"
+	@echo "fmt: 0 file(s) changed. If you expected a formatter, the answer is that there is none, not that it found nothing."
 
 check: build test lint
 

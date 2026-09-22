@@ -1,0 +1,76 @@
+{
+  "header": [
+    "UNALLOCATED — a generic 500 carries `internal_error`; `io_error` and `storage_error` are used only",
+    "for their own conditions. A MUST the specification itself says no wire client can drive.",
+    "",
+    "Batch 2. Reached by reading §3.3 whole (the 500 row and its satisfaction mode)."
+  ],
+  "id_status": "unallocated",
+  "under": "",
+  "title": "A 500 response carries `internal_error` unless `io_error` (OS I/O) or `storage_error` (store/tree) names the actual condition",
+  "spec": "ENTITY-CORE-PROTOCOL §3.3 (500 row + default-code force)",
+  "spec_also": [
+    "§3.3 satisfaction mode ('500 — not drivable by a conformance client ... satisfied by a source audit')"
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "MUST",
+  "profile": [
+    "core"
+  ],
+  "surface": "unreachable",
+  "status": "draft",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F16",
+  "reading": [
+    "§3.3's 500 row: \"Default `code` = `internal_error` — an internal step failed and no more-specific",
+    "defined code applies (0.8.2.6). More-specific 500 codes where one applies (0.8.2.8): `io_error` ...",
+    "`storage_error` ... The two are distinct conditions and are not interchangeable.\" Default-code force",
+    "makes the default a MUST for the generic case, and makes an undefined spelling non-conformant.",
+    "",
+    "TWO CLAUSES, ONE SLOT. As with ECP-R44, the unit is the code slot at 500: {internal_error, io_error,",
+    "storage_error}, each used for its own condition. \"Not interchangeable\" is part of what the slot",
+    "means, not a second obligation.",
+    "",
+    "THE SPECIFICATION DECLARES IT UNREACHABLE, WHICH IS UNUSUAL AND WORTH TAKING AT ITS WORD. §3.3: \"500 —",
+    "not drivable by a conformance client. A conformant peer cannot be made to fail internally on demand",
+    "over the wire, so this row is satisfied by a SOURCE AUDIT of the implementation's emit sites at a",
+    "named commit, not by a `validate-peer` check.\" And: \"a check MUST NOT be pinned to a row it cannot",
+    "reach.\" That last sentence binds THIS REPO's suites. So there is no wire arm, no negative control,",
+    "and the exclusion below names the class and the discharge.",
+    "",
+    "WHY AUTHOR A FILE AT ALL. Because the alternative is silence, and silence is indistinguishable from",
+    "nobody having read the 500 row. The file makes the obligation countable and names what would",
+    "discharge it.",
+    "",
+    "WHY `unallocated`. No §9 row names 500 codes. The discharge question (cross-peer observable? interop",
+    "breaking?) is answered \"observable when it occurs, unforceable to make occur\" — which the CQ-9",
+    "procedure does not have a branch for. F16."
+  ],
+  "preconditions": {
+    "grants": [],
+    "identities": [],
+    "handlers": []
+  },
+  "unreachable": {
+    "class": "§3.3 satisfaction mode — not drivable by a conformance client (the specification's own classification)",
+    "why_no_proxy": "any wire input that produces a 500 on a conformant peer is a peer bug by definition, so no suite can rely on one existing; fault injection needs the peer's cooperation, which is a host-seam, not the wire.",
+    "discharged_by": [
+      "a source audit of every 500 emit site at a named content digest or release tag",
+      "a host-seam fault-injection hook, where a peer's harness offers one"
+    ],
+    "reported_as": "SKIP, naming §3.3's satisfaction mode — never PASS"
+  },
+  "arm": [
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a peer whose store layer surfaces an OS error string as the code, or maps every internal failure to `io_error`",
+      "expect": "500 with `code` = 'ENOSPC' or `io_error` for a store failure",
+      "why": "the two defects the 0.8.2.6/0.8.2.8 revisions name: an undefined spelling, and the two specific codes treated as interchangeable."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": "",
+    "oracle_note": "by the specification's own text no validate-peer check measures this, and none should."
+  }
+}

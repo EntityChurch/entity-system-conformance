@@ -1,0 +1,161 @@
+{
+  "header": [
+    "UNALLOCATED — ⚖ DISPUTED — is a received frame that is valid CBOR but not canonical ECF refused, or accepted?",
+    "",
+    "Batch 3. The two normative documents give OPPOSITE MUSTs, and the normative vector corpus takes no",
+    "side. Shipped `disputed`: both readings stated, a suite reports SKIP naming the dispute. F21."
+  ],
+  "id_status": "unallocated",
+  "under": "",
+  "title": "A received frame that is valid CBOR but not canonical ECF (non-minimal integer, indefinite length, unsorted map keys, non-shortest float) is refused",
+  "spec": "ENTITY-CORE-PROTOCOL §1.11 ('An implementation MUST NOT: ... Accept any byte sequence at the boundary that is not canonical ECF.')",
+  "spec_also": [
+    "ENTITY-CBOR-ENCODING §9.2 item 1 ('Decoders MUST: 1. Accept any valid CBOR (not just deterministic)') — CONTRADICTS",
+    "ENTITY-CBOR-ENCODING §5.2 ('Receivers MUST validate content hashes by re-encoding to ECF')",
+    "ENTITY-CBOR-ENCODING §10.3 ('Never hash received wire bytes directly, as they may be valid but non-canonical')",
+    "ENTITY-CBOR-ENCODING §5.4 condition (a)",
+    "ENTITY-CBOR-ENCODING Appendix E (no decode_reject vector for non-canonical input)"
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "MUST",
+  "profile": [
+    "core"
+  ],
+  "surface": "wire",
+  "status": "disputed",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F21",
+  "reading": [
+    "READING R — REFUSE. Core §1.11 is headed \"(normative)\": the boundary contract is that a peer \"(b)",
+    "accepts only canonical conformant bytes at the boundary from other peers\", and in its MUST NOT list:",
+    "\"Accept any byte sequence at the boundary that is not canonical ECF.\" Plain, unconditional, and in the",
+    "document that states the conformance floor.",
+    "",
+    "READING A — ACCEPT, RE-ENCODE, VALIDATE. ENTITY-CBOR-ENCODING §9.2: \"Decoders MUST: 1. Accept any valid",
+    "CBOR (not just deterministic)\". And the same document assumes it twice more in prose that only makes",
+    "sense if non-canonical bytes are received and processed: §5.2 \"Receivers MUST validate content hashes by",
+    "re-encoding to ECF and computing the hash\", and §10.3 \"Always re-encode to ECF before hashing. Never hash",
+    "received wire bytes directly, as they may be valid but non-canonical.\" Under A a non-canonical entity is",
+    "accepted iff its re-encoded hash matches the carried one.",
+    "",
+    "WHY WE DO NOT PICK. Unlike tags (F21's first half, authored at MUST), neither side has an explicit",
+    "negation of the other and neither is backed by the corpus: Appendix E has `decode_reject` vectors for",
+    "tags only, and its `length` category tests encoder output (\"confirms the absence of indefinite-length",
+    "output\"). §5.4 condition (a) — \"receipt validation is a strict ECF re-encode-and-compare — so an accepted",
+    "entity's canonical encoding provably equals its received bytes\" — reads naturally under R (compare",
+    "received bytes to canonical re-encoding, reject if different) but is offered as ONE of two permitted",
+    "mechanisms, which under R would be pointless. Real degrees of freedom; prohibition 2.",
+    "",
+    "WHAT BOTH READINGS AGREE ON, AND IS THEREFORE NOT DISPUTED. Duplicate keys (measured separately) and",
+    "tags (measured separately). And under both readings, the CONTENT HASH must be computed over the",
+    "canonical re-encoding, so the probe carries the canonical hash — a refusal under A would then be a",
+    "defect, and an acceptance under R would be.",
+    "",
+    "THE PROBE, for when it is ruled. A hello whose extra field `x_cnf_probe` is encoded non-canonically,",
+    "content_hash computed over the canonical form of {type, data}. Under R: refused. Under A: answered."
+  ],
+  "dispute": {
+    "question": "At the boundary, is valid-but-non-canonical CBOR refused (core §1.11) or accepted and re-encoded for hash validation (ENTITY-CBOR-ENCODING §9.2, §5.2, §10.3)?",
+    "why_it_matters": "every peer is conformant under exactly one of them, and the two produce opposite outcomes on the same bytes. Under R, a peer following ECF §9.2 accepts inputs a §1.11 peer refuses — a cross-peer divergence at the boundary §1.11 says has 'no internal-divergence escape'.",
+    "owner": "entity-system-architecture",
+    "our_lean": "none recorded. If pressed: R is the newer, boundary-scoped statement and §9.2 reads as a pre-§6.3 list (its tag line is already overridden). But §5.2/§10.3 are not stale in the same way, and a lean from document age is the weak argument AP-4 warns about.",
+    "blocked_work": "this requirement only. Non-canonical-input vectors for Appendix E, if R is ruled.",
+    "suite_reports": "SKIP — disputed, naming this question. The witness arm still runs and records the outcome."
+  },
+  "preconditions": {
+    "grants": [],
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "posture_axes": [
+      "seed_policy",
+      "close_wait_bound"
+    ]
+  },
+  "domain": {
+    "axis": "non_canonical_form",
+    "members": [
+      "non-minimal integer (18 01 for 1)",
+      "indefinite-length array (9F 01 FF)",
+      "map keys out of length-then-lex order (\"bb\" before \"a\")",
+      "non-shortest float (FB 3FF8000000000000 for 1.5)",
+      "non-minimal length prefix on a text string (78 03 for a 3-byte string)"
+    ]
+  },
+  "arm": [
+    {
+      "name": "reading-R-refused",
+      "kind": "conformant",
+      "given": "a fresh connection per member; a hello whose extra field is the member; content_hash over the canonical form",
+      "why": "conformant under reading R only. NOT SCORED while disputed.",
+      "step": [
+        {
+          "op": "send_hello",
+          "capture": "non_canonical",
+          "extra": "the domain member, encoded non-canonically"
+        }
+      ],
+      "witness": [
+        {
+          "field": "outcome_and_code",
+          "why": "the cohort's current split is the most useful input to the ruling."
+        }
+      ]
+    },
+    {
+      "name": "reading-A-accepted",
+      "kind": "conformant",
+      "given": "the same input",
+      "why": "conformant under reading A only: the hello is answered. NOT SCORED while disputed.",
+      "step": [
+        {
+          "op": "send_hello",
+          "capture": "non_canonical_a",
+          "extra": "the domain member, encoded non-canonically"
+        }
+      ],
+      "witness": [
+        {
+          "field": "outcome_and_code",
+          "why": "same observation, recorded against the other reading."
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "the same hello with the member canonically encoded",
+      "why": "MANDATORY ANTI-VACUITY, and runs now: proves the only difference is the encoding, so whatever the ruling is, the witnessed outcome is attributable to canonicality and not to the extra field.",
+      "step": [
+        {
+          "op": "send_hello",
+          "capture": "canonical",
+          "extra": "the member, canonical"
+        }
+      ],
+      "accept": [
+        {
+          "outcome": "hello_answered",
+          "why": "ECP-R4-pending-b."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "close",
+          "why": "voids the witness."
+        }
+      ]
+    },
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a peer that hashes the received wire bytes directly",
+      "expect": "under BOTH readings it is non-conformant: it accepts a non-canonical hello only if the carried hash was computed over the non-canonical bytes, which no conformant sender produces",
+      "why": "§10.3's named hazard, and the one outcome this file can score before the ruling: a hello whose carried hash is over the NON-canonical bytes must never be answered. Recorded as a witness until the arm vocabulary can score one member of a disputed file."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": ""
+  }
+}

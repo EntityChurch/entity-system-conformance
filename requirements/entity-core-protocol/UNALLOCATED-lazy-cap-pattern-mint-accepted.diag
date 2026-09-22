@@ -1,0 +1,129 @@
+{
+  "header": [
+    "UNALLOCATED — a cap pattern naming a never-contacted peer by a non-canonical handle is ACCEPTED at mint, not refused.",
+    "",
+    "Batch 4. §3.6 rule 3, first MUST. What `peer_pattern_2_lazy_canon_mint` measures. Its second MUST",
+    "(canonicalize on first contact) is a separate file: a peer can accept and never canonicalize."
+  ],
+  "id_status": "unallocated",
+  "under": "",
+  "title": "A policy entry whose peers: reference is the SHA-256 form of a peer the impl has never contacted is accepted by configure",
+  "spec": "ENTITY-CORE-PROTOCOL §3.6 rule 3 ('when an operator mints a cap pattern using a non-canonical Base58 handle for a peer the impl has not previously contacted, the impl MUST accept the mint with the non-canonical form, recording the pattern as `pending-canonicalization`')",
+  "spec_also": [
+    "§1.5 carve-out (canonicalize 'via the §6.2 lazy-canonicalize path when at mint time without prior contact') — the rule lives in §3.6, F33",
+    "§1.5 ('Impls MAY refuse non-canonical form at construction or handshake under stricter local policy') — does not name mint, F35",
+    "§6.2 configure"
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "MUST",
+  "profile": [
+    "core"
+  ],
+  "surface": "wire",
+  "status": "draft",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F33, F35, F37",
+  "reading": [
+    "THE OBLIGATION IS ACCEPTANCE. \"the impl MUST accept the mint with the non-canonical form\". The second half of",
+    "the sentence — \"recording the pattern as `pending-canonicalization`\" — names internal state with no wire",
+    "representation the spec defines (no field, no type, no path), so it is not asserted; only its consequence is,",
+    "in the companion file.",
+    "",
+    "WHY THIS CANNOT BE CANONICALIZED AT MINT, AND WHY THAT IS THE POINT. The SHA-256 form carries `SHA-256(P)`, not",
+    "`P`; without prior contact the impl cannot compute `C(K)`. The rule's alternative to accepting was refusing,",
+    "and the text chose acceptance.",
+    "",
+    "A STRICTER-POLICY REFUSAL IS NOT PERMITTED BY THE SNAPSHOT (F35). §1.5 lets an impl \"refuse non-canonical form",
+    "at construction or handshake under stricter local policy\". \"Construction\" is not defined in §1.5, so this is a",
+    "reading and it is argued, not asserted (review): the same document uses the word for building a peer_id — §7.4",
+    "\"Implementations MUST construct using canonical `hash_type`\", \"is NOT a valid construction form\" — and §1.5's",
+    "sentence is about the FORM of a peer_id. Minting a pattern that names someone else's peer_id is not constructing",
+    "one. On that reading mint is neither construction nor handshake. The v7.65 proposal the rule came",
+    "from says \"Reject-at-mint can be added as deployment-local stricter policy if wanted\" (§6.2 there) — and that",
+    "sentence did not reach the specification. So a refusing peer is non-conformant as written. We author the text,",
+    "flag the probable intent, and route it: if arch folds the permission, this file gains an `accept` arm for the",
+    "refusal, with a code.",
+    "",
+    "WHICH WRITE IS A MINT. Handler-mediated policy writes only: `configure` (see the rule-1 file — a raw",
+    "`system/tree:put` bypasses the handler and §6.2 says it \"skips\" normalization, so rule 3 cannot bind it).",
+    "",
+    "FORM, AND THE UNCONTACTED KEY. K is generated for this run and never used to connect before the probe, so \"not",
+    "previously contacted\" holds by construction rather than by assumption about the peer's history. Flat form in",
+    "`peers` (F32)."
+  ],
+  "preconditions": {
+    "grants": [
+      "system/capability: configure"
+    ],
+    "identities": [
+      "caller",
+      "K (generated for the run, never connected)"
+    ],
+    "handlers": [
+      "system/capability with the configure operation"
+    ],
+    "posture_axes": [
+      "seed_policy"
+    ],
+    "note": "no configure operation, or no grant for it under the declared posture → UNMEASURABLE, never passed. (§9.5 rules configure core; its absence is a different failure.)"
+  },
+  "arm": [
+    {
+      "name": "accepted",
+      "kind": "conformant",
+      "given": "an authenticated caller; K never connected; configure a policy entry whose grant-entry has peers.include = [S(K)]",
+      "why": "rule 3's first MUST.",
+      "step": [
+        {
+          "op": "connect"
+        },
+        {
+          "op": "send_execute",
+          "capture": "configure_uncontacted",
+          "uri": "system/capability",
+          "operation": "configure",
+          "note": "policy-entry {peer_pattern: <hex of a suite identity>, grants: [{handlers: {include: [\"system/tree\"]}, resources: {include: [\"cnf/*\"]}, operations: {include: [\"get\"]}, peers: {include: [S(K)]}}]}"
+        }
+      ],
+      "assert": [
+        {
+          "kind": "status",
+          "capture": "configure_uncontacted",
+          "equals": 200
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "the identical configure, to a different peer_pattern, with peers.include = [C(K2)] for a second never-contacted key K2",
+      "why": "MANDATORY ANTI-VACUITY. Proves configure accepts a pattern naming an uncontacted peer at all on this peer under this posture — so a refusal in the main arm is attributable to the non-canonical FORM, not to the grant, the handler, or a policy of refusing unknown peers (which the text does not forbid for canonical ids either, and so could not be scored).",
+      "step": [
+        {
+          "op": "send_execute",
+          "capture": "configure_uncontacted_canonical",
+          "uri": "system/capability",
+          "operation": "configure",
+          "note": "policy-entry {peer_pattern: <hex of another suite identity>, grants: [the same grant-entry, peers: {include: [C(K2)]}]}"
+        }
+      ],
+      "assert": [
+        {
+          "kind": "status",
+          "capture": "configure_uncontacted_canonical",
+          "equals": 200
+        }
+      ]
+    },
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a peer that validates peers: references as canonical at write time",
+      "expect": "the control is 200 and the main arm is a 4xx",
+      "why": "the paste-handle case §3.6 says the rule preserves: an operator holding only a legacy handle can grant nothing to that peer until after contact, and falls back to `default`."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": "peer_canonicalization/peer_pattern_2_lazy_canon_mint"
+  }
+}

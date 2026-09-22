@@ -1,0 +1,137 @@
+{
+  "header": [
+    "UNALLOCATED — ENTAILED — identity references (granter, grantee, signer) are 0x00 hashes on every connection, whatever format is active.",
+    "",
+    "Batch 4. §4.5a item 1a (v7.77). Batch 1's §4.5a holes were items 1, 2 and 4; 1a sits inside item 1 and is",
+    "the identity surface, so it is read here. Conditional: unobservable against a peer that negotiates only 0x00."
+  ],
+  "id_status": "unallocated",
+  "under": "",
+  "title": "On a connection whose active content_hash_format is not 0x00, every identity reference the peer emits (granter, grantee, signer) still carries format code 0x00",
+  "spec": "ENTITY-CORE-PROTOCOL §4.5a item 1a ('The identity entity a peer presents (§4.6's `peer_entity`) is authored under ECFv1-SHA-256 (`0x00`) unconditionally — on every connection, whatever the active format, and whatever the peer's home format.')",
+  "spec_also": [
+    "§4.5a item 1 (every other wire/identity-surface entity is hashed under the active format)",
+    "§4.5a item 4 (MUST NOT re-derive a received identity's content_hash under a different format)",
+    "§4.5a item 2 ('A peer MUST NOT author a wire/identity-surface entity under a format outside the negotiated active value') — IN TENSION, F34",
+    "§4.5 ('MUST NOT transmit an entity whose `content_hash_format` is outside the negotiated active value') — IN TENSION, F34",
+    "§4.4 (the granter identity is in the authenticate response's included map)",
+    "§4.6 construction",
+    "§1.2 format table (0x01 = SHA-384, 49 bytes)"
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "MUST",
+  "level_basis": "entailed",
+  "profile": [
+    "core"
+  ],
+  "surface": "wire",
+  "status": "draft",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F34, F37",
+  "reading": [
+    "THE LEVEL IS ARGUED. Item 1a has no keyword of its own. It is headed \"(normative, v7.77)\", it is written as",
+    "an \"Exception\" to item 1, which is a MUST (\"MUST be content-hashed under the active format\"), and it says the",
+    "identity entity \"is authored under ECFv1-SHA-256 (`0x00`) unconditionally\". An exception to a MUST that",
+    "states the alternative in the indicative is the alternative at MUST: otherwise a peer hashing its identity",
+    "under the active format would satisfy item 1 and item 1a would permit it, and item 1a's stated purpose — \"the",
+    "identity hash becomes the same bytes on every connection in the network\" — would be unachieved by a",
+    "conformant peer. So the level is ENTAILED from item 1's MUST plus the section's \"(normative)\" header, and",
+    "`level_basis` says so.",
+    "",
+    "WHAT IS DISCRIMINATING. On a 0x00 connection item 1 and item 1a demand the same bytes, so only a connection",
+    "whose active format is NOT 0x00 separates them. The cleanest is 0x01 (SHA-384, \"Validated\"). A peer that does",
+    "not advertise any non-0x00 format cannot be driven there: the requirement is UNMEASURABLE against it, and",
+    "reported so — never passed.",
+    "",
+    "⚠ WHAT ITEM 1a COLLIDES WITH, AND WHY ONLY REFERENCES ARE SCORED (found by review). Item 1a calls itself the",
+    "\"Exception\" to item 1 and \"the single exception to §1.2's\" uniform home format. It does not name item 2 (\"A peer",
+    "MUST NOT author a wire/identity-surface entity under a format outside the negotiated active value\") or §4.5",
+    "(\"MUST NOT transmit an entity whose `content_hash_format` is outside the negotiated active value\"). The",
+    "`system/peer` ENTITY is a wire/identity-surface entity; on a 0x01 connection its 0x00 hash is outside the active",
+    "value, so transmitting it — §4.4 puts the granter identity in `included` — satisfies item 1a and violates both.",
+    "The identity REFERENCES are different: `granter`, `grantee` and `signer` are hash values inside another entity's",
+    "`data`, not entities authored or transmitted, so item 2 and §4.5 do not reach them and item 1a governs them",
+    "alone. So: the references are scored; the entity itself is witness-only, and the collision is routed (F34).",
+    "",
+    "THE TWO HASHES ON ONE CONNECTION. Under 0x01, the envelope and the grant token are hashed under 0x01 (item 1)",
+    "and the identity references INSIDE them — `signer`, `granter`, `grantee` — are 0x00 (item 1a). A peer that",
+    "applies \"active format\" uniformly emits 0x01 identity references. A peer that applies 0x00 uniformly emits a",
+    "0x00 token hash on a 0x01 connection. The main arm catches the first and the control catches the second.",
+    "",
+    "F34 (wording, routed): item 1a justifies itself by saying the identity entity is \"wholly recoverable from the",
+    "public peer-id\". That is true for identity-form key_types and false for SHA-256-form ones (Ed448, ML-DSA-*),",
+    "where §1.4 says \"SHA-256-form requires prior contact to recover pubkey\". The obligation does not depend on",
+    "the justification, so this file is unaffected."
+  ],
+  "preconditions": {
+    "grants": [],
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "posture_axes": [
+      "seed_policy",
+      "content_hash_format"
+    ],
+    "note": "requires the peer to advertise a non-0x00 hash format (ecfv1-sha384 preferred). Otherwise UNMEASURABLE, reported as such."
+  },
+  "domain": {
+    "axis": "identity_reference_on_non_floor_connection",
+    "members": [
+      "authenticate response grant token data.granter",
+      "authenticate response grant token data.grantee",
+      "the included capability signature's data.signer",
+      "(witness only — F34) whether the granter's system/peer entity is included, and under which format code"
+    ]
+  },
+  "arm": [
+    {
+      "name": "floor-pinned",
+      "kind": "conformant",
+      "given": "a hello advertising only `ecfv1-sha384`; handshake completes with active format 0x01",
+      "why": "item 1a at the only connection where it is distinguishable from item 1.",
+      "step": [
+        {
+          "op": "connect",
+          "capture": "sha384",
+          "hash_formats": [
+            "ecfv1-sha384"
+          ]
+        }
+      ],
+      "assert": [
+        {
+          "kind": "identity_hash_format_code",
+          "capture": "sha384",
+          "equals": "0x00",
+          "why": "each domain member is a 33-byte 0x00 hash."
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "the same connection. The grant token is a capability minted for this connection (item 1 names 'the capabilities it mints for this connection'; item 5 forbids carrying a home-format chain across a format boundary)",
+      "why": "MANDATORY ANTI-VACUITY. The grant token's OWN content_hash (the `included` key) is under the active format, 0x01 — proves the connection really is non-floor and the peer is not simply hashing everything at 0x00, in which case the main arm passes for the wrong reason.",
+      "assert": [
+        {
+          "kind": "each_included_key_format_code",
+          "capture": "sha384",
+          "exclude": "system/peer",
+          "equals": "0x01"
+        }
+      ]
+    },
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a peer that re-hashes its identity under the active format",
+      "expect": "granter/grantee/signer are 49-byte 0x01 hashes",
+      "why": "its identity is a different value on every connection format, so a cap it granted on a 0x00 connection names a granter no 0x01 connection recognises — the split item 1a was added to close."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": "",
+    "oracle_note": "no reference check in `peer_canonicalization` cites §4.5a; `format_agility` may. Not looked up in the register for this batch."
+  }
+}

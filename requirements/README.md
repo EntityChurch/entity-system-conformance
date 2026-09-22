@@ -5,9 +5,17 @@ file per independently failable obligation, authored **from the specification** 
 `spec-data/` snapshot, stating what a conformant peer does *and* what a non-conformant one does.
 
 ```
-requirements/ECP-INDEX.md        derived id↔§9-row map — scaffolding, deleted when §9 converts
-requirements/core/<id>.toml      one obligation, one file
+requirements/ECP-INDEX.md                        derived id↔§9-row map — scaffolding, deleted when §9 converts
+requirements/<spec>/<id>.diag                    one obligation, one file (CBOR diagnostic notation, RFC 8949 §8)
+requirements/entity-core-protocol/ECP-R7.diag    …so, concretely
 ```
+
+⭐ **`requirements/<spec>/` mirrors `spec-data/<spec>/` name-for-name** (`ADR-0001`), so *"which
+specification is this requirement from"* is answerable from the path alone. The mirror is a gate,
+not a convention: `tools/requirement-gate.py` fails the build if a file's directory and its
+`snapshot` field name different specs. **This directory was called `core` until 2026-09-15** — an
+abbreviation this seat invented, which collided with *core profile*, a real and different thing, and
+which no instrument in the tree could see was wrong.
 
 ## The id, and its three states
 
@@ -18,9 +26,9 @@ declares `id_status`, and **all three states are real and countable**:
 
 | `id_status` | Means | Filename |
 |---|---|---|
-| `allocated` | binds a §9 row's own id | `ECP-R66.toml` |
-| `pending-split` | the §9 row it belongs to **bundles**; this obligation is the 2nd or 3rd under one id, and arch appends its number from `ECP-R99` — **the split is routed, never performed here** | `ECP-R66-pending-b.toml` |
-| `unallocated` | ⭐ **a binding MUST in the specification body with NO §9 row at all.** Not a bundled row — an absent one | `UNALLOCATED-<slug>.toml` |
+| `allocated` | binds a §9 row's own id | `ECP-R66.diag` |
+| `pending-split` | the §9 row it belongs to **bundles**; this obligation is the 2nd or 3rd under one id, and arch appends its number from `ECP-R99` — **the split is routed, never performed here** | `ECP-R66-pending-b.diag` |
+| `unallocated` | ⭐ **a binding MUST in the specification body with NO §9 row at all.** Not a bundled row — an absent one | `UNALLOCATED-<slug>.diag` |
 
 > ⭐ **`unallocated` is the state nobody expected, and it is now a sanctioned measurement: the
 > FLOOR-GAP WORKLIST.** Ruled 2026-09-12 (`CQ-9`): §9 is the membership authority for **the floor**

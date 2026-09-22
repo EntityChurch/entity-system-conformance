@@ -1,0 +1,139 @@
+{
+  "header": [
+    "UNALLOCATED — §6.11(b): responses arriving out of order on one connection are routed to their",
+    "callers by request_id.",
+    "",
+    "Batch 2. Floor by §9.0's prose, no §9.1 row (F14). This is the requester-side obligation the",
+    "reference check `connectivity/request_id_echoed` CITES; the responder-side echo it MEASURES is",
+    "ECP-R6 (F11)."
+  ],
+  "id_status": "unallocated",
+  "under": "",
+  "title": "When a counterparty answers a peer's outbound EXECUTEs out of order on one connection, each originating call receives its own response",
+  "spec": "ENTITY-CORE-PROTOCOL §6.11(b)",
+  "spec_also": [
+    "§3.2 (Correlation)",
+    "§6.5 ('Root is EXECUTE_RESPONSE? -> Correlate by request_id, deliver to waiting caller')",
+    "§6.11 'Profile applicability'",
+    "§9.0"
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "MUST",
+  "profile": [
+    "core"
+  ],
+  "surface": "host-seam",
+  "status": "draft",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F14",
+  "reading": [
+    "§6.11(b): \"Response routing MUST tolerate out-of-order replies on a single connection. The",
+    "`request_id` field on each `EXECUTE_RESPONSE` (§3 wire format) is the demultiplexing key; responses MUST be routed to the",
+    "awaiting caller by `request_id`, irrespective of receive order on the wire.\"",
+    "",
+    "TWO MUSTS, ONE OBLIGATION: \"tolerate out-of-order\" is what \"route by request_id irrespective of order\"",
+    "produces. A peer can fail it two ways — deliver response #2 to caller #1 (routing by arrival order),",
+    "or discard/hang on an unexpected id — and both are the same failure of the one obligation.",
+    "",
+    "WHAT ONLY THE SEAM CAN SEE. The suite can SEND responses out of order; only the originating handler",
+    "knows which response each call RECEIVED. So the probe handler reports, per call, the result it got,",
+    "and the responses carry distinguishable results. This is the precondition that makes (b) measurable at",
+    "all, and why it is host-seam.",
+    "",
+    "SINGLE CONNECTION IS PART OF THE INPUT. On a dial-per-dispatch peer, each response arrives alone on its",
+    "own connection and \"out of order on a single connection\" is unconstructible -> SKIP naming the",
+    "mechanism (from the (a) file's witness), not PASS."
+  ],
+  "preconditions": {
+    "grants": [
+      "as UNALLOCATED-reentry-no-serialization-across-await"
+    ],
+    "identities": [
+      "caller",
+      "suite-as-counterparty"
+    ],
+    "handlers": [
+      "originating-probe (as above), reporting for each originated call the `result` it received"
+    ],
+    "posture_axes": [
+      "seed_policy",
+      "origination_trigger"
+    ]
+  },
+  "arm": [
+    {
+      "name": "reversed-replies-routed",
+      "kind": "conformant",
+      "given": "the probe handler originates #1 then #2 on one pooled connection; the suite answers #2 FIRST, then #1, each with a result naming its own request_id",
+      "why": "§6.11(b).",
+      "step": [
+        {
+          "op": "listen_as_counterparty"
+        },
+        {
+          "op": "trigger_origination",
+          "count": 2
+        },
+        {
+          "op": "receive_inbound_executes",
+          "capture": "pair",
+          "count": 2
+        },
+        {
+          "op": "respond_in_order",
+          "order": [
+            "second",
+            "first"
+          ],
+          "result": "a primitive/any entity whose data names the request_id it answers"
+        },
+        {
+          "op": "read_probe_handler_report",
+          "capture": "report"
+        }
+      ],
+      "assert": [
+        {
+          "kind": "each_call_received_its_own_result",
+          "capture": "report"
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "the same, answered IN order",
+      "why": "MANDATORY ANTI-VACUITY. Proves the report is faithful and the result payloads distinguishable: in-order replies MUST route correctly on any working peer. If THIS arm fails, the harness or the seam is broken and the run is SKIP, not FAIL — the conformant arm's failure only means something when this one passes.",
+      "step": [
+        {
+          "op": "respond_in_order",
+          "order": [
+            "first",
+            "second"
+          ]
+        },
+        {
+          "op": "read_probe_handler_report",
+          "capture": "report_in_order"
+        }
+      ],
+      "assert": [
+        {
+          "kind": "each_call_received_its_own_result",
+          "capture": "report_in_order"
+        }
+      ]
+    },
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a pooled client that pairs each write with the next frame read",
+      "expect": "call #1 receives #2's result and vice versa",
+      "why": "the arrival-order router; indistinguishable from a correct one whenever the counterparty happens to answer in order, which is why the reversal is the probe."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": "",
+    "oracle_note": "cited, not measured, by connectivity/request_id_echoed (F11)."
+  }
+}

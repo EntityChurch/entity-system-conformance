@@ -1,0 +1,140 @@
+{
+  "header": [
+    "ECP-R6 — an EXECUTE_RESPONSE carries the request_id of the EXECUTE it answers.",
+    "",
+    "Batch 2. The obligation the reference check `connectivity/request_id_echoed` measures. §9.1 names it",
+    "as \"Request ID correlation\" — a row with no citation, no party and no keyword. No body sentence",
+    "places the echo on the responder with a keyword either; the row is satisfiable only by the echo.",
+    "",
+    "CORRECTED 2026-09-12 (review): this file was first shipped `unallocated`, claiming no §9 row named",
+    "the obligation. §9.1's \"Request ID correlation\" row (ECP-R6) does. Nobody had grepped for it. F11."
+  ],
+  "id": "ECP-R6",
+  "id_status": "allocated",
+  "title": "The request_id of an EXECUTE_RESPONSE equals the request_id of the EXECUTE it answers",
+  "spec": "ENTITY-CORE-PROTOCOL §3.2 (Request ID — Correlation)",
+  "spec_also": [
+    "§3.3 (EXECUTE_RESPONSE: `request_id` is a required field)",
+    "§6.11(b) (the requester MUST route responses by request_id)",
+    "§6.5 ('Root is EXECUTE_RESPONSE? -> Correlate by request_id')",
+    "§4.10(a) ('a 413 EXECUTE_RESPONSE correlated by request_id')",
+    "§9.1 ('Request ID correlation' — the floor row this id binds)"
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "MUST",
+  "profile": [
+    "core"
+  ],
+  "surface": "wire",
+  "status": "draft",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F11",
+  "reading": [
+    "WHAT THE TEXT SAYS. §3.2: \"The requester generates `request_id` ... Correlation: The receiver",
+    "correlates an EXECUTE_RESPONSE to its EXECUTE by `request_id`.\" §3.3's type declares `request_id` on",
+    "the response with no `optional: true`. §6.11(b): \"responses MUST be routed to the awaiting caller by",
+    "`request_id`, irrespective of receive order on the wire\" — and it names who that binds: \"the routing",
+    "side is whichever end originated the outbound EXECUTE ... the client of this request.\"",
+    "",
+    "THE FLOOR ROW. §9.1 lists \"Request ID correlation\" — bare, with no section cited, no party named and no",
+    "keyword beyond the list's own MUST heading. So the obligation IS on the floor; what the row does not",
+    "say is who does what. This file is the reading of that row.",
+    "",
+    "WHAT THE BODY DOES NOT SAY. Every passage above binds the REQUESTER, or declares a field. None says",
+    "the RESPONDER MUST copy the EXECUTE's `request_id` into its response. The reference check cites",
+    "§6.11(b), which is the requester's obligation.",
+    "",
+    "WHY THE ROW IS READ AS THE RESPONDER'S ECHO, AND THE LEVEL FLAGGED. The echo is ENTAILED, and the entailment is",
+    "tight: §6.11(b) is a MUST on the requester that is UNSATISFIABLE unless the responder echoes — there",
+    "is no other field to route by, and a response carrying any other value is routed to the wrong caller",
+    "or to none. A responder that does not echo makes every conformant requester fail its own MUST. So",
+    "there is no conformant alternative, which is what distinguishes an entailed obligation from an",
+    "invented one: we are not choosing a behaviour the spec left open, we are naming the only one it",
+    "leaves. Correlation is a two-party property, and the requester's half (route by id) is §6.11(b)'s;",
+    "the responder's half (echo) is the only thing that makes the row satisfiable. The MUST comes from the",
+    "§9.1 heading; that the row binds the responder's echo is argued, and F11 asks arch to say so in the row.",
+    "",
+    "SCOPE. Asserted on responses to AUTHENTICATED EXECUTEs and on the handshake's own responses: §4.1 says",
+    "\"Every EXECUTE receives an EXECUTE_RESPONSE — connection setup follows the same request-response",
+    "pattern as the rest of the protocol.\" The one declared exception is §4.10(a)'s over-size refusal, where the id may not yet be",
+    "parsed; that case is ECP-R66's and not probed here.",
+    "",
+    "ECHO, NOT UNIQUENESS. Whether the responder must DETECT duplicate ids is §9.4 implementation-defined",
+    "(\"Duplicate in-flight request_id handling\"), and the uniqueness scope is itself contradictory in the",
+    "text (F13). Every probe here uses fresh ids so neither question is touched."
+  ],
+  "preconditions": {
+    "grants": [
+      "system/tree: get"
+    ],
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "posture_axes": [
+      "seed_policy"
+    ],
+    "note": "the grant is not what is measured — any answer, including an error, carries a request_id. It is listed because without it every probe is a 403, and a suite should see the echo on a success AND on an error."
+  },
+  "arm": [
+    {
+      "name": "echoed",
+      "kind": "conformant",
+      "given": "an established connection; three EXECUTEs with distinct, non-UUID request_ids, sent PIPELINED; one of them addressed to an unregistered path so at least one answer is an error",
+      "why": "the entailed MUST, on both a success and an error response. Pipelined so a responder that echoes 'the last id it read' rather than the id of the request answered is exposed.",
+      "step": [
+        {
+          "op": "connect"
+        },
+        {
+          "op": "send_pipelined_executes",
+          "capture": "set",
+          "request_ids": [
+            "cnf-rid-a-7f3e",
+            "cnf-rid-b-01",
+            "cnf-rid-c-x"
+          ],
+          "note": "non-UUID and of different lengths: §3.2 makes any non-empty string valid and UUIDs only RECOMMENDED, so a responder that parses the id as a UUID is also caught here."
+        }
+      ],
+      "assert": [
+        {
+          "kind": "response_request_ids_match_by_content",
+          "capture": "set",
+          "why": "each response is matched to its request by what it answers (the error one by its 404), and its request_id must equal that request's. Matching by ARRIVAL ORDER would assume in-order replies, which §6.11(b) says a requester must not assume."
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "the suite's assertion applied to a fixture response set whose request_ids are rotated by one",
+      "why": "MANDATORY ANTI-VACUITY, suite-side: no conformant peer can be made to mis-echo. Proves the assertion matches responses by content rather than trusting the id — a suite that pairs responses by the id they carry passes a rotated set, because every id is present.",
+      "step": [
+        {
+          "op": "replay_fixture",
+          "fixture": "three responses, request_ids rotated a->b->c->a",
+          "capture": "fixture"
+        }
+      ],
+      "assert": [
+        {
+          "kind": "response_request_ids_match_by_content",
+          "capture": "fixture",
+          "expect": "fails"
+        }
+      ]
+    },
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a responder that generates its own request_id for each response",
+      "expect": "responses carry ids the requester never issued; a conformant requester routes them to no caller and times out",
+      "why": "the shape §6.11(b)'s MUST cannot survive, stated so the entailment argument is checkable."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": "connectivity/request_id_echoed",
+    "oracle_note": "provenance. It cites §6.11(b) and §3.3; §6.11(b) binds the requester, not the responder whose behaviour the check name describes. F11."
+  }
+}

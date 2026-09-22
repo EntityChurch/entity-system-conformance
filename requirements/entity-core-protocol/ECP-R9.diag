@@ -1,0 +1,167 @@
+{
+  "header": [
+    "ECP-R9 — the connection path is pre-authorized in ANY connection state: a post-establishment",
+    "connect-path EXECUTE carrying no author, capability or signature is not refused for their absence.",
+    "",
+    "Batch 2. Reached from `connectivity/keepalive_ping_pong`, which cites EXTENSION-NETWORK (not in this",
+    "snapshot) — but its core half is §4.2, which IS. See FINDINGS F10."
+  ],
+  "id": "ECP-R9",
+  "id_status": "allocated",
+  "title": "After establishment, an EXECUTE to system/protocol/connect with no author, capability or signature is not refused on authentication or authorization grounds",
+  "spec": "ENTITY-CORE-PROTOCOL §4.2 (first two bullets)",
+  "spec_also": [
+    "§3.2 ('All EXECUTE requests MUST include author and capability — except requests targeting the connection path')",
+    "§4.7 (unknown connect operation -> 400 invalid_request; half-open ping -> 409)",
+    "§5.2a (the 401/403 split for other paths)",
+    "§9.1 (the floor row this id binds)"
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "MUST",
+  "profile": [
+    "core"
+  ],
+  "surface": "wire",
+  "status": "draft",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F10",
+  "reading": [
+    "§4.2: \"`system/protocol/connect` is the sole pre-authorized path, IN ANY CONNECTION STATE — before and",
+    "after establishment (0.8.2.6) ... a post-establishment `ping` bearing no `author`, no `capability`",
+    "and no signature MUST be served, and a responder MUST NOT refuse it for their absence.\" And: \"EXECUTE",
+    "targeting this path MUST be accepted without `author` or `capability` fields.\"",
+    "",
+    "ONE OBLIGATION, AND IT IS THE STATE QUALIFIER. Pre-establishment, the exemption is exercised by every",
+    "hello there has ever been, and no peer fails it without failing everything. 0.8.2.6 added \"in any",
+    "connection state\" because the POST-establishment half was being read the wrong way round (§5.1 as",
+    "the rule, the connect path as an exception scoped to setup). So the discriminating probe is",
+    "post-establishment, and that is this file.",
+    "",
+    "WHAT THIS FILE DELIBERATELY DOES NOT ASSERT — AND WHY IT IS A FINDING. §4.2 says a post-establishment",
+    "`ping` \"MUST be served\". `ping` is defined nowhere in this snapshot: the word appears in §4.2, in",
+    "§4.7's half-open paragraph (\"an unauthenticated `ping` on a half-open connection is 409\"), and nowhere",
+    "else (`grep -n -w -i ping` over all three documents: §4.2 twice, §4.7 once; the §3.13 type comment",
+    "says \"keepalive\", not `ping` — corrected 2026-09-12, review). Its definition is EXTENSION-NETWORK's. Two readings:",
+    "  (A) the MUST is about the pre-authorization exemption; `ping` is the motivating example, and a",
+    "      core-only peer that does not implement it answers §4.7's \"unknown connect operation\" row,",
+    "      `400 invalid_request`, which is not a refusal \"for their absence\";",
+    "  (B) core requires `ping` to be implemented, so `200` is the only conformant answer.",
+    "§4.7's half-open paragraph leans B (\"a connect operation the responder implements\"); §4.7's own",
+    "unknown-operation row, which exists for exactly this case, leans A. The reference oracle's owner",
+    "records reading A in its own status log (\"`ping` required in the connect manifest at FULL profile",
+    "(core profile unchanged)\"). We do not pick. So this file asserts only what BOTH readings require —",
+    "the answer is not an authentication or authorization refusal and not a close — and records the",
+    "status and code as a witness. Routed as F10.",
+    "",
+    "⚠ THE STATE QUALIFIER IS CONTRADICTED BY TWO OTHER PASSAGES, AND UNTIL RULED THIS FILE DOES NOT SCORE",
+    "401. Found by review 2026-09-12; routed as F10's second question. Three passages, three scopes:",
+    "  * §4.2: \"the sole pre-authorized path, in any connection state — before and after establishment\".",
+    "  * §6.5's dispatch chain: \"URI = system/protocol/connect AND connection not established? -> Connection",
+    "    handler (no auth required)\"; \"Otherwise: ... Verify request integrity (§5.2 verify_request ...)\".",
+    "    A post-establishment connect-path EXECUTE takes the \"Otherwise\" branch, and an unauthenticated one",
+    "    is refused auth-class — 401. §6.5 then says \"Connection pre-authorization is the sole dispatch",
+    "    special case\", without a state.",
+    "  * §4.7's half-open paragraph: \"the pre-authorized-connect exception (§3.3 line 773 / §5.1) is scoped",
+    "    to an **established** connection, which a half-open one is not\" — the opposite scope to §6.5.",
+    "§4.2 is the most specific and states that it corrects the older reading, and we lean to it. But a",
+    "peer implementing §6.5's diagram literally answers 401, and that is a specification gap before it is",
+    "an implementation bug. So 401/403 are a WITNESS here, not a refusal, until arch rules; a close stays a",
+    "refusal, because no passage produces one.",
+    "",
+    "THE CONTROL IS WHAT MAKES THIS MEAN SOMETHING. A peer that never enforces authentication anywhere",
+    "passes the conformant arm trivially. The control sends the same unauthenticated shape to a",
+    "non-connect path and requires the auth-class refusal §4.2's third bullet and §5.2a require, proving the",
+    "exemption is path-specific."
+  ],
+  "preconditions": {
+    "grants": [],
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "posture_axes": [
+      "seed_policy"
+    ]
+  },
+  "arm": [
+    {
+      "name": "post-establishment-unauthenticated-connect",
+      "kind": "conformant",
+      "given": "an ESTABLISHED connection (§4.1 legs 1–2 complete); an EXECUTE to `system/protocol/connect`, operation `ping`, with no `author`, no `capability`, and no signature in `included`",
+      "why": "§4.2's state qualifier.",
+      "step": [
+        {
+          "op": "connect"
+        },
+        {
+          "op": "send_execute_unauthenticated",
+          "capture": "ping",
+          "uri": "system/protocol/connect",
+          "operation": "ping"
+        }
+      ],
+      "witness": [
+        {
+          "field": "auth_class_refusal",
+          "status": [
+            401,
+            403
+          ],
+          "why": "refused for the absence of author/capability/signature. §4.2 calls this the pre-0.8.2.6 misreading; §6.5's dispatch chain produces it (the 'connection not established' branch). PENDING F10's second question — moves to refuse if arch rules §4.2 governs. Recorded, not scored, until then."
+        },
+        {
+          "field": "status_and_code",
+          "why": "which reading the cohort implements. Recorded, never scored beyond the arms above."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "close",
+          "why": "a close is a refusal too, and §4.2's 'MUST be served' excludes it under either reading."
+        }
+      ],
+      "accept": [
+        {
+          "outcome": "coded_response",
+          "status_not_in": [
+            401,
+            403
+          ],
+          "why": "§4.2's obligation is that the EXECUTE is not refused FOR THE ABSENCE of author, capability or signature. Any coded answer that is not auth-class is outside that refusal: 200 (reading B), 400 invalid_request (reading A, §4.7's unknown-connect-operation row), and a peer that implements `ping` and refuses OUR params shape. Which of those a peer gives is the status_and_code witness below, never scored here.\nAMENDED 2026-09-13, AFTER THE FIRST EXECUTION (F40). This arm listed exactly {200, 400 invalid_request}. Run against entity-core-go's entity-peer it FAILED on `400 invalid_params` — message \"ping params must be system/network/ping, got primitive/any\": the peer implements ping with EXTENSION-NETWORK's params type, which is not in this snapshot (F10), and refused our §3.2 empty-params shape. That is a served, non-auth answer. The enumerated accept set was narrower than this file's own title and reading; the defect was the requirement's, and only running it showed it."
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "the same established connection; the SAME unauthenticated shape sent to `system/tree`, operation `get`",
+      "why": "MANDATORY ANTI-VACUITY. Proves the conformant arm's not-401 is the PATH EXEMPTION and not a peer that authenticates nothing. §4.2's third bullet: 'EXECUTE targeting any other path without valid authentication MUST be rejected per §5.2a: a missing/unverifiable author or signature is auth-class 401'.",
+      "step": [
+        {
+          "op": "send_execute_unauthenticated",
+          "capture": "tree",
+          "uri": "system/tree",
+          "operation": "get"
+        }
+      ],
+      "assert": [
+        {
+          "kind": "status",
+          "capture": "tree",
+          "equals": 401
+        }
+      ]
+    },
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a peer that applies §5.1's author/capability requirement to every EXECUTE once the connection is established",
+      "expect": "the post-establishment unauthenticated ping is refused 401",
+      "why": "the exact misreading 0.8.2.6 was written to correct: the general rule and its exception, the wrong way round."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": "connectivity/keepalive_ping_pong",
+    "oracle_note": "provenance, and PARTIAL: that check cites EXTENSION-NETWORK §5.1/§12.1, whose ping semantics (pong shape, keepalive loop) are not in this snapshot and are not authored. This file is the core half only. F10."
+  }
+}

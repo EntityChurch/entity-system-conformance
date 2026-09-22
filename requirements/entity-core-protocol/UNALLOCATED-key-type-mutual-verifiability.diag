@@ -1,0 +1,182 @@
+{
+  "header": [
+    "UNALLOCATED — the responder's own `key_type` must appear in the initiator's advertised",
+    "`key_types`, or the hello is refused with 400 unsupported_key_type.",
+    "",
+    "A BINDING MUST IN §4.5 WITH NO §9 ROW — see UNALLOCATED-hash-format-intersection's header and",
+    "FINDINGS F4. ⛔ CORRECTED 2026-09-12 (batch 2): this file originally read the reject point as",
+    "unpinned (F6) and accepted a reject at `authenticate` as conformant. §4.5 pins it at hello for",
+    "this input; the later surfaces are ADDITIONAL, not alternative. See F6's correction."
+  ],
+  "id_status": "unallocated",
+  "under": "",
+  "title": "A hello whose `key_types` accept-set excludes the responder's own key_type is refused with 400 unsupported_key_type",
+  "spec": "ENTITY-CORE-PROTOCOL §4.5",
+  "spec_also": [
+    "§4.6 (authenticate — a permitted ADDITIONAL reject point, never a substitute for hello)",
+    "§1.5 (key_type in the peer-id form)",
+    "§4.7"
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "MUST",
+  "profile": [
+    "core"
+  ],
+  "surface": "wire",
+  "status": "draft",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F4, F6",
+  "reading": [
+    "§4.5, on the accept-set shape: \"each peer's own identity `key_type` MUST appear in the other peer's",
+    "advertised `key_types` set. If either peer's own `key_type` is absent from the other's set, the",
+    "responder MUST reject with `400 unsupported_key_type` ... The responder-side gate (own `key_type` in",
+    "initiator's set) is the MUST.\"",
+    "",
+    "THE ASYMMETRY IS THE REQUIREMENT. §4.5 is careful that `key_types` is NOT a value collapsed to one:",
+    "\"a `key_type` IS identity-bound: each peer signs with the fixed key its identity holds and cannot",
+    "adopt another ... There is no single 'connection key_type'; each peer authors and signs under its",
+    "own.\" So the property is MUTUAL VERIFIABILITY, and the responder-side half -- the only half a",
+    "conformance client can drive -- is: *is MY key_type in the set YOU advertised?* A check that",
+    "intersects the two sets and demands a non-empty result is testing the single-active-value shape and",
+    "would pass a hello whose set overlaps the responder's advertised set while excluding the responder's",
+    "actual key.",
+    "",
+    "⛔ THE REJECT POINT IS PINNED AT HELLO FOR THIS INPUT — CORRECTED 2026-09-12. The first version of this",
+    "reading said the opposite, and it is kept below the correction because the misreading is the lesson.",
+    "",
+    "§4.5's v7.66 closeout, parsed rather than skimmed: \"when `key_types` intersection is empty, the",
+    "responder MUST return `400 unsupported_key_type` (per §4.7) AT THE HELLO STEP. Implementations MAY",
+    "ALSO reject an unsupported `key_type` later in the handshake ... AS A FALLBACK or DEFENSE-IN-DEPTH;",
+    "rejecting at multiple surfaces is conformant.\"",
+    "",
+    "  * \"MAY ALSO\" is additive. It permits rejecting at authenticate IN ADDITION to hello; it does not",
+    "    permit rejecting at authenticate INSTEAD. \"Rejecting at multiple surfaces is conformant\" says the",
+    "    same: multiple, not other.",
+    "  * \"is satisfied if `400 unsupported_key_type` is emitted at any handshake surface\" (§4.5, verbatim;",
+    "    corrected 2026-09-12 — an earlier edit elided the code) is stated for the `AGILITY-UNKNOWN-1` vector,",
+    "    which is a different input. We transplanted its satisfaction mode onto this one.",
+    "  * \"a conformant but non-canonical reject point\" (the accept-set bullet) attaches to a peer that",
+    "    ADVERTISES A NARROWED SET, causing its COUNTERPARTY to reject later. It is about advertisement",
+    "    narrowing, not about the responder-side gate this file drives, which the same bullet calls \"the",
+    "    MUST\".",
+    "",
+    "So a responder that completes hello and refuses only at `authenticate` has failed this row, and the",
+    "accept arm for that outcome is removed. This is AP-4's shape a second time (the qualifier \"ALSO\" and",
+    "the antecedent of \"any surface\" were never parsed) — see the catalog.",
+    "",
+    "RESIDUAL, ROUTED AS A READING QUESTION, NOT RESOLVED HERE: (i) the MUST sentence says \"when",
+    "`key_types` INTERSECTION is empty\", which is the intersection model the accept-set bullet and §4.7's",
+    "retired `incompatible_key_type` row both say §4.5 no longer uses; the input it means is plainly the",
+    "responder-side gate, but the wording is a remnant. (ii) Arch agreed with F6 in",
+    "`ROUTING-2026-09-12-c-entity-system-conformance-all-four-asks-ruled-plus-CQ-3-and-your-F7-negative-was-two-directories-wide`",
+    "§8 without quoting the hello-step MUST, so the reversal is a correction we owe them.",
+    "",
+    "— ORIGINAL READING (superseded, kept as the record) —",
+    "\"the SURFACE [is] an observation rather than an assertion: a peer that accepts the hello and refuses",
+    "at `authenticate` with `400 unsupported_key_type` is conformant and MUST NOT be scored against.\"",
+    "",
+    "THE OBSERVATION IS STILL WORTH RECORDING. Which surface a peer rejects at is real, comparable",
+    "cohort data and is exactly the kind of fact that later becomes a spec decision. It is emitted as a",
+    "`witness` field on the result, never as a verdict."
+  ],
+  "preconditions": {
+    "grants": [],
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "posture_axes": [
+      "seed_policy",
+      "responder_key_type"
+    ],
+    "note": "the probe must EXCLUDE the responder's own key_type, so the run must know it. It is derivable from the responder's peer-id (§1.5: `PeerID := Base58(varint(key_type) || varint(hash_type) || digest)`), which is the honest source — an assumption of `ed25519` is the recommendation, not the peer's."
+  },
+  "arm": [
+    {
+      "name": "refused",
+      "kind": "conformant",
+      "given": "a well-formed hello whose `key_types` is a non-empty set excluding the responder's own key_type",
+      "why": "§4.5's responder-side MUST.",
+      "step": [
+        {
+          "op": "send_hello",
+          "capture": "excluding",
+          "key_types": [
+            "$responder_key_type_excluded"
+          ],
+          "note": "a well-formed key-type name the responder does not hold. NOT an empty set — an empty `key_types` is the absent case and defaults to [\"ed25519\"] (§4.5, §3.8 `optional: true`), which is a different input and probably an intersecting one."
+        }
+      ],
+      "accept": [
+        {
+          "outcome": "coded_response",
+          "status": 400,
+          "code": "unsupported_key_type",
+          "at": "hello",
+          "why": "§4.5's canonical earliest reject point."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "coded_response",
+          "status": 400,
+          "code": "unsupported_key_type",
+          "at": "authenticate",
+          "only_at": true,
+          "why": "CORRECTED 2026-09-12 (was an accept arm). A reject ONLY at authenticate, after hello succeeded, fails §4.5's 'MUST return ... at the hello step'. A reject at authenticate IN ADDITION to the hello reject cannot occur on this probe (the hello refusal ends the handshake) and is conformant where it does occur."
+        },
+        {
+          "outcome": "handshake_completes",
+          "why": "THE FAILURE: a connection established where the responder's signatures cannot be verified by the caller. Every capability the responder mints on it is unverifiable at the other end."
+        }
+      ],
+      "witness": [
+        {
+          "field": "reject_surface",
+          "why": "recorded, never scored beyond the arms above — which surface(s) a peer rejects at is cohort data, and after the F6 correction it is also the direct evidence for the refuse arm."
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "the same hello whose `key_types` INCLUDES the responder's own key_type",
+      "why": "MANDATORY — proves the refusal discriminates on the accept-set and not on the hello being malformed or the key-type name being unrecognised in general.",
+      "step": [
+        {
+          "op": "send_hello",
+          "capture": "including",
+          "key_types": [
+            "$responder_key_type"
+          ]
+        }
+      ],
+      "assert": [
+        {
+          "kind": "error_code",
+          "capture": "including",
+          "not_equals": "unsupported_key_type"
+        }
+      ]
+    },
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a peer that intersects the two advertised sets instead of testing its OWN key_type for membership",
+      "expect": "a hello advertising [\"ed25519\", \"x-other\"] against a responder advertising [\"x-other\"] but HOLDING an ed25519 identity is accepted — the sets intersect and the responder's own key is still unverifiable",
+      "why": "the discriminating shape, and the reason §4.5 spends a paragraph saying an accept-set is not a single active value. A check built on intersection passes this peer."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": "negotiation/keytype_disjoint_reject",
+    "oracle_note": "provenance. `format_agility/agility_unknown_1` cites the same clause from the other side (AGILITY-UNKNOWN-1) and is the one row in the register that already reflects the any-surface reading."
+  },
+  "predicted_disagreement": {
+    "against": "negotiation/keytype_advertised",
+    "prediction": "the reference check requires the responder's hello to carry a non-empty `key_types` set including `ed25519`, which §3.8 makes optional and §4.5 gives a default for",
+    "basis": "identical in shape to the `format_advertised` prediction — the same optional-field-asserted-as-mandatory reading, in the same category, on the sibling field.",
+    "if_true": "two checks, one defect class, and the pair is stronger evidence than either alone.",
+    "if_false": "there is a MUST-advertise obligation we did not find.",
+    "settled": "2026-09-12 — UPHELD ON THE TEXT. ROUTING-2026-09-12-c §3.2: §4.5's table reads `key_types | Required: No | Default: [\"ed25519\"]`. Same defect as the `hash_formats` arm, same mechanism — the vector's given-clause (`both advertise key_types superset of {ed25519, ed448}`) promoted to an obligation. Filed for entity-core-go as check-design — held in the core-go batch, NOT yet routed (no packet exists); this file is unchanged."
+  }
+}

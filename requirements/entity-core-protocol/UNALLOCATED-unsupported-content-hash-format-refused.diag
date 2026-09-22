@@ -1,0 +1,149 @@
+{
+  "header": [
+    "UNALLOCATED — an entity whose content_hash names a format code the peer does not support is refused 400 unsupported_content_hash_format.",
+    "",
+    "Batch 3. A SHALL with a pinned code (§4.7 row 5), a named put-admission route (§6.3), and no §9 row.",
+    "§4.7 itself says this is NOT a handshake obligation, so it does not ride on the §4.7 floor row."
+  ],
+  "id_status": "unallocated",
+  "under": "",
+  "title": "A system/tree:put whose entity content_hash carries an unallocated format code is refused 400 unsupported_content_hash_format, not treated as a mismatch, a miss or a malformed entity",
+  "spec": "ENTITY-CORE-PROTOCOL §1.2 (Content-hash format-code interpretation)",
+  "spec_also": [
+    "§4.7 row 5 and its 'Row 5's surface is ingest, not the handshake' paragraph",
+    "§6.3 put admission step 1 (the unsupported-format case routed to row 5)",
+    "ENTITY-CBOR-ENCODING §4.7 (construction-vs-verification asymmetry: the verification path MUST reject)"
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "MUST",
+  "profile": [
+    "core"
+  ],
+  "surface": "wire",
+  "status": "draft",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F20, F23",
+  "reading": [
+    "§1.2: \"An implementation receiving a `content_hash` whose format code it does not support SHALL return",
+    "`unsupported_content_hash_format` (per §4.7) rather than silently failing or treating an unknown-format",
+    "hash as a content miss.\" SHALL is MUST (RFC 2119; ENTITY-CBOR-ENCODING §1.4 adopts it). §4.7 pins the status: 400.",
+    "§6.3 names the put route explicitly: \"A `content_hash` that is well-formed but names a format code the",
+    "peer does not support is the separate §1.2 ingest-dispatch case and is refused 400",
+    "`unsupported_content_hash_format` (§4.7 row 5), not this row [invalid_request].\" ENTITY-CBOR-ENCODING",
+    "§4.7: \"The `content_hash` verification path (decoder) MUST reject any unsupported or unallocated",
+    "`format_code` with `unsupported_content_hash_format`\".",
+    "",
+    "WHY PUT AND NOT THE HELLO. §4.7 row 5 is \"reachable on any frame carrying an unallocated format code\",",
+    "so a hello is a legal surface too. But a hello's root is a wire/identity-surface entity that §4.5a item",
+    "2 forbids the SENDER to author under a non-negotiated format, and whether a responder answers that as a",
+    "§1.2 dispatch or as a sequence/validity failure is not stated. Put is the one surface where the text",
+    "names this code for this input; the hello is witnessed.",
+    "",
+    "WHICH CODE. 0x7E: in §1.2's \"0x0A–0xEF Reserved (future)\" range, so no peer can support it conformantly",
+    "today, and outside the range where ECF §4.3's registry disagrees with core's (F20). It is single-byte,",
+    "so a peer that reads the format code as an OCTET (ECF §4.5) and one that reads a varint (§1.2) see the",
+    "same code — this probe does not depend on F20.",
+    "",
+    "\"WELL-FORMED\" IS THE CONDITION, SO THE HASH IS 33 BYTES. §6.3 routes to row 5 only a hash that is",
+    "otherwise well-formed. The digest length of an unallocated code is not defined, so \"matches its format",
+    "code\" cannot be evaluated for it; a 33-byte hash is the length a peer that assumes 32-byte digests",
+    "would accept, which makes any other answer attributable to the code, not the length."
+  ],
+  "preconditions": {
+    "grants": [
+      "system/tree: put"
+    ],
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "posture_axes": [
+      "seed_policy",
+      "content_hash_format"
+    ],
+    "note": "without a put grant the put member is UNMEASURABLE (a 403), reported so; the hello member still runs as a witness."
+  },
+  "arm": [
+    {
+      "name": "put-unsupported-format",
+      "kind": "conformant",
+      "given": "an authenticated connection; system/tree:put of {type: \"test/v1\", data: {\"x\": 1}, content_hash: 0x7E || SHA-256(ECF({type, data}))}",
+      "why": "§1.2's SHALL at the surface §6.3 routes to it.",
+      "step": [
+        {
+          "op": "connect"
+        },
+        {
+          "op": "send_execute",
+          "capture": "put_7e",
+          "uri": "system/tree",
+          "operation": "put"
+        }
+      ],
+      "assert": [
+        {
+          "kind": "status",
+          "capture": "put_7e",
+          "equals": 400
+        },
+        {
+          "kind": "error_code",
+          "capture": "put_7e",
+          "equals": "unsupported_content_hash_format",
+          "why": "NOT hash_mismatch (the peer recomputed under an assumed algorithm), NOT invalid_request (the peer judged length against an assumed digest size), NOT a 404-style miss."
+        }
+      ]
+    },
+    {
+      "name": "hello-unsupported-format",
+      "kind": "conformant",
+      "given": "a fresh connection; a hello whose root content_hash is 0x7E || the SHA-256 digest",
+      "why": "WITNESS-ONLY: row 5 is reachable here, but the responder's precedence against §4.5a is unstated.",
+      "step": [
+        {
+          "op": "send_hello",
+          "capture": "hello_7e",
+          "corrupt": "root.content_hash format byte 0x00 → 0x7E"
+        }
+      ],
+      "witness": [
+        {
+          "field": "status_and_code",
+          "why": "cohort data."
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "the same put with format byte 0x00 and the same digest",
+      "why": "MANDATORY ANTI-VACUITY. Same digest, same entity, one byte different. A 200 here and the coded refusal in the probe can only be about the format code. Without it, a peer refusing every put from this suite passes.",
+      "step": [
+        {
+          "op": "send_execute",
+          "capture": "put_00",
+          "uri": "system/tree",
+          "operation": "put"
+        }
+      ],
+      "assert": [
+        {
+          "kind": "status",
+          "capture": "put_00",
+          "equals": 200
+        }
+      ]
+    },
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a peer that ignores the format byte and hashes everything with SHA-256",
+      "expect": "the 0x7E put is ACCEPTED (the digest matches), and the stored entity is addressed under a hash that names an algorithm nobody computed",
+      "why": "the silent failure §1.2's 'rather than silently failing' names — and the reason the probe's digest is the correct SHA-256: it is the input that exposes a format-blind peer."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": "encoding/hash_algorithm_byte",
+    "oracle_note": "provenance only — its name suggests the format byte; it cites ENTITY-CBOR-ENCODING §4.3 (the registry that disagrees with core, F20)."
+  }
+}

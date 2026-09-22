@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """differential — every instrument that ran on a peer, joined by REQUIREMENT ID.
 
-    tools/differential.py --runs output/runs --requirements requirements/core --out output/DIFFERENTIAL.md
+    tools/differential.py --runs output/runs --requirements requirements/entity-core-protocol --out output/DIFFERENTIAL.md
 
 Reads output/runs/<source>/<instrument>/<peer>.json (+ .provenance.json). `validate-peer` is the reference
 oracle; every other instrument directory is a suite of ours, and there may be any number of them (AGENTS.md,
@@ -30,16 +30,19 @@ import argparse
 import json
 import re
 import sys
-import tomllib
 from pathlib import Path
+
+sys.dont_write_bytecode = True   # __pycache__ is .gitignore'd; lint-ignored refuses it (AP-8)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cbordiag  # noqa: E402  — tools' OWN codec; never the suite's
 
 ORACLE = "validate-peer"
 
 
 def oracle_map(req_dir: Path) -> dict[str, list[str]]:
     out = {}
-    for p in sorted(req_dir.glob("*.toml")):
-        req = tomllib.loads(p.read_text())["requirement"]
+    for p in sorted(req_dir.glob("*.diag")):
+        req = cbordiag.parse(p.read_text())
         rid = req.get("id") or p.stem
         oc = str(req.get("notes", {}).get("oracle_check", ""))
         out[rid] = [c.strip() for c in oc.replace(";", ",").split(",") if c.strip()]
@@ -62,8 +65,8 @@ def core_sections(texts: list[str]) -> set[str]:
 
 def requirement_sections(req_dir: Path) -> dict[str, set[str]]:
     out = {}
-    for p in sorted(req_dir.glob("*.toml")):
-        req = tomllib.loads(p.read_text())["requirement"]
+    for p in sorted(req_dir.glob("*.diag")):
+        req = cbordiag.parse(p.read_text())
         also = req.get("spec_also", [])
         out[req.get("id") or p.stem] = core_sections([str(req.get("spec", ""))] + [str(x) for x in (also if isinstance(also, list) else [also])])
     return out

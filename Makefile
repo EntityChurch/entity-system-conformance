@@ -11,7 +11,7 @@
 # (`entity-system-generator` ADR-0001): host python is stdlib-only; anything needing a third-party
 # library runs in a container. `lint` stays containerised so the interpreter version is pinned.
 
-.PHONY: help build test lint lint-native lint-ignored lint-spec-data lint-requirements check clean \
+.PHONY: help build corpus test lint lint-native lint-ignored lint-sources lint-spec-data lint-requirements check clean \
         install-probe keystone-s1 keystone-oracle generator-s1 generator-oracle core-go-s1 core-go-oracle differential \
         substrate-go peer-up peer-down oracle-run register
 .DEFAULT_GOAL := help
@@ -46,17 +46,18 @@ OUT          ?= output
 help:
 	@echo "entity-system-conformance — host needs make + podman + python3 (>=3.11, stdlib only)."
 	@echo
-	@echo "  lint        spec-data digests + ECP id index + requirement schema, in $(PYTHON_IMAGE)"
+	@echo "  lint        spec-data digests + ECP id index + requirement schema + source read-state, in $(PYTHON_IMAGE)"
 	@echo "  lint-native the same on host python3 (in the host contract; unpinned interpreter version)"
 	@echo "  check       build + test + lint"
-	@echo "  build       suite 1 (suites/s1-py) -> $(S1) + $(S1).d (pinned interpreter, requirement digests)"
-	@echo "  test        suite 1's codec vs the ECF corpus, Ed25519 vs RFC 8032, in the pinned interpreter"
+	@echo "  build       the prototype suite (suites/py-prototype) -> $(SUITE_BIN) + $(SUITE_BIN).d (pinned interpreter, requirement digests)"
+	@echo "  test        the suite's codec vs the ECF corpus, Ed25519 vs RFC 8032, in the pinned interpreter"
 	@echo
-	@echo "  keystone-s1     suite 1 on KEYSTONE_PEERS via keystone census --probe  (default: $(KEYSTONE_PEERS))"
+	@echo "  keystone-s1     the suite on KEYSTONE_PEERS via keystone census --probe  (default: $(KEYSTONE_PEERS))"
 	@echo "  keystone-oracle validate-peer on the same peers via the same driver"
 	@echo "  generator-s1 / generator-oracle   the same pair on GENERATOR_TARGETS via host-launch"
 	@echo "  core-go-s1 / core-go-oracle   the same pair against core-go entity-peer (after peer-up)"
 	@echo "  differential    join all collected runs by requirement id -> $(OUT)/DIFFERENTIAL.md"
+	@echo "  corpus      canonical CBOR build of requirements/ -> $(OUT)/requirement-corpus.cbor + its digest"
 	@echo
 	@echo "  substrate-go   build the reference image via $(SUBSTRATE_GO)'s own 'make build'"
 	@echo "  peer-up        run $(GO_IMAGE) entity-peer as $(PEER_NAME) on network $(NET)"
@@ -68,24 +69,26 @@ help:
 	@echo
 	@echo "See AGENTS.md for what this repo is for and the three prohibitions."
 
-# ── suite 1 (suites/s1-py) ────────────────────────────────────────────────────────────────────
+# ── the prototype suite (suites/py-prototype) ────────────────────────────────────────────────────────────────────
 # Python, stdlib only, NOT Go (operator, 2026-09-13): the reference oracle and the reference peer are both Go, so
 # an instrument in Go would share the one language whose idioms the ecosystem's measurements already carry.
 #
 # The standard slots exec the instrument inside each peer's own toolchain image, where no interpreter is common.
 # So the bundle carries one: a PINNED python-build-standalone CPython (musl) and the musl loader from a PINNED
-# alpine, started by suites/s1-py/launcher.sh. Nothing is installed on the host; both pins are checked by sha256.
+# alpine, started by suites/py-prototype/launcher.sh. Nothing is installed on the host; both pins are checked by sha256.
 # The requirement files the suite implements are digested into the bundle's BUILD.json, so every verdict names
 # the exact requirement text it measured.
 PYRT_URL     ?= https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-x86_64-unknown-linux-musl-install_only_stripped.tar.gz
 PYRT_SHA256  ?= 1f37044c8cdbd74d5ee112a753c65ef209fedd169c98f3e4e748a93e27eb27a4
 MUSL_IMAGE   ?= docker.io/library/alpine@sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e
-S1_REQS      := $(shell grep -v "^#" suites/s1-py/IMPLEMENTS)
-S1           := $(OUT)/bin/s1-py
-S1_SRC       := $(shell find suites/s1-py/run.py suites/s1-py/s1py -name '*.py') suites/s1-py/launcher.sh suites/s1-py/IMPLEMENTS
+# The requirement corpus this suite is built from. One place, so a layout move is one edit.
+REQ_DIR      := requirements/entity-core-protocol
+SUITE_REQS      := $(shell grep -v "^#" suites/py-prototype/IMPLEMENTS)
+SUITE_BIN           := $(OUT)/bin/py-prototype
+SUITE_SRC       := $(shell find suites/py-prototype/run.py suites/py-prototype/prototype -name '*.py') suites/py-prototype/launcher.sh suites/py-prototype/IMPLEMENTS
 CACHE        := $(OUT)/cache
 # The pinned interpreter, run on the repo read-only: `make test` executes the same bits the slots will.
-PYRT = podman run --rm --network=none $(PODMAN_CAPS) -v $(CURDIR):/repo:ro,Z -v $(abspath $(S1)).d:/b:ro,Z -w /repo/suites/s1-py \
+PYRT = podman run --rm --network=none $(PODMAN_CAPS) -v $(CURDIR):/repo:ro,Z -v $(abspath $(SUITE_BIN)).d:/b:ro,Z -w /repo/suites/py-prototype \
 	-e PYTHONHOME=/b/pyrt/python -e PYTHONDONTWRITEBYTECODE=1 $(MUSL_IMAGE) /b/pyrt/ld-musl-x86_64.so.1 --library-path /b/pyrt/python/lib /b/pyrt/python/bin/python3.12 -s -B
 
 $(CACHE)/pyrt.tgz:
@@ -95,24 +98,28 @@ $(CACHE)/pyrt.tgz:
 	@echo "$(PYRT_SHA256)  $(CACHE)/pyrt.tgz.part" | sha256sum -c --quiet || { echo "build: interpreter tarball does NOT match PYRT_SHA256 — refusing" >&2; rm -f $(CACHE)/pyrt.tgz.part; exit 2; }
 	mv $(CACHE)/pyrt.tgz.part $@
 
-build: $(S1)
+build: $(SUITE_BIN)
 
-$(S1): $(S1_SRC) $(CACHE)/pyrt.tgz $(addprefix requirements/core/,$(addsuffix .toml,$(S1_REQS)))
-	@rm -rf $(S1).d && mkdir -p $(S1).d/pyrt $(S1).d/suite
-	tar -xzf $(CACHE)/pyrt.tgz -C $(S1).d/pyrt
-	install -m 0755 $(CACHE)/ld-musl-x86_64.so.1 $(S1).d/pyrt/ld-musl-x86_64.so.1
-	cp -r suites/s1-py/run.py suites/s1-py/s1py $(S1).d/suite/
-	@python3 -c "import hashlib,json,subprocess,sys; \
-		v=subprocess.run(['git','describe','--always','--dirty'],capture_output=True,text=True).stdout.strip() or 'dev'; \
-		d={r:hashlib.sha256(open(f'requirements/core/{r}.toml','rb').read()).hexdigest() for r in sys.argv[1:]}; \
-		s={r:next((l.split('=',1)[1].strip().strip('\"') for l in open(f'requirements/core/{r}.toml') if l.startswith('snapshot')),'undeclared') for r in sys.argv[1:]}; \
-		rt={'pyrt_sha256':'$(PYRT_SHA256)','musl_loader_sha256':hashlib.sha256(open('$(CACHE)/ld-musl-x86_64.so.1','rb').read()).hexdigest(),'musl_image':'$(MUSL_IMAGE)'}; \
-		json.dump({'suite_version':v,'requirement_digests':d,'requirement_snapshots':s,'runtime':rt},open('$(S1).d/suite/BUILD.json','w'),indent=2)" $(S1_REQS)
-	install -m 0755 suites/s1-py/launcher.sh $@
+$(SUITE_BIN): $(SUITE_SRC) $(CACHE)/pyrt.tgz $(addprefix $(REQ_DIR)/,$(addsuffix .diag,$(SUITE_REQS)))
+	@rm -rf $(SUITE_BIN).d && mkdir -p $(SUITE_BIN).d/pyrt $(SUITE_BIN).d/suite
+	tar -xzf $(CACHE)/pyrt.tgz -C $(SUITE_BIN).d/pyrt
+	install -m 0755 $(CACHE)/ld-musl-x86_64.so.1 $(SUITE_BIN).d/pyrt/ld-musl-x86_64.so.1
+	cp -r suites/py-prototype/run.py suites/py-prototype/prototype $(SUITE_BIN).d/suite/
+	@python3 -B tools/build-info.py --req-dir $(REQ_DIR) --loader $(CACHE)/ld-musl-x86_64.so.1 \
+		--pyrt-sha256 $(PYRT_SHA256) --musl-image $(MUSL_IMAGE) \
+		--out $(SUITE_BIN).d/suite/BUILD.json $(SUITE_REQS)
+	install -m 0755 suites/py-prototype/launcher.sh $@
 	@$@ -list-requirements >/dev/null && echo "build: $@ runs"
 
+# The canonical build of the whole requirement corpus, and its ONE content digest. This is what
+# `DESIGN-THE-SUITE-CONTRACT` §2 calls the comparability anchor; before the 2026-09-15 format move
+# we sha256'd each file separately, which is a manifest and not an identity.
+corpus: $(OUT)/requirement-corpus.cbor
+$(OUT)/requirement-corpus.cbor: $(wildcard $(REQ_DIR)/*.diag)
+	@$(PY) tools/requirement-corpus.py --out $@
+
 # The codec against the snapshot's ECF corpus and Ed25519 against RFC 8032, before it touches any peer.
-test: $(S1)
+test: $(SUITE_BIN)
 	$(PYRT) -m unittest discover -s tests -v
 
 # ── run it ────────────────────────────────────────────────────────────────────────────────────
@@ -122,16 +129,16 @@ test: $(S1)
 # file touched.
 KEYSTONE       ?= ../entity-core-keystone
 KEYSTONE_PEERS ?= python rust go typescript
-PROBE_NAME     := cnf-s1-py
+PROBE_NAME     := cnf-py-prototype
 
-install-probe: $(S1)
+install-probe: $(SUITE_BIN)
 	@rm -rf $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME).d
-	cp -a $(S1).d $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME).d
-	install -m 0755 $(S1) $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME)
+	cp -a $(SUITE_BIN).d $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME).d
+	install -m 0755 $(SUITE_BIN) $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME)
 
 keystone-s1: install-probe
 	cd $(KEYSTONE) && tools/run-cohort-census.sh --probe $(PROBE_NAME) $(KEYSTONE_PEERS)
-	python3 tools/collect-run.py keystone --instrument s1-py --src $(KEYSTONE)/output/scratch/$(PROBE_NAME) \
+	python3 -B tools/collect-run.py keystone --instrument py-prototype --src $(KEYSTONE)/output/scratch/$(PROBE_NAME) \
 		--keystone $(KEYSTONE) --out $(OUT)/runs $(KEYSTONE_PEERS)
 
 # The reference oracle on the SAME peers, via the same driver, for the differential.
@@ -143,7 +150,7 @@ keystone-oracle:
 	@git -C $(KEYSTONE) diff --quiet -- tools/peer-tiers.tsv || { echo "keystone-oracle: REFUSING — $(KEYSTONE)/tools/peer-tiers.tsv has uncommitted changes; the census would stamp over them" >&2; exit 2; }
 	-cd $(KEYSTONE) && tools/run-cohort-census.sh $(KEYSTONE_PEERS)
 	@git -C $(KEYSTONE) diff --quiet -- tools/peer-tiers.tsv || { git -C $(KEYSTONE) checkout -- tools/peer-tiers.tsv; echo "keystone-oracle: the census stamped keystone's roster; restored (it was clean before this run)"; }
-	python3 tools/collect-run.py keystone --instrument validate-peer --src $(KEYSTONE)/output/scratch/census \
+	python3 -B tools/collect-run.py keystone --instrument validate-peer --src $(KEYSTONE)/output/scratch/census \
 		--keystone $(KEYSTONE) --out $(OUT)/runs $(KEYSTONE_PEERS)
 
 # The generator's composed peers, through ITS one-copy launcher (tools/host-launch). Suite 1 goes through the
@@ -160,14 +167,14 @@ GEN_RUN = podman run --rm --network=none --security-opt label=disable --timeout 
 gen_image = $$(python3 -c "import tomllib;print(tomllib.load(open('$(GENERATOR)/languages/'+'$$t'+'/profile.toml','rb'))['toolchain']['image'])")
 
 generator-s1: install-probe
-	@mkdir -p $(OUT)/runs/generator/s1-py
+	@mkdir -p $(OUT)/runs/generator/py-prototype
 	@for t in $(GENERATOR_TARGETS); do \
-		echo "== generator $$t/$(GENERATOR_COMP): s1-py (CLIENT slot)"; \
+		echo "== generator $$t/$(GENERATOR_COMP): py-prototype (CLIENT slot)"; \
 		$(GEN_RUN) -e CLIENT=/church/$(notdir $(abspath $(KEYSTONE)))/output/s4-oracles/$(PROBE_NAME) $(gen_image) \
-			./tools/host-launch $$t $(GENERATOR_COMP) -peer $$t-$(GENERATOR_COMP) -profile core -json-out /out/s1-py/$$t-$(GENERATOR_COMP).json \
-			| grep -E "^(PASS|FAIL|SKIP|INCON|ERROR|s1-py|    )" ; \
+			./tools/host-launch $$t $(GENERATOR_COMP) -peer $$t-$(GENERATOR_COMP) -profile core -json-out /out/py-prototype/$$t-$(GENERATOR_COMP).json \
+			| grep -E "^(PASS|FAIL|SKIP|INCON|ERROR|py-prototype|    )" ; \
 	done
-	python3 tools/collect-run.py generator --instrument s1-py --src $(OUT)/runs/generator/s1-py --generator $(GENERATOR) \
+	python3 -B tools/collect-run.py generator --instrument py-prototype --src $(OUT)/runs/generator/py-prototype --generator $(GENERATOR) \
 		--comp $(GENERATOR_COMP) --out $(OUT)/runs $(addsuffix -$(GENERATOR_COMP),$(GENERATOR_TARGETS))
 
 generator-oracle:
@@ -177,30 +184,40 @@ generator-oracle:
 		$(GEN_RUN) $(gen_image) \
 			./tools/host-launch $$t $(GENERATOR_COMP) -profile core -json-out /out/validate-peer/$$t-$(GENERATOR_COMP).json | tail -2 ; \
 	done
-	python3 tools/collect-run.py generator --instrument validate-peer --src $(OUT)/runs/generator/validate-peer --generator $(GENERATOR) \
+	python3 -B tools/collect-run.py generator --instrument validate-peer --src $(OUT)/runs/generator/validate-peer --generator $(GENERATOR) \
 		--comp $(GENERATOR_COMP) --out $(OUT)/runs $(addsuffix -$(GENERATOR_COMP),$(GENERATOR_TARGETS))
 
 # core-go's reference peer on the bootstrap posture (peer-up), our suite in its own container on the network.
-core-go-s1: $(S1)
+core-go-s1: $(SUITE_BIN)
 	@test -f $(PEER_POSTURE) || { echo "core-go-s1: COULD NOT LOOK — no $(PEER_POSTURE); run make peer-up (it records the posture)" >&2; exit 2; }
-	@mkdir -p $(OUT)/runs/core-go/s1-py
+	@mkdir -p $(OUT)/runs/core-go/py-prototype
 	-podman run --rm --network $(NET) $(PODMAN_CAPS) -v $(abspath $(OUT)):/out:Z $(MUSL_IMAGE) \
-		/out/bin/s1-py -addr $(PEER_NAME):$(PEER_PORT) -peer core-go -posture-grants "$$(sed -n 's/^grants=//p' $(PEER_POSTURE))" \
-		-json-out /out/runs/core-go/s1-py/$(CORE_GO_LABEL).json
-	python3 tools/collect-run.py core-go --instrument s1-py --src $(OUT)/runs/core-go/s1-py --posture-file $(PEER_POSTURE) --out $(OUT)/runs $(CORE_GO_LABEL)
+		/out/bin/py-prototype -addr $(PEER_NAME):$(PEER_PORT) -peer core-go -posture-grants "$$(sed -n 's/^grants=//p' $(PEER_POSTURE))" \
+		-json-out /out/runs/core-go/py-prototype/$(CORE_GO_LABEL).json
+	python3 -B tools/collect-run.py core-go --instrument py-prototype --src $(OUT)/runs/core-go/py-prototype --posture-file $(PEER_POSTURE) --out $(OUT)/runs $(CORE_GO_LABEL)
 
 core-go-oracle:
 	@test -f $(PEER_POSTURE) || { echo "core-go-oracle: COULD NOT LOOK — no $(PEER_POSTURE); run make peer-up (it records the posture)" >&2; exit 2; }
 	-$(MAKE) --no-print-directory oracle-run OUT=$(OUT)/runs/core-go/validate-peer
 	mv $(OUT)/runs/core-go/validate-peer/validate-peer.report.json $(OUT)/runs/core-go/validate-peer/$(CORE_GO_LABEL).json
-	python3 tools/collect-run.py core-go --instrument validate-peer --src $(OUT)/runs/core-go/validate-peer --posture-file $(PEER_POSTURE) --out $(OUT)/runs $(CORE_GO_LABEL)
+	python3 -B tools/collect-run.py core-go --instrument validate-peer --src $(OUT)/runs/core-go/validate-peer --posture-file $(PEER_POSTURE) --out $(OUT)/runs $(CORE_GO_LABEL)
 
 # Join every collected run: requirement id ↔ the oracle check each requirement file names.
 differential:
-	python3 tools/differential.py --runs $(OUT)/runs --requirements requirements/core --out $(OUT)/DIFFERENTIAL.md
+	python3 -B tools/differential.py --runs $(OUT)/runs --requirements $(REQ_DIR) --out $(OUT)/DIFFERENTIAL.md
 	@cat $(OUT)/DIFFERENTIAL.md
 
-lint: lint-ignored lint-suite-independence lint-suite-constants lint-spec-data lint-requirements
+lint: lint-ignored lint-suite-independence lint-suite-constants lint-sources lint-spec-data lint-requirements
+
+# D17 / audit A6 pass C (2026-09-14, landed 2026-09-15). THE GAP THIS CLOSES: every other gate here
+# measures content WE PRODUCED, and all of them were green through four sessions in which this seat
+# cited a 1,094-line governing document nobody had opened. Nothing measured whether the INPUTS were
+# read, and nothing ever would by accident — a gate cannot see an absence unless something makes it
+# look. This one fails on a citation into a document docs/SOURCES.md records as unread, and on an
+# inventory row with no read state or no date. Its debt ledger is docs/SOURCES-CITATION-DEBT.
+lint-sources:
+	@$(PY) tools/sources-gate.py --self-test
+	@$(PY) tools/sources-gate.py
 
 # AP-10 (candidate): no suite is written in the reference oracle's language, and no suite reaches into another suite
 # or into tools/. Shared code is shared bugs; a shared language with the oracle is shared idioms and shared libraries.
@@ -211,21 +228,14 @@ lint-suite-independence:
 	@for d in suites/*/; do n=$$(basename $$d); \
 	   hits=$$(grep -rIo -E "suites/[a-z0-9-]+/|\.\./\.\./tools/|(from|import) tools" $$d --exclude=README.md 2>/dev/null | grep -v ":suites/$$n/$$"); \
 	   if [ -n "$$hits" ]; then echo "lint-suite-independence: $$n references another suite or tools/:" >&2; echo "$$hits" >&2; exit 1; fi; done
-# D16 / AP-13 (F43, F65): a run-defining input that the requirement files already carry MUST be derived, never
-# restated as a suite constant. A snapshot name in suite source is stamped into spec.* — the verdict's
-# comparability anchor — and is correct only until the requirement set cites two snapshots. The planted control
-# runs first: a gate that cannot be made to fail has not been shown to measure anything.
-SNAPDIRS := $(shell ls -d spec-data/*/ 2>/dev/null | xargs -n1 basename 2>/dev/null)
-lint-suite-constants:
-	@pat=$$(echo "$(SNAPDIRS)" | tr ' ' '|'); \
-	 if [ -z "$$pat" ]; then echo "lint-suite-constants: COULD NOT LOOK — no spec-data/ snapshots" >&2; exit 2; fi; \
-	 tmp=$$(mktemp -d); printf 'SNAPSHOT = "%s"\n' "$$(echo $(SNAPDIRS) | cut -d' ' -f1)" > $$tmp/planted.py; \
-	 grep -qIE "[\"'](.*)($$pat)" $$tmp/planted.py || { echo "lint-suite-constants: SELF-TEST FAILED — planted constant not refused" >&2; rm -rf $$tmp; exit 2; }; \
-	 rm -rf $$tmp; \
-	 hits=$$(grep -rInIE "^[A-Za-z_]+ *= *[\"'][^\"']*($$pat)" suites --include='*.py' --include='*.sh' --include='*.rs' --include='*.ts' 2>/dev/null); \
-	 if [ -n "$$hits" ]; then echo "lint-suite-constants: a suite asserts a spec-data/ snapshot as a constant — derive it from the requirement files (D16/AP-13):" >&2; echo "$$hits" >&2; exit 1; fi; \
-	 echo "lint-suite-constants: self-test OK (planted constant refused); 0 suite constant(s) naming a spec-data/ snapshot"
 	@echo "lint-suite-independence: $$(ls -d suites/*/ | wc -l) suite(s); none in the oracle's language, none reaching into another suite or tools/"
+
+# D16 / AP-13 (F43, F65): a run-defining input that the requirement files already carry MUST be derived,
+# never restated as a suite constant. Its planted controls, its hole and why it is now a tool rather than
+# a grep are all documented in tools/suite-constants-gate.py's header.
+lint-suite-constants:
+	@$(PY) tools/suite-constants-gate.py --self-test
+	@$(PY) tools/suite-constants-gate.py
 
 # The gates below read the WORKING TREE. A file they validate that .gitignore excludes passes locally and is
 # absent from every clone — a green run over something nobody else has. Host git: it is the repository, not a
@@ -245,8 +255,12 @@ lint-spec-data:
 lint-requirements:
 	@$(PY) tools/ecp-index.py --self-test
 	@$(PY) tools/ecp-index.py --check
+	@$(PY) tools/cbordiag.py --self-test
+	@$(PY) tools/requirement-corpus.py --self-test
+	@$(PY) tools/build-info.py --self-test
 	@$(PY) tools/requirement-gate.py --self-test
 	@$(PY) tools/requirement-gate.py
+	@$(PY) tools/requirement-corpus.py
 
 lint-native:
 	@echo "lint-native: host python3 — sanctioned, but the interpreter version is not pinned; reports cite make lint." >&2

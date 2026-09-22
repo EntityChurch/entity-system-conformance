@@ -1,0 +1,139 @@
+{
+  "header": [
+    "ECP-R41 — a received hash whose total byte length does not match its format code is refused.",
+    "",
+    "Batch 3. The only surface where this row is DISCRIMINABLE from a hash mismatch is `system/tree:put`,",
+    "because §6.3 gives the two failures different codes. Everywhere else a mis-sized hash is also a",
+    "mismatched hash and a refusal cannot be attributed to the length check."
+  ],
+  "id": "ECP-R41",
+  "id_status": "allocated",
+  "title": "A system/tree:put whose entity content_hash has the wrong total length for its format code is refused 400 invalid_request, not 400 hash_mismatch",
+  "spec": "ENTITY-CORE-PROTOCOL §1.2 ('Implementations MUST validate total byte length matches format code.')",
+  "spec_also": [
+    "§6.3 put admission, step 1 (mis-sized content_hash is 'not an entity' → 400 invalid_request) and step 2 (400 hash_mismatch)",
+    "§9.1's `system/tree:put` admission row (ECP-R40)",
+    "§9.1 (the floor row this id binds)"
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "MUST",
+  "profile": [
+    "core"
+  ],
+  "surface": "wire",
+  "status": "draft",
+  "reading": [
+    "§1.2: \"Implementations MUST validate total byte length matches format code.\" One sentence, no surface,",
+    "no code.",
+    "",
+    "THE PROBLEM WITH MEASURING IT ALONE. A hash one byte short under code 0x00 is ALSO a hash that does not",
+    "equal digest(ECF({type, data})). Any refusal of it satisfies ECP-R3 as well, so on the root, included",
+    "or params surfaces a refusal proves nothing about length. A length check that was never written and a",
+    "hash check that was are indistinguishable there.",
+    "",
+    "§6.3 IS WHERE THE TWO COME APART. \"A `content_hash` that is a well-formed `system/hash` whose total",
+    "byte length matches its format code (§1.2). A value failing any of those clauses — ... `content_hash`",
+    "absent or mis-sized — is not an entity, and `put` MUST refuse it 400 `invalid_request`\" and \"2. Hash.",
+    "... A disagreement MUST be refused 400 `hash_mismatch`.\" \"Step 1 strictly precedes step 2.\" So on put,",
+    "the length check has its own code, and a peer that skips it answers `hash_mismatch`.",
+    "",
+    "OVERLAP WITH ECP-R40, STATED SO NOTHING IS SCORED TWICE BY ACCIDENT. ECP-R40's row names \"an absent /",
+    "mis-sized `content_hash` emits 400 invalid_request\". This file measures R41's general rule at the one",
+    "surface where it is observable, which is that same input. A suite reports both rows off one probe and",
+    "MUST declare that it did. ECP-R40 itself belongs to the `tree_operations` batch and is not authored here.",
+    "",
+    "THE 0x01 MEMBER IS CONDITIONAL. A 33-byte hash under code 0x01 is mis-sized (§1.2: 49 bytes). If the",
+    "peer does not support 0x01, §6.3 routes \"a format code the peer does not support\" to `400",
+    "unsupported_content_hash_format` — but only for a hash that is otherwise \"well-formed\", and whether a",
+    "mis-sized hash under an allocated-but-unsupported code is well-formed is not stated. So that member runs",
+    "only against a peer that advertises `ecfv1-sha384`."
+  ],
+  "preconditions": {
+    "grants": [
+      "system/tree: put"
+    ],
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "posture_axes": [
+      "seed_policy",
+      "content_hash_format"
+    ],
+    "note": "a put grant on a path the suite owns. Without it every probe is a 403 and the row is UNMEASURABLE under that posture — reported, never passed."
+  },
+  "domain": {
+    "axis": "mis_sized_hash",
+    "members": [
+      "0x00 + 31-byte digest",
+      "0x00 + 33-byte digest",
+      "0x01 + 32-byte digest (only if the peer advertises ecfv1-sha384)"
+    ]
+  },
+  "arm": [
+    {
+      "name": "mis-sized",
+      "kind": "conformant",
+      "given": "an authenticated connection; `system/tree:put` of a structurally complete entity whose `content_hash` is the domain member",
+      "why": "§1.2's MUST, at the §6.3 surface that gives it a code of its own.",
+      "step": [
+        {
+          "op": "connect"
+        },
+        {
+          "op": "send_execute",
+          "capture": "put_mis_sized",
+          "uri": "system/tree",
+          "operation": "put",
+          "note": "entity {type: \"test/v1\", data: {\"x\": 1}, content_hash: <member>}"
+        }
+      ],
+      "assert": [
+        {
+          "kind": "status",
+          "capture": "put_mis_sized",
+          "equals": 400
+        },
+        {
+          "kind": "error_code",
+          "capture": "put_mis_sized",
+          "equals": "invalid_request",
+          "why": "NOT `hash_mismatch` — that code means the length check did not run and the peer went straight to comparing."
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "the same put with a correctly sized 0x00 hash whose last digest byte is flipped",
+      "why": "MANDATORY ANTI-VACUITY. Proves the peer DOES distinguish the two steps: a correctly sized wrong hash must answer `hash_mismatch`. Without it, a peer answering `invalid_request` to every bad hash passes the probe while never checking length.",
+      "step": [
+        {
+          "op": "send_execute",
+          "capture": "put_wrong_hash",
+          "uri": "system/tree",
+          "operation": "put"
+        }
+      ],
+      "assert": [
+        {
+          "kind": "error_code",
+          "capture": "put_wrong_hash",
+          "equals": "hash_mismatch"
+        }
+      ]
+    },
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a peer that compares hashes without checking length",
+      "expect": "the mis-sized put answers 400 hash_mismatch; elsewhere a truncated hash that happens to prefix-match (a digest-prefix comparison) is accepted",
+      "why": "the length check is what makes byte equality (§5.3) meaningful for hashes of different formats."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": "encoding/hash_wire_format",
+    "oracle_note": "provenance only; whether that check measures length at all is not known from its citation."
+  }
+}

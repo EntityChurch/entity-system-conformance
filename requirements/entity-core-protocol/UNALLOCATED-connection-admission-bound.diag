@@ -1,0 +1,153 @@
+{
+  "header": [
+    "UNALLOCATED — §4.10(c)'s connection-admission SHOULD.",
+    "",
+    "TWO THINGS WERE WRONG WITH THIS ROW AND ONE IS NOW RULED:",
+    "1. It has NO §9 inventory row — and arch's adjudication SHARPENED this: it is not a hole in",
+    "§9.1, which names and excludes it correctly (\"not part of this MUST\"). It is a hole in §9.2,",
+    "which never added it. A row is proposed at the SHOULD tier.",
+    "2. \"As written it cannot be failed\" — RULED 2026-09-12 (CQ-10): reading B, and not merely as the",
+    "narrower choice. See [requirement.ruled].",
+    "",
+    "SHIPPED `disputed` 2026-09-11; RULED 2026-09-12. The vocabulary worked exactly as intended — one",
+    "real case, both readings stated, declined to pick, SKIP rather than Warn, one requirement blocked",
+    "and nothing else. Arch: \"that is the vocabulary working. Keep using it this way.\"",
+    "This file KEEPS the dispute's record rather than deleting it: the argument is why the row reads",
+    "as it does, and a ruling with its question erased is a conclusion nobody can re-check."
+  ],
+  "id_status": "unallocated",
+  "under": "",
+  "title": "The peer bounds concurrent connections and refuses over-bound connections cleanly",
+  "spec": "ENTITY-CORE-PROTOCOL §4.10(c)",
+  "spec_also": [
+    "§9.1's resource-bounds row, which EXCLUDES this: \"Connection admission (§4.10(c)) is a SHOULD ... not part of this MUST\""
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "SHOULD",
+  "profile": [
+    "core"
+  ],
+  "surface": "wire",
+  "status": "draft",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F4 and F5 — ANSWERED, ROUTING-2026-09-12-c §2",
+  "reading": [
+    "§4.10(c): \"A peer SHOULD bound concurrent connections and refuse over-bound connections cleanly",
+    "(`503 too_many_connections` or a connection close). This is NOT a MUST: connection admission is",
+    "commonly owned by the layer below the peer (systemd socket limits, a reverse proxy, the OS fd",
+    "limit), so a peer MAY rely on an external admission layer rather than self-limiting.\"",
+    "",
+    "⛔ THE DISPUTE AS FILED, KEPT BECAUSE THE RULING IS ONLY LEGIBLE AGAINST IT: **as written, no",
+    "observation appeared able to fail this row.** The two outcomes a",
+    "suite can see against a peer under connection pressure are",
+    "",
+    "  (i)  connections are refused        -> satisfied by self-limiting;",
+    "  (ii) connections are accepted       -> satisfied by \"relies on an external admission layer\",",
+    "                                         which §4.10(c) explicitly permits;",
+    "",
+    "and (ii) is indistinguishable from a peer that bounds NOTHING and has no external layer either. The",
+    "carve-out is a property of the DEPLOYMENT, and nothing in the exchange reports it. So the check that",
+    "exists reports a Warn on an outcome that is conformant, non-conformant and undeterminable at once.",
+    "",
+    "That is `GUIDE-CONFORMANCE` §5.2b.1's shape one level up: not a proxy that cannot fail the way the",
+    "real case fails, but a REQUIREMENT that cannot fail at all. A row every peer passes by construction",
+    "is a row that measures the suite's willingness to write it.",
+    "",
+    "TWO READINGS WITH REAL DEGREES OF FREEDOM, AND WE DECLINE TO PICK ONE ([prohibition 2]):",
+    "",
+    "  READING A — the obligation is on the DEPLOYMENT, and the peer's part is to DECLARE which side of",
+    "  the carve-out it is on. Then the row becomes checkable: the posture declares `external_admission =",
+    "  true|false`, and with `false` the suite asserts a clean refusal under pressure. Cost: a new posture",
+    "  axis, and a peer that lies is unmeasured — but a declaration that can be wrong is still infinitely",
+    "  more than a row that cannot be.",
+    "",
+    "  READING B — the obligation is on the PEER's refusal SHAPE, not on whether it bounds: IF the peer",
+    "  refuses, the refusal is clean (`503 too_many_connections` or a close), never a hang or a partial",
+    "  accept. Then the antecedent is \"a refusal occurred\", the row is vacuously satisfied when none does,",
+    "  and that vacuity is honest and declared rather than hidden.",
+    "",
+    "✅ RULED 2026-09-12: **B — and the ruling corrects our reasoning, not just our uncertainty.** We had",
+    "B as *\"narrower, changes no peer's status, checkable today\"*, which is true and undersells it. **B is",
+    "what the sentence's grammar gives.** §4.10(c) has two conjuncts — *bound* concurrent connections",
+    "**and** *refuse* over-bound connections cleanly — and the carve-out attaches to **self-limiting**,",
+    "which is the FIRST conjunct only. It excuses bounding. It does not excuse the refusal shape, and it",
+    "does not need to: **a peer relying on an external layer has no over-bound connections arriving to",
+    "refuse.** The second conjunct is therefore **vacuous, not excused** — and vacuity you can declare is",
+    "not the same thing as an obligation you cannot fail. That distinction is the whole of the answer and",
+    "we did not see it.",
+    "",
+    "Reading A is rejected on cost and on `L17`: it needs a new posture axis, which is a normative",
+    "capability claim requiring a declared site a peer can carry plus a check to enforce it — a large",
+    "change to buy a SHOULD, and our own diagnosis (*\"nothing in the exchange reports it\"*) is the",
+    "argument against it.",
+    "",
+    "**So a suite STOPS reporting `SKIP — disputed` on this row** and runs the `reading-b-clean-refusal`",
+    "arm below, reporting vacuous-satisfied where no refusal occurs.",
+    "",
+    "AND THE SEPARATE STRUCTURAL PROBLEM: this obligation has no §9 row, so it has no id. It is not one",
+    "of ECP-R1…R98 and it is not a bundled sibling of any of them. §9.1 removes it by name and §9.2 does",
+    "not add it. See F4 — the inventory is not exhaustive over the body's binding text, which is a",
+    "question about what §9 IS, not about this clause."
+  ],
+  "preconditions": {
+    "grants": [],
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "posture_axes": [
+      "seed_policy"
+    ]
+  },
+  "ruled": {
+    "question": "Is §4.10(c) an obligation on the deployment (declare which side of the carve-out you are on), or on the refusal shape (if you refuse, refuse cleanly)?",
+    "why_it_matters": "under the first, a peer that bounds nothing and has no external layer is non-conformant and currently scores a Warn. Under the second it is conformant and the Warn is the defect.",
+    "owner": "entity-system-architecture",
+    "our_lean": "B — narrower, changes no peer's status, checkable today",
+    "ruling": "B, 2026-09-12. ROUTING-2026-09-12-c §2. The carve-out attaches to the FIRST conjunct (self-limiting) only; the refusal-shape conjunct is vacuous rather than excused, because a peer relying on an external layer has no over-bound connections arriving.",
+    "correction": "our lean was right for a weaker reason than the real one. We argued from cost and checkability; the answer is in the sentence's grammar. Recorded because 'right answer, wrong argument' is the state that does not survive being re-derived by someone else.",
+    "filed": "the dispute stood for one day and blocked one requirement. That is what the vocabulary is for."
+  },
+  "arm": [
+    {
+      "name": "reading-b-clean-refusal",
+      "kind": "conformant",
+      "given": "the peer has refused a connection under admission pressure",
+      "why": "Reading B's arm, authored so the dispute was CONCRETE rather than a complaint. ✅ B is ruled — this arm is now THE arm, and it runs.",
+      "accept": [
+        {
+          "outcome": "coded_response",
+          "status": 503,
+          "code": "too_many_connections"
+        },
+        {
+          "outcome": "connection_closed",
+          "why": "§4.10(c) names the close as an equal alternative — 'or a connection close'."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "hang",
+          "why": "neither refusal shape. An accepted-then-unanswered connection is the §4.9(c) deliver-or-signal failure wearing an admission decision's clothes."
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "a single connection, no pressure",
+      "why": "MANDATORY and it is the arm that makes the vacuity visible: it establishes the peer accepts connections at all, so 'no refusal observed' can be reported as vacuous-satisfied rather than as a pass.",
+      "assert": [
+        {
+          "kind": "connected",
+          "why": "if this fails the run reports SKIP — the instrument could not establish its own antecedent (§2.4b)."
+        }
+      ]
+    }
+  ],
+  "notes": {
+    "peer_attributable": false,
+    "peer_attributable_why": "under BOTH readings a peer can satisfy this row without implementing anything — Reading A via an external admission layer, Reading B vacuously when no refusal occurs. A row a sibling could ship none of and not move is not a peer result (GUIDE-CONFORMANCE §5.2).",
+    "oracle_check": "resource_bounds/r3_connection_flood",
+    "oracle_note": "provenance. The register describes it as 'admission bound; clean refusal or external-delegation Warn' — which is this dispute, already visible in the reference set's own wording."
+  }
+}

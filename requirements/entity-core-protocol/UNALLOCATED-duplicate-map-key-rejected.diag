@@ -1,0 +1,135 @@
+{
+  "header": [
+    "UNALLOCATED — a received frame containing a map with a duplicate key is refused.",
+    "",
+    "Batch 3. Stated twice in ENTITY-CBOR-ENCODING, consistently, at MUST; no §9 row; no code; no",
+    "Appendix E vector."
+  ],
+  "id_status": "unallocated",
+  "under": "",
+  "title": "A received frame in which any CBOR map carries the same key twice is not processed",
+  "spec": "ENTITY-CBOR-ENCODING §4.1 Rule 5",
+  "spec_also": [
+    "ENTITY-CBOR-ENCODING §9.2 item 4 ('Reject duplicate map keys')",
+    "ENTITY-CORE-PROTOCOL §1.3 ('No duplicate map keys')",
+    "ENTITY-CORE-PROTOCOL §1.11 (b) (accept only canonical ECF at the boundary)"
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "MUST",
+  "profile": [
+    "core"
+  ],
+  "surface": "wire",
+  "status": "draft",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F21, F25",
+  "reading": [
+    "ENTITY-CBOR-ENCODING §4.1: \"Rule 5: No duplicate map keys. Duplicate keys are encoding errors.",
+    "Implementations MUST reject them.\" §9.2, \"Decoders MUST: ... 4. Reject duplicate map keys\". Unlike",
+    "tags (F21) and non-canonical input (disputed), the two passages AGREE, and core §1.3 lists the rule too.",
+    "",
+    "WHY IT MATTERS MORE THAN IT LOOKS. A map with a duplicate key has no single meaning — CBOR decoders",
+    "differ on first-wins, last-wins and error. Two peers decoding the same bytes to different values while",
+    "agreeing on the content_hash (computed over the bytes) is a signature-covers-something-else hazard,",
+    "which is why \"reject\" rather than \"pick one\" is the rule.",
+    "",
+    "NO CODE IS PINNED. §6.3's `non_canonical_ecf` is scoped to tags; §4.1 says \"reject\" and no more; there",
+    "is no `decode_reject` vector for duplicates in the corpus (F25). So any refusal satisfies the row and",
+    "the code is witnessed. `non_canonical_ecf` is the obvious candidate; asserting it would author it.",
+    "",
+    "THE PROBE. A hello whose data carries `\"x_cnf_dup\": 1` twice — an extra key the hello type admits (§4.7",
+    "CDDL `* tstr => any`), so neither occurrence collides with a field the peer interprets. The encoded",
+    "map's declared count includes both pairs. content_hash is computed over the bytes sent."
+  ],
+  "preconditions": {
+    "grants": [],
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "posture_axes": [
+      "seed_policy",
+      "close_wait_bound"
+    ]
+  },
+  "domain": {
+    "axis": "duplicate_position",
+    "members": [
+      "top-level hello data map, identical values",
+      "top-level hello data map, differing values (1 then 2)",
+      "a map nested inside hello data"
+    ]
+  },
+  "arm": [
+    {
+      "name": "refused",
+      "kind": "conformant",
+      "given": "a fresh connection per member; an otherwise correct hello with the duplicate",
+      "why": "Rule 5's MUST.",
+      "step": [
+        {
+          "op": "send_hello",
+          "capture": "dup",
+          "extra": "the domain member"
+        }
+      ],
+      "accept": [
+        {
+          "outcome": "coded_response",
+          "why": "any non-200: no code is pinned."
+        },
+        {
+          "outcome": "close",
+          "why": "a decoder-level rejection with no response is a rejection."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "hello_answered",
+          "why": "THE FAILURE: the peer picked a value."
+        }
+      ],
+      "witness": [
+        {
+          "field": "status_and_code",
+          "why": "cohort data for a code F25 asks arch to pin."
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "the same hello with `x_cnf_dup` present once",
+      "why": "MANDATORY ANTI-VACUITY. Same construction, one pair fewer. Without it a peer refusing every hello with an extra key passes.",
+      "step": [
+        {
+          "op": "send_hello",
+          "capture": "single",
+          "extra": "\"x_cnf_dup\": 1 once"
+        }
+      ],
+      "accept": [
+        {
+          "outcome": "hello_answered",
+          "why": "the control's subject is the second pair."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "close",
+          "why": "voids the probe."
+        }
+      ]
+    },
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a peer whose CBOR library silently keeps the last value",
+      "expect": "the hello is answered; with differing values, two peers holding the same signed bytes act on different data",
+      "why": "the hazard Rule 5 exists to close."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": ""
+  }
+}

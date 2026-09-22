@@ -1,0 +1,31 @@
+# Requirement files suite py-prototype implements, one id (filename stem) per line.
+# Read by the Makefile (digests written into the bundle), by tests/test_manifest.py (must equal the
+# CHECKS table), and by tools/requirement-gate.py (the executed-by-a-suite ratchet).
+ECP-R1
+ECP-R6
+ECP-R9
+ECP-R44
+ECP-R45
+ECP-R57
+UNALLOCATED-no-unsolicited-leg3-authenticate
+UNALLOCATED-key-type-mutual-verifiability
+UNALLOCATED-error-response-carries-code
+ECP-R47
+ECP-R47-pending-b
+UNALLOCATED-hash-format-intersection
+ECP-R66
+ECP-R66-pending-c
+ECP-R2
+ECP-R12
+ECP-R7-pending-b
+UNALLOCATED-emitted-frames-are-canonical-ecf
+UNALLOCATED-emitted-entities-conform-to-protocol-types
+UNALLOCATED-emitted-optional-fields-absent-not-null
+ECP-R3
+ECP-R7
+UNALLOCATED-cbor-tag-rejected
+UNALLOCATED-duplicate-map-key-rejected
+ECP-R4-pending-b
+ECP-R4
+ECP-R41
+UNALLOCATED-unsupported-content-hash-format-refused

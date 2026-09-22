@@ -1,0 +1,145 @@
+{
+  "header": [
+    "ECP-R47-pending-b — a hello with `protocols` absent or empty is refused with 400 invalid_request.",
+    "The second obligation under §9.1's negotiation row. Routed, not split here."
+  ],
+  "id_status": "pending-split",
+  "under": "ECP-R47",
+  "split_index": "b",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F3",
+  "title": "A hello carrying no `protocols` field, or an empty one, is refused with 400 invalid_request",
+  "spec": "ENTITY-CORE-PROTOCOL §4.5",
+  "spec_also": [
+    "§3.8 (the hello type — `protocols` is the one negotiated array with no `optional: true`)",
+    "§4.7"
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "MUST",
+  "profile": [
+    "core"
+  ],
+  "surface": "wire",
+  "status": "draft",
+  "reading": [
+    "§4.5: \"Unlike `hash_formats` and `key_types`, `protocols` is Required with no default, so there is",
+    "no floor to fall back to. A hello carrying NO `protocols` field, or an empty list, MUST be rejected",
+    "with `400 invalid_request` -- it is a malformed request, not a version incompatibility.\"",
+    "",
+    "TWO INPUTS, ONE CODE, AND THEY ARE SEPARATE ARMS ANYWAY. Absent and empty are different wire shapes",
+    "-- one omits the key, one sends a zero-length array -- and an implementation that checks",
+    "`if (hello.protocols == null)` passes the first and fails the second. The spec names both explicitly,",
+    "so both are exercised; this is `GUIDE-CONFORMANCE` §5.2b's rule (`entity-system-architecture`; not in this snapshot) at the",
+    "granularity of a single field (\"one probe against one arm is a sample, not coverage\").",
+    "",
+    "They are ONE requirement rather than two because they are one obligation with one remedy: §4.5's",
+    "whole argument for the code split is that the remedy differs between codes, and here the remedy is",
+    "identical -- send the field. Recorded because the judgement could go the other way and the next",
+    "author should see it was made.",
+    "",
+    "THE TYPE SYSTEM AGREES, which is worth citing because it is independent evidence for the reading:",
+    "§3.8 declares `protocols: {array_of: {type_ref: \"primitive/string\"}}` with no `optional: true`,",
+    "while `hash_formats`, `key_types`, `compression` and `encryption` all carry it. The required/optional",
+    "split in the type definition and the default/no-default split in §4.5's table are the same line drawn",
+    "twice, which is the pattern this corpus calls a floor row restating its authority -- here the two",
+    "agree, and that agreement is what makes the reading safe."
+  ],
+  "preconditions": {
+    "grants": [],
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "posture_axes": [
+      "seed_policy"
+    ]
+  },
+  "arm": [
+    {
+      "name": "absent",
+      "kind": "conformant",
+      "given": "a well-formed hello with the `protocols` key omitted entirely",
+      "why": "§4.5's first named input.",
+      "step": [
+        {
+          "op": "send_hello",
+          "capture": "absent",
+          "omit": [
+            "protocols"
+          ]
+        }
+      ],
+      "assert": [
+        {
+          "kind": "status",
+          "capture": "absent",
+          "equals": 400
+        },
+        {
+          "kind": "error_code",
+          "capture": "absent",
+          "equals": "invalid_request",
+          "why": "NOT `incompatible_protocol` — §4.5: 'a caller that named no version cannot be told the comparison failed.'"
+        }
+      ]
+    },
+    {
+      "name": "empty",
+      "kind": "conformant",
+      "given": "a well-formed hello with `protocols` present and equal to `[]`",
+      "why": "§4.5's second named input, and the one a null-check implementation passes the first arm and fails.",
+      "step": [
+        {
+          "op": "send_hello",
+          "capture": "empty",
+          "protocols": []
+        }
+      ],
+      "assert": [
+        {
+          "kind": "status",
+          "capture": "empty",
+          "equals": 400
+        },
+        {
+          "kind": "error_code",
+          "capture": "empty",
+          "equals": "invalid_request"
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "the same hello with `protocols` = [\"entity-core/1.0\"]",
+      "why": "MANDATORY — proves the refusal discriminates on the FIELD and not on the hello being otherwise unacceptable.",
+      "step": [
+        {
+          "op": "send_hello",
+          "capture": "present",
+          "protocols": [
+            "entity-core/1.0"
+          ]
+        }
+      ],
+      "assert": [
+        {
+          "kind": "error_code",
+          "capture": "present",
+          "not_equals": "invalid_request"
+        }
+      ]
+    },
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a peer that defaults an absent or empty `protocols` to `[\"entity-core/1.0\"]`",
+      "expect": "the handshake proceeds — the peer supplied a version the caller never claimed",
+      "why": "the natural implementation error, since the four neighbouring fields DO have defaults. §4.5 exists to say this one does not."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": "connectivity/connect_absent_protocols",
+    "oracle_note": "provenance only. ⛔ CORRECTED 2026-09-13 (F54): this note said no reference check measures it; `connectivity/connect_absent_protocols` does, in the executed set (a runtime-named check the register cannot see). Its reported message names the EMPTY member only; this file names two members, absent and empty."
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "header": [
+    "ECP-R66-pending-d — \"the default maximum MUST be finite\". A binding MUST that no finite probe",
+    "can discharge, declared UNREACHABLE rather than approximated."
+  ],
+  "id_status": "pending-split",
+  "under": "ECP-R66",
+  "split_index": "d",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F3",
+  "title": "The peer's default maximum inbound payload size is finite",
+  "spec": "ENTITY-CORE-PROTOCOL §4.10(a)",
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "MUST",
+  "profile": [
+    "core"
+  ],
+  "surface": "unreachable",
+  "status": "draft",
+  "reading": [
+    "§4.10(a): \"The default maximum MUST be finite (an unbounded/absent default is non-conformant).\"",
+    "",
+    "THIS IS A BINDING MUST AND IT IS NOT WIRE-DECIDABLE. No finite probe distinguishes \"the bound is",
+    "2 GiB\" from \"there is no bound\": every passing observation is consistent with both, and the only",
+    "input that would separate them is one the suite cannot afford to send. It is also a property of the",
+    "peer's CONFIGURATION rather than of any response, so it is not a thing an exchange can carry.",
+    "",
+    "DECLARED `unreachable`, WHICH IS A STATE AND NOT A BLANK. `GUIDE-CONFORMANCE` §5.2a governs the",
+    "class -- a rule with no peer-observable surface is gated by a pinned-input vector or declared -- and",
+    "`GUIDE-CONFORMANCE` §5.2b.1 (`entity-system-architecture`; not in this snapshot) governs the temptation: \"a proxy that cannot fail the way the real case fails MUST NOT be",
+    "recorded as covering it.\" The available proxy is \"send something large and see it refused\", which is",
+    "ECP-R66 and which passes identically against a peer whose bound is merely LARGER than the probe.",
+    "**It reads as coverage while missing the case, which is worse than a declared exclusion.**",
+    "",
+    "WHAT WOULD DISCHARGE IT, so this is a worklist entry rather than a shrug:",
+    "",
+    "  1. A DECLARED-LIMITS SURFACE. If the peer publishes its configured bounds as entity-native",
+    "     operational state (§3.13 populates `system/config/*`), the value is readable and the assertion",
+    "     becomes \"a finite value is published\". That surface is §9.2 SHOULD, not MUST, so it cannot be",
+    "     required -- but where it exists this requirement becomes reachable, and that is worth recording",
+    "     because it makes a SHOULD load-bearing for a MUST's measurability.",
+    "  2. A HOST-SEAM assertion, driven by the peer's own harness against its configuration.",
+    "  3. The run's POSTURE. The suite already requires `max_payload` to be declared (ECP-R66); a run",
+    "     whose posture declares a finite value has evidence about the DEPLOYMENT, not about the peer's",
+    "     DEFAULT -- which is what §4.10(a) binds. Recorded so nobody mistakes the one for the other.",
+    "",
+    "UNTIL THEN this row is reported, never silently absent, and it is reported as `SKIP` with this",
+    "reason -- which under [ADR-0012] counts as a failure for release purposes. That is the correct",
+    "severity: the ecosystem does not currently know whether any peer satisfies it."
+  ],
+  "preconditions": {
+    "grants": [],
+    "identities": [],
+    "handlers": []
+  },
+  "unreachable": {
+    "class": "GUIDE-CONFORMANCE §5.2a — no peer-observable surface",
+    "why_no_proxy": "the only wire proxy (ECP-R66) passes identically against a peer whose bound merely exceeds the probe, so it cannot fail the way this case fails.",
+    "discharged_by": [
+      "declared-limits surface (§3.13 operational state, §9.2 SHOULD)",
+      "host-seam assertion",
+      "a pinned-input vector if one is ever authored"
+    ],
+    "reported_as": "SKIP, with this reason and the surface named"
+  },
+  "arm": [
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a peer shipping no default inbound bound, relying on the operator to configure one",
+      "expect": "unbounded allocation on a sufficiently large frame",
+      "why": "stated so the obligation stays legible while unmeasured. §4.10(a) calls this out by name — 'an unbounded/absent default is non-conformant' — so the shape is the spec's, not ours."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": "",
+    "oracle_note": "NO reference check measures this. Recorded as a coverage gap in the reference set, not as an absence of requirement — the register is derived from the oracle's declarations and is structurally blind to it."
+  }
+}

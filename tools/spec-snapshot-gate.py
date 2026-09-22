@@ -152,7 +152,22 @@ def main(argv: list[str]) -> int:
         print("spec-snapshot-gate: COULD NOT LOOK — no spec-data/", file=sys.stderr)
         return 2
 
-    snapshots = sorted(p for p in SPEC_DATA.iterdir() if p.is_dir())
+    # ADR-0001: a snapshot is `spec-data/<spec>/v<version>/`, two levels. Before 2026-09-15 it was
+    # one — `spec-data/core-0.8.2.21/` — where `core` was an abbreviation this seat invented and
+    # which collided with `core profile`, a real and different thing.
+    #
+    # An empty `<spec>/` is COULD NOT LOOK, never a clean run: a spec directory with no version in
+    # it is exactly what a half-finished migration leaves behind, and this gate's whole failure mode
+    # is a glob that has stopped matching reporting success over nothing.
+    specs = sorted(p for p in SPEC_DATA.iterdir() if p.is_dir())
+    snapshots = []
+    for spec in specs:
+        versions = sorted(p for p in spec.iterdir() if p.is_dir())
+        if not versions:
+            print(f"spec-snapshot-gate: COULD NOT LOOK — spec-data/{spec.name}/ holds no "
+                  f"version directory. The layout is spec-data/<spec>/v<version>/.", file=sys.stderr)
+            return 2
+        snapshots.extend(versions)
     if len(snapshots) < MIN_SNAPSHOTS:
         print(
             f"spec-snapshot-gate: COULD NOT LOOK — {len(snapshots)} snapshot(s), below "

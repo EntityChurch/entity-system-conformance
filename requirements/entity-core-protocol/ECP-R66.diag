@@ -1,0 +1,172 @@
+{
+  "header": [
+    "ECP-R66 — the inbound payload bound is finite and enforced, and the refusal is coded.",
+    "",
+    "THE FIRST REQUIREMENT AUTHORED IN THIS REPO, and it was chosen because it is small enough to",
+    "finish and rich enough to break the format. It did both: see",
+    "docs/status/FINDINGS-FROM-AUTHORING.md F1 and F2."
+  ],
+  "id": "ECP-R66",
+  "id_status": "allocated",
+  "title": "An inbound EXECUTE over the peer's configured maximum wire size is refused with 413 payload_too_large",
+  "spec": "ENTITY-CORE-PROTOCOL §4.10(a)",
+  "spec_also": [
+    "§9.1 (the floor row this id binds)",
+    "§3.3 (status/code table)"
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "MUST",
+  "profile": [
+    "core"
+  ],
+  "surface": "wire",
+  "status": "draft",
+  "reading": [
+    "§4.10(a) states two obligations in one sentence and they fail independently:",
+    "",
+    "  (i)  the peer MUST reject an inbound EXECUTE whose wire size exceeds its configured maximum",
+    "       with `413 payload_too_large`;",
+    "  (ii) \"the default maximum MUST be finite (an unbounded/absent default is non-conformant)\".",
+    "",
+    "THIS FILE IS (i). (ii) is a property of the peer's configuration rather than of a response, and it",
+    "is not decidable from any single exchange -- no finite probe distinguishes \"the bound is 2 GiB\" from",
+    "\"there is no bound\". It is carried as `ECP-R66-pending-d` with its measurement problem stated, not",
+    "silently folded in here, because folding it in would produce a requirement that passes on a peer",
+    "with no bound at all whenever the probe is smaller than the machine.",
+    "",
+    "WHAT THE REFUSAL MUST CARRY. §4.10's error table binds `payload_too_large` to 413 and the pairing",
+    "is the assertion: a 413 with a different code, or the right code under a different status, is a",
+    "different failure and a caller keying on the code (§4.7's stated reason for coded errors) cannot act",
+    "on it. `GUIDE-CONFORMANCE` §5.2b.1 governs how: assert the DECODED `result.data.code`, never a",
+    "substring of the response, because the value appears under a wrong key just as readably as under the",
+    "right one.",
+    "",
+    "WHAT IS *NOT* REQUIRED, AND THIS IS THE PART A NAIVE CHECK GETS WRONG. §4.10(a)'s emission shape is",
+    "explicitly permissive: the peer \"SHOULD emit a 413 EXECUTE_RESPONSE correlated by `request_id` when",
+    "the id is available, and otherwise MAY close the connection after a best-effort coded frame.\" The",
+    "over-size condition may be detected before `request_id` has been parsed -- that is the whole reason",
+    "the clause exists -- so:",
+    "",
+    "  * a correlated 413 on the open connection is conformant;",
+    "  * a best-effort coded frame followed by a CLOSE is conformant;",
+    "  * and therefore A CHECK THAT REQUIRES THE CONNECTION TO SURVIVE THE REFUSAL IS ASSERTING MORE",
+    "    THAN §4.10(a) REQUIRES.",
+    "",
+    "The arms below are built so that either conformant shape passes, and the discrimination that matters",
+    "-- refused versus accepted -- is preserved in both. `keeps serving` is a real and separate obligation",
+    "(§4.10's \"Rejection is clean, not collapse\") and is `ECP-R66-pending-c`, where it is measured on a",
+    "FRESH connection precisely because §4.10(a) permits closing the old one.",
+    "",
+    "\"BEFORE FULLY BUFFERING OR DECODING IT WHERE THE TRANSPORT ALLOWS\" is not asserted here. It is",
+    "conditioned on the transport (\"where the transport allows\"), it describes an internal ordering, and",
+    "no wire observation distinguishes a peer that buffered-then-refused from one that refused early.",
+    "Recorded rather than dropped: an unasserted clause is a declared exclusion, and a blank is",
+    "indistinguishable from nobody having looked."
+  ],
+  "preconditions": {
+    "grants": [],
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "declared_limits": [
+      "max_payload"
+    ],
+    "posture_axes": [
+      "seed_policy",
+      "declared_limits"
+    ],
+    "notes": {
+      "max_payload": "the peer's CONFIGURED maximum, obtained from the run's posture. 16 MiB is §4.10's non-normative recommendation and MUST NOT be assumed."
+    }
+  },
+  "arm": [
+    {
+      "name": "refused",
+      "kind": "conformant",
+      "given": "an inbound EXECUTE whose wire size exceeds the declared max_payload by one byte",
+      "why": "§4.10(a)'s MUST. One byte over, not a gratuitous multiple: a check that sends 10x the bound cannot tell an enforced bound from a transport that failed under load.",
+      "step": [
+        {
+          "op": "connect",
+          "note": "§4.1 handshake. Completed BEFORE the oversize frame, so a failure here is a precondition failure and not this requirement's."
+        },
+        {
+          "op": "send_execute",
+          "capture": "over",
+          "size": "max_payload + 1",
+          "note": "the payload is padded to size; its content is irrelevant and MUST be well-formed, so that a refusal cannot be attributed to malformedness (that is what the control arm proves)."
+        }
+      ],
+      "accept": [
+        {
+          "outcome": "coded_response",
+          "status": 413,
+          "code": "payload_too_large",
+          "why": "the SHOULD-preferred shape: correlated by request_id, connection intact."
+        },
+        {
+          "outcome": "coded_frame_then_close",
+          "status": 413,
+          "code": "payload_too_large",
+          "why": "§4.10(a)'s explicit MAY, for the case where the over-size condition is detected before request_id is parsed."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "accepted",
+          "why": "THE FAILURE THIS REQUIREMENT EXISTS TO CATCH: a 200, or any response indicating the envelope was processed, means no finite bound was enforced on this input."
+        },
+        {
+          "outcome": "close_without_code",
+          "why": "a bare close is NOT conformant: §4.10(a)'s MAY is 'close AFTER a best-effort coded frame'. A peer that drops the connection silently leaves the caller unable to distinguish a bound from a crash, which is the §4.9(c) deliver-or-signal floor."
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "an inbound EXECUTE one byte UNDER the declared max_payload, otherwise byte-identical",
+      "why": "MANDATORY ANTI-VACUITY. It proves the refusal arm discriminates on SIZE and not on the request being malformed, unauthorized, or routed to a missing handler -- every one of which also produces a non-200 and would make the refusal arm pass against a peer that enforces no bound at all.",
+      "step": [
+        {
+          "op": "connect"
+        },
+        {
+          "op": "send_execute",
+          "capture": "under",
+          "size": "max_payload - 1"
+        }
+      ],
+      "accept": [
+        {
+          "outcome": "coded_response",
+          "not_status": 413,
+          "why": "any non-413 outcome satisfies the control -- including a 403 or a 404. The control's subject is the BOUND, so it asserts only that this input was not refused FOR SIZE. Asserting 200 here would silently add a grant precondition this requirement does not need."
+        }
+      ]
+    },
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a peer with no finite inbound bound, sent max_payload + 1 bytes",
+      "expect": "the envelope is processed and answered on its merits, or the peer allocates without limit",
+      "why": "the shape the requirement rejects, stated so a suite author can build the negative-control fixture and so a reviewer can check the arms actually separate."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": "resource_bounds/r1_payload_over_limit",
+    "oracle_note": "cross-reference for the differential run only. Its expected values were not read while authoring, and this file's reading is derived from §4.10(a) alone."
+  },
+  "predicted_disagreement": {
+    "against": "resource_bounds/r1_payload_over_limit",
+    "prediction": "the reference check requires the peer to remain answerable ON THE SAME CONNECTION after the refusal",
+    "basis": "the register describes it as 'oversize inbound -> 413 payload_too_large + keeps serving', and the requirement format's own worked example asserts the follow-up request 'on the same connection'.",
+    "if_true": "the check asserts more than §4.10(a) requires, and a peer taking the explicitly-permitted close-after-coded-frame path is scored non-conformant for conforming. CHECK BUG -> route to entity-core-go.",
+    "if_false": "our reading of the emission shape is too permissive and this file is wrong. Fix here.",
+    "unsettled": "we have read the register's description, NOT the check's source ([prohibition 3]). This is a prediction about behaviour, and only a run settles it.",
+    "settled": "2026-09-12 — ⛔ FALSE. The reference check accepts both a 413 frame and a close, closes the probe connection, and measures keeps-serving on a FRESH connection; unchanged since 2026-08-24, so it predates the prediction. Settled by a separate read-only analysis of the check's source at entity-core-go 55c2146 (not by a run) — reading the source to SETTLE a behavioural prediction is the differential, not authoring; nothing in this file's reading or arms was taken from it, and nothing changes. What the prediction actually caught was F1, the design doc's RB-R1 example, and arch's 'confirmed independently' (ROUTING-2026-09-12-c §3.2) confirmed F1, not this check: both sides conflated the prototype with the oracle.",
+    "if_false_was_wrong": "the `if_false` above says a false prediction means 'our reading is too permissive and this file is wrong'. It does not: the prediction was about the ORACLE, and its failing means the oracle and this file AGREE. A prediction's if_false must state what the outcome means for the thing predicted about, not for us. Recorded rather than rewritten, because a retrofitted if_false is exactly what the gate's rule exists to prevent."
+  }
+}

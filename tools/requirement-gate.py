@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """requirement-gate — the requirement format, validated in one place.
 
-    tools/requirement-gate.py              # validate every requirements/**/*.toml
+    tools/requirement-gate.py              # validate every requirements/**/*.diag
     tools/requirement-gate.py --self-test  # plant the defects and require refusal
 
 **The neutral half.** This file is the reference reading of the format and the validator every
@@ -34,8 +34,11 @@ from __future__ import annotations
 
 import re
 import sys
-import tomllib
 from pathlib import Path
+
+sys.dont_write_bytecode = True   # __pycache__ is .gitignore'd; lint-ignored refuses it (AP-8)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cbordiag  # noqa: E402  — tools' OWN codec; never the suite's (lint-suite-independence)
 
 ROOT = Path(__file__).resolve().parent.parent
 REQ_DIR = ROOT / "requirements"
@@ -104,9 +107,17 @@ ARM_TABLES = {
 LEVEL_BASES = ("keyword", "entailed")
 
 REQUIRED = ("title", "spec", "snapshot", "level", "surface", "status", "id_status")
+# Prose fields, held as an array of lines. See validate() for why this is not cosmetic.
+PROSE_FIELDS = ("header", "reading")
 ECP_ID = re.compile(r"^ECP-R([1-9][0-9]?|9[0-8])$")   # the allocated space: ECP-R1…ECP-R98
 
 MIN_REQUIREMENTS = 5
+
+
+def reading_text(req: dict) -> str:
+    """`reading` as one string. Stored as an array of lines; joined wherever it is searched."""
+    v = req.get("reading") or []
+    return "\n".join(v) if isinstance(v, list) else str(v)
 
 
 class GateError(Exception):
@@ -114,34 +125,53 @@ class GateError(Exception):
 
 
 def load(path: Path) -> dict:
+    """A requirement is one CBOR diagnostic-notation map (RFC 8949 §8), read by tools' OWN codec.
+
+    The suite reads the same corpus through the canonical `.cbor` build artifact and its own
+    decoder; neither side shares a line with the other (`make lint-suite-independence`)."""
     try:
-        doc = tomllib.loads(path.read_text())
-    except tomllib.TOMLDecodeError as exc:
+        req = cbordiag.parse(path.read_text())
+    except cbordiag.DiagError as exc:
         raise GateError(f"{path.name}: not parseable — {exc}") from exc
-    req = doc.get("requirement")
     if not isinstance(req, dict):
-        raise GateError(f"{path.name}: no [requirement] table")
+        raise GateError(f"{path.name}: top level is {type(req).__name__}, not a map")
     return req
 
 
-def validate(req: dict, name: str) -> list[str]:
+def validate(req: dict, name: str, spec_dir: str | None = None) -> list[str]:
     f: list[str] = []
     add = f.append
 
     for field in REQUIRED:
         if not req.get(field):
-            add(f"{name}: [requirement].{field} is required")
+            add(f"{name}: `{field}` is required")
     if not req.get("reading"):
         add(f"{name}: no `reading`. A requirement authored from the spec states the reading it "
             f"pins, so a reviewer checks the REQUIREMENT against the SPEC rather than against what "
             f"an implementation happens to do.")
+
+    # ── prose is an ARRAY OF LINES, and that is load-bearing ──────────────────────────────
+    #
+    # Diagnostic-notation text strings are single-line (RFC 8949 §8), so a `reading` held as one
+    # string becomes one 2,400-character line: a single-word edit reds the whole line in every
+    # diff. The `reading` IS this repo's deliverable and per-line review is how it gets checked,
+    # so prose is an array of lines and consumers join with "\n". Gated, because the day one file
+    # is authored as a bare string is the day the convention stops being true of the corpus.
+    for field in PROSE_FIELDS:
+        v = req.get(field)
+        if v is None:
+            continue
+        if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+            add(f"{name}: `{field}` must be an ARRAY OF LINES, not {type(v).__name__}. "
+                f"Diagnostic-notation strings are single-line; prose held as one string is one "
+                f"unreviewable line, and the argument is what a reviewer is here to read.")
 
     level, surface = req.get("level"), req.get("surface")
     status, id_status = req.get("status"), req.get("id_status")
     basis = req.get("level_basis", "keyword")
     if basis not in LEVEL_BASES:
         add(f"{name}: level_basis={basis!r} not in {', '.join(LEVEL_BASES)}")
-    elif basis == "entailed" and "ENTAIL" not in str(req.get("reading", "")).upper():
+    elif basis == "entailed" and "ENTAIL" not in reading_text(req).upper():
         add(f"{name}: level_basis=entailed but `reading` never argues the entailment. An entailed "
             f"level is one we ARGUED; the argument is the only thing that makes it reviewable.")
     if level and level not in LEVELS:
@@ -160,7 +190,7 @@ def validate(req: dict, name: str) -> list[str]:
             add(f"{name}: id_status=allocated needs an `id` inside the allocated space "
                 f"ECP-R1…ECP-R98. Got {rid!r}. Arch fixed that space; a number outside it is one "
                 f"we minted in their namespace.")
-        elif f"{rid}.toml" != name:
+        elif f"{rid}.diag" != name:
             add(f"{name}: id {rid!r} does not match the filename. One requirement, one file, one "
                 f"name — a mismatch makes every grep for the id miss this file.")
     elif id_status == "pending-split":
@@ -264,6 +294,32 @@ def validate(req: dict, name: str) -> list[str]:
     if snap and not (ROOT / "spec-data" / str(snap)).is_dir():
         add(f"{name}: snapshot={snap!r} names no directory under spec-data/. Every requirement "
             f"cites the text it was read from, or it cannot be re-verified when that text moves.")
+
+    # ── the layout mirror, enforced rather than promised (ADR-0001 §6.5) ──────────────────
+    #
+    # `requirements/<spec>/` mirrors `spec-data/<spec>/` name-for-name, so "which spec is this
+    # requirement from" is answerable by PATH. A mirror that is only a convention drifts the first
+    # time someone drops a file in the wrong directory, and nothing here could see it: the old
+    # layout called this directory `core` — an abbreviation this seat invented, colliding with
+    # `core profile`, a real and different thing — and it survived four sessions and a green
+    # `make check` every time. **A gate cannot see a name unless something makes it look.**
+    # This is `entity-core-go`'s profile.go drift-gate pattern turned on our own layout.
+    # The three checks are INDEPENDENT, not an elif chain: a file in a bogus directory whose
+    # snapshot names a different spec violates both, and an elif would report one and hide the
+    # other — while the corpus holds one spec directory, which is exactly the condition under
+    # which a chained branch is never executed and never known to work.
+    if spec_dir is not None:
+        if spec_dir == "":
+            add(f"{name}: sits directly in requirements/, not under requirements/<spec>/. The "
+                f"requirement directory mirrors spec-data/<spec>/ name-for-name; a file outside "
+                f"that mirror belongs to no spec that anything can determine from its path.")
+        elif not (ROOT / "spec-data" / spec_dir).is_dir():
+            add(f"{name}: lives in requirements/{spec_dir}/, which has no counterpart "
+                f"spec-data/{spec_dir}/. The two trees mirror name-for-name.")
+        if spec_dir and snap and str(snap).split("/")[0] != spec_dir:
+            add(f"{name}: path says requirements/{spec_dir}/ but snapshot={snap!r} is under "
+                f"spec-data/{str(snap).split('/')[0]}/. The path and the cited text disagree about "
+                f"which spec this requirement is from, and the path is what a reader trusts.")
     routed = req.get("routed")
     if routed:
         target = str(routed).split()[0].split("#")[0]
@@ -321,7 +377,7 @@ def main(argv: list[str]) -> int:
     if not REQ_DIR.is_dir():
         print("requirement-gate: COULD NOT LOOK — no requirements/", file=sys.stderr)
         return 2
-    paths = sorted(REQ_DIR.rglob("*.toml"))
+    paths = sorted(REQ_DIR.rglob("*.diag"))
     if len(paths) < MIN_REQUIREMENTS:
         print(f"requirement-gate: COULD NOT LOOK — {len(paths)} file(s), below "
               f"MIN_REQUIREMENTS={MIN_REQUIREMENTS}. A glob that has stopped matching reports a "
@@ -336,7 +392,8 @@ def main(argv: list[str]) -> int:
         except GateError as exc:
             print(f"requirement-gate: COULD NOT LOOK — {exc}", file=sys.stderr)
             return 2
-        findings.extend(validate(req, path.name))
+        rel = path.relative_to(REQ_DIR).parts
+        findings.extend(validate(req, path.name, spec_dir=rel[0] if len(rel) > 1 else ""))
         tally[req.get("id_status", "unallocated")] = tally.get(req.get("id_status"), 0) + 1
         disputed += req.get("status") == "disputed"
         unreachable += req.get("surface") == "unreachable"
@@ -368,16 +425,16 @@ def self_test() -> int:
     """Executed control. Every planted defect is one batch 1 could have shipped."""
     clean = {
         "id": "ECP-R1", "id_status": "allocated", "title": "t", "spec": "s",
-        "snapshot": "core-0.8.2.21", "level": "MUST", "surface": "wire", "status": "draft",
-        "reading": "r",
+        "snapshot": "entity-core-protocol/v0.8.2.21", "level": "MUST", "surface": "wire", "status": "draft",
+        "reading": ["r"],
         "arm": [
             {"name": "a", "kind": "conformant", "why": "w"},
             {"name": "c", "kind": "negative-control", "why": "w"},
         ],
     }
-    if validate(clean, "ECP-R1.toml"):
+    if validate(clean, "ECP-R1.diag"):
         print(f"SELF-TEST FAILED: the clean requirement was rejected: "
-              f"{validate(clean, 'ECP-R1.toml')}", file=sys.stderr)
+              f"{validate(clean, 'ECP-R1.diag')}", file=sys.stderr)
         return 1
 
     def mutate(**kw):
@@ -388,30 +445,35 @@ def self_test() -> int:
 
     planted = [
         ("no negative control",
-         mutate(arm=[{"name": "a", "kind": "conformant", "why": "w"}]), "ECP-R1.toml"),
+         mutate(arm=[{"name": "a", "kind": "conformant", "why": "w"}]), "ECP-R1.diag"),
         ("an arm with no `why`",
          mutate(arm=[{"name": "a", "kind": "conformant"},
-                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.toml"),
-        ("disputed with no dispute block", mutate(status="disputed"), "ECP-R1.toml"),
-        ("unreachable with no exclusion block", mutate(surface="unreachable"), "ECP-R1.toml"),
+                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.diag"),
+        ("disputed with no dispute block", mutate(status="disputed"), "ECP-R1.diag"),
+        ("unreachable with no exclusion block", mutate(surface="unreachable"), "ECP-R1.diag"),
         # The loophole, planted: unreachable is the ONE exemption from the negative control, so a
         # file claiming it without the block that justifies it must still be refused on both counts.
         ("unreachable claimed to dodge the control, with no exclusion block",
          mutate(surface="unreachable",
-                arm=[{"name": "w", "kind": "non-conformant", "why": "w"}]), "ECP-R1.toml"),
+                arm=[{"name": "w", "kind": "non-conformant", "why": "w"}]), "ECP-R1.diag"),
         ("a pending-split carrying a minted id",
-         mutate(id_status="pending-split", under="ECP-R66", routed="x"), "ECP-R66-pending-b.toml"),
+         mutate(id_status="pending-split", under="ECP-R66", routed="x"), "ECP-R66-pending-b.diag"),
         ("an unallocated requirement that was never routed",
-         mutate(id=None, id_status="unallocated"), "UNALLOCATED-x.toml"),
-        ("an id outside the allocated space", mutate(id="ECP-R400"), "ECP-R400.toml"),
-        ("an id that disagrees with its filename", mutate(id="ECP-R2"), "ECP-R1.toml"),
-        ("a snapshot that resolves to nothing", mutate(snapshot="core-9.9.9.9"), "ECP-R1.toml"),
+         mutate(id=None, id_status="unallocated"), "UNALLOCATED-x.diag"),
+        ("an id outside the allocated space", mutate(id="ECP-R400"), "ECP-R400.diag"),
+        ("an id that disagrees with its filename", mutate(id="ECP-R2"), "ECP-R1.diag"),
+        ("a snapshot that resolves to nothing", mutate(snapshot="core-9.9.9.9"), "ECP-R1.diag"),
         ("a prediction with no `if_false`",
          mutate(predicted_disagreement={"against": "x", "prediction": "p", "basis": "b",
-                                        "if_true": "t"}), "ECP-R1.toml"),
-        ("a level outside §8.5a's closed six", mutate(level="REQUIRED"), "ECP-R1.toml"),
-        ("a level_basis outside keyword/entailed", mutate(level_basis="implied"), "ECP-R1.toml"),
-        ("an entailed level whose reading argues nothing", mutate(level_basis="entailed"), "ECP-R1.toml"),
+                                        "if_true": "t"}), "ECP-R1.diag"),
+        # The format move's own rule (2026-09-15): prose is an array of lines, because a
+        # diagnostic-notation string is single-line and this repo's deliverable IS the argument.
+        ("a `reading` authored as one long string instead of an array of lines",
+         mutate(reading="TWO KEYWORDS, ONE FUNCTION. §7.4 says …"), "ECP-R1.diag"),
+        ("a `header` authored as one long string", mutate(header="ECP-R1 — a thing"), "ECP-R1.diag"),
+        ("a level outside §8.5a's closed six", mutate(level="REQUIRED"), "ECP-R1.diag"),
+        ("a level_basis outside keyword/entailed", mutate(level_basis="implied"), "ECP-R1.diag"),
+        ("an entailed level whose reading argues nothing", mutate(level_basis="entailed"), "ECP-R1.diag"),
         # F67, planted three ways. The first is the real incident: a fourth outcome kind invented in a
         # file and certified clean. The second is the one that actually costs a run — a typo'd `accept`
         # that is silently never evaluated. The third is an arm with no way to fail.
@@ -420,35 +482,61 @@ def self_test() -> int:
                       "accept": [{"outcome": "ok", "why": "w"}],
                       "refuse": [{"outcome": "bad", "why": "w"}],
                       "sometimes": [{"outcome": "x", "why": "w"}]},
-                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.toml"),
+                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.diag"),
         ("a typo'd accept table, which would silently never be evaluated",
          mutate(arm=[{"name": "a", "kind": "conformant", "why": "w",
                       "acccept": [{"outcome": "ok", "why": "w"}],
                       "refuse": [{"outcome": "bad", "why": "w"}]},
-                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.toml"),
+                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.diag"),
         ("a conformant arm that accepts and can never refuse",
          mutate(arm=[{"name": "a", "kind": "conformant", "why": "w",
                       "accept": [{"outcome": "ok", "why": "w"}]},
-                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.toml"),
+                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.diag"),
         # The rule this one guards was WRONG on its first cut (`capture`, the mode) and reddened two
         # correct negative controls. It is planted so the corrected rule (`kind`, the intersection)
         # is shown able to fail rather than merely shown able to pass the corpus.
         ("an assert row with no `kind`",
          mutate(arm=[{"name": "a", "kind": "conformant", "why": "w",
                       "assert": [{"capture": "x", "equals": 1}]},
-                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.toml"),
+                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.diag"),
         ("a witness declared as an outcome instead of a field",
          mutate(arm=[{"name": "a", "kind": "conformant", "why": "w",
                       "accept": [{"outcome": "ok", "why": "w"}],
                       "refuse": [{"outcome": "bad", "why": "w"}],
                       "witness": [{"outcome": "x", "why": "w"}]},
-                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.toml"),
+                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.diag"),
     ]
     for label, doc, fname in planted:
         doc = {k: v for k, v in doc.items() if v is not None}
         if not validate(doc, fname):
             print(f"SELF-TEST FAILED: {label} validated clean. Its failure mode is a requirement "
                   f"that reads as measured and is not.", file=sys.stderr)
+            return 1
+
+    # ── the layout mirror (ADR-0001 §6.5), planted ────────────────────────────────────────
+    # The positive first: the real layout must still validate clean, or the gate below is
+    # measuring the fixture rather than the rule.
+    if validate(clean, "ECP-R1.diag", spec_dir="entity-core-protocol"):
+        print("SELF-TEST FAILED: the real layout was rejected by the mirror gate: "
+              f"{validate(clean, 'ECP-R1.diag', spec_dir='entity-core-protocol')}", file=sys.stderr)
+        return 1
+    # Each control names the branch it exercises, and asserts that branch fired — three defects
+    # that all trip the same first check would report three passes for one rule (AP-3's shape).
+    for label, doc, sdir, tell in [
+        ("a requirement sitting directly in requirements/",
+         clean, "", "sits directly in requirements/"),
+        ("a requirement under a spec directory with no spec-data/ counterpart",
+         clean, "extension-tree", "has no counterpart"),
+        # The mirror's real subject, checked independently of whether the directory resolves:
+        # the path and the cited text name different specs.
+        ("a requirement whose path and snapshot name different specs",
+         clean, "extension-tree", "disagree about"),
+    ]:
+        hits = validate({k: v for k, v in doc.items() if v is not None}, "ECP-R1.diag", spec_dir=sdir)
+        if not any(tell in h for h in hits):
+            print(f"SELF-TEST FAILED: {label} did not trip the layout mirror's "
+                  f"{tell!r} branch (got {hits}). Its failure mode is a requirement whose path "
+                  f"lies about which spec it states.", file=sys.stderr)
             return 1
 
     # The ratchet, planted: a manifest naming a missing file, a count above the ceiling, a missing ceiling.
@@ -463,6 +551,7 @@ def self_test() -> int:
             print(f"SELF-TEST FAILED: {label} passed the executed ratchet", file=sys.stderr)
             return 1
     planted.append(("executed-ratchet (3)", None, None))
+    planted.append(("layout-mirror (3)", None, None))
 
     print(f"requirement-gate self-test: OK — clean definition accepted, "
           f"{len(planted)} planted defects refused")

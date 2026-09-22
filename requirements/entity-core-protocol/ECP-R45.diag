@@ -1,0 +1,175 @@
+{
+  "header": [
+    "ECP-R45 — a dispatch to a local path with no registered handler answers 404 handler_not_found.",
+    "",
+    "Batch 2 (`connectivity`). Read range: §3.3 whole, §6.2's status-code block, §6.5, §6.7's",
+    "resolution-first paragraph. See docs/status/FINDINGS-FROM-AUTHORING.md, batch 2."
+  ],
+  "id": "ECP-R45",
+  "id_status": "allocated",
+  "title": "An EXECUTE to a path on the local peer where no handler is registered is answered 404 handler_not_found",
+  "spec": "ENTITY-CORE-PROTOCOL §3.3 (404 row)",
+  "spec_also": [
+    "§6.2 (the defining home of the code)",
+    "§6.5 (dispatch chain — resolution precedes permission)",
+    "§6.7 (resolution-first dispatch, informative + the RT-8 masking MAY)",
+    "§5.2a / §1.4 (the foreign-namespace input is a different row)",
+    "§9.1 (the floor row this id binds)"
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "level": "MUST",
+  "profile": [
+    "core"
+  ],
+  "surface": "wire",
+  "status": "draft",
+  "reading": [
+    "§3.3's 404 row: \"Default `code` = `handler_not_found` — no handler is registered at the resolved path",
+    "(§6.5), ON A PATH THAT TARGETS THE LOCAL PEER.\" The default-code-force paragraph makes the default",
+    "mandatory for this generic case: \"when a response carries the status and no more-specific defined",
+    "code applies, `result.data.code` MUST be the named default.\" §9.1's row restates both halves.",
+    "",
+    "THREE INPUTS LOOK LIKE THIS ROW AND ONLY ONE IS.",
+    "  * A local path with no handler              -> THIS ROW, 404 handler_not_found.",
+    "  * A path naming a FOREIGN peer_id           -> NOT this row. §6.5 step 3 refuses it at",
+    "    canonicalization, before resolution, with 400 invalid_request, and §6.2 says it \"MUST NOT be",
+    "    reported as handler_not_found\". A probe built on a fully-qualified URI with the wrong peer_id",
+    "    measures §5.2a, and a peer answering 404 to it is failing THAT row. So the probe here is",
+    "    PEER-RELATIVE (§4.3: \"Peer-relative URIs are implicitly scoped to the receiving peer\"), which",
+    "    cannot be mistaken for a foreign address.",
+    "  * A 404 raised INSIDE a registered handler for an absent entity  -> a domain outcome carrying the",
+    "    domain's code, \"not this row\" (§3.3). So the probe path must sit where no handler pattern can",
+    "    match, not merely where no entity is bound.",
+    "",
+    "AUTHORIZATION IS NOT A PRECONDITION, AND THAT IS THE DISCRIMINATING PART. §6.5 resolves the handler",
+    "before `check_permission`, and §6.7 is explicit: \"an unauthorized request to a handler that is not",
+    "registered returns 404 handler_not_found, not 403 capability_denied\" -- `check_permission` needs the",
+    "resolved handler pattern as input, so it cannot run first. A check that grants the caller wide",
+    "authority before probing cannot tell a resolution-first peer from one that checks permission first",
+    "and happens to be permitted. The conformant arm therefore runs under the NARROWEST authority the",
+    "connection yields; the grant set is recorded, never widened.",
+    "",
+    "THE MASKING MAY DOES NOT INVERT THIS. §6.7's RT-8 option lets a peer answer 404 INSTEAD OF 403 for a",
+    "path the caller may not know exists. It widens where 404 may appear; it never licenses 403 where no",
+    "handler exists. So a 403 on this probe is still a failure of this row — WITH ONE EXCEPTION THE SAME PARAGRAPH GRANTS.",
+    "",
+    "A DECLARED PRE-DISPATCH LAYER IS PERMITTED, AND ITS 403 IS NOT THIS ROW'S FAILURE (review 2026-09-12).",
+    "§6.7 also says: \"implementations MAY layer a network boundary or a deployment-wide cap-check before",
+    "the dispatch chain\" — \"deployments that need masking ship it at a layer above §6.5\". Such a layer",
+    "runs before resolution, and it fires precisely under the narrowest authority, which is how this probe",
+    "runs. So a 403 produced by a DECLARED pre-dispatch layer (posture axis `pre_dispatch_layer`) is a",
+    "witness, not a failure; an undeclared 403 remains the failure above. The declaration is what keeps",
+    "this from becoming \"any 403 is excused\".",
+    "",
+    "THE HANDSHAKE MUST HAVE ISSUED A CAPABILITY. §6.5 runs `verify_request` — \"hash, signature,",
+    "capability chain, grantee\" — BEFORE \"Resolve handler from tree\". The probe is signed and carries the",
+    "capability the handshake delivered; with no valid capability it is refused 401/403 at verification",
+    "and never reaches resolution. `grants = []` therefore means \"no grant beyond the handshake's\", NOT",
+    "\"no capability\", and that is declared as data below rather than left in this sentence.",
+    "",
+    "THE TOTAL HANDLER — AN UNCONSTRUCTIBLE INPUT, NOT A FAILURE. §3.3's satisfaction mode (0.8.2.8): \"at a",
+    "peer that registers a catch-all pattern, no unregistered path exists, so the row's input is",
+    "unconstructible ... Such a peer is conformant; the check MUST record a declared SKIP naming the",
+    "catch-all, and MUST NOT report the fallback's answer as a failure of this row.\" That is a binding",
+    "instruction to every suite, including this one. The suite needs the peer's handler index to know",
+    "which case it is in; `system/handler/*` is the §6.2 index (ECP-R36) and is read, not assumed.",
+    "EXECUTED 2026-09-13 ON 36 PEERS — THE PROBE PINS ONE POINT OF A DOMAIN THE ROW COVERS WHOLE (F53). Keystone asm-arm64,",
+    "asm-x86_64 and riscv64 answer an unregistered path `404 handler_not_found` for an UNDEFINED operation, but serve `get` on",
+    "the same path through a fallback: `404 not_found` with a resource, `403 capability_denied` without. Their handler index",
+    "shows no catch-all pattern, so this is not §3.3's total-handler SKIP: §6.6 resolves a handler by PATH, and the answer to",
+    "\"is a handler registered here\" cannot depend on the operation. `not_found` is also an undefined spelling. The reference",
+    "oracle probes with an undefined operation only, and passed all three; this file probes with `get`. Measured members:",
+    "resource present/absent, URI peer-relative/fully qualified, `system/` namespace or not, `get` or an undefined operation.",
+    "Suite 1 scores the file's member and records the rest as witnesses. Domain enumeration as scored arms: CQ-33."
+  ],
+  "preconditions": {
+    "grants": [],
+    "capability": "handshake-issued",
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "posture_axes": [
+      "seed_policy",
+      "pre_dispatch_layer"
+    ],
+    "note": "the handler index (`system/handler/*`) is read before probing. If ANY registered pattern would match the probe path — a catch-all in particular — the run reports SKIP naming that pattern (§3.3 satisfaction mode). If the index cannot be read, the run picks the probe path under a reserved-looking segment, records that it could not rule a catch-all out, and a 200 on the probe is reported as SKIP-could-not-rule-out rather than FAIL."
+  },
+  "arm": [
+    {
+      "name": "no-handler",
+      "kind": "conformant",
+      "given": "an established connection; a peer-relative URI whose path no registered handler pattern matches",
+      "why": "§3.3's 404 row with its mandatory default code.",
+      "step": [
+        {
+          "op": "connect"
+        },
+        {
+          "op": "read_handler_index",
+          "capture": "index",
+          "note": "decides between this arm and the declared SKIP. Not asserted on."
+        },
+        {
+          "op": "send_execute",
+          "capture": "probe",
+          "uri": "conformance-probe/unregistered/<random>",
+          "operation": "get",
+          "note": "peer-relative, a random final segment so a stale binding cannot satisfy it. Well-formed and signed, so a refusal cannot be attributed to malformedness or authentication."
+        }
+      ],
+      "assert": [
+        {
+          "kind": "status",
+          "capture": "probe",
+          "equals": 404
+        },
+        {
+          "kind": "error_code",
+          "capture": "probe",
+          "equals": "handler_not_found",
+          "why": "the decoded `result.data.code` (GUIDE-CONFORMANCE §5.2b.1), never a substring. `not_found`, `no_handler`, `unknown_path` are undefined spellings and non-conformant under default-code force."
+        }
+      ],
+      "witness": [
+        {
+          "field": "pre_dispatch_403",
+          "why": "a 403 when the posture declares `pre_dispatch_layer` (§6.7's MAY). Recorded, not scored; with no declaration a 403 fails the status assertion above."
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "the same connection; an EXECUTE to a handler the peer MUST register (§6.2 — the tree handler), operation `get`",
+      "why": "MANDATORY ANTI-VACUITY. Proves the probe arm discriminates on HANDLER EXISTENCE and not on the request shape, the caller's authority, or a peer that answers 404 to everything. The assertion is deliberately weak: the control's subject is resolution, so ANY outcome other than 404 handler_not_found satisfies it — including a 403 from the narrow grant, and a domain 404 for an absent binding carrying a different code.",
+      "step": [
+        {
+          "op": "send_execute",
+          "capture": "registered",
+          "uri": "system/tree",
+          "operation": "get"
+        }
+      ],
+      "assert": [
+        {
+          "kind": "error_code",
+          "capture": "registered",
+          "not_equals": "handler_not_found"
+        }
+      ]
+    },
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a peer that checks permission before resolving the handler",
+      "expect": "the unregistered-path probe under a narrow grant is answered 403 capability_denied",
+      "why": "the ordering §6.5 forbids and §6.7 explains. It is also the shape that passes a check run under a wide debug grant — which is why this file declares the grant set rather than inheriting one."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": "connectivity/handler_not_found_on_unregistered_path",
+    "oracle_note": "provenance only. Its citations (§3.3 / §9.1) resolve and agree with this file's spec field."
+  }
+}

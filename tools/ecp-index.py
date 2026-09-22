@@ -41,7 +41,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SNAPSHOT = "core-0.8.2.21"
+SNAPSHOT = "entity-core-protocol/v0.8.2.21"
 SPEC = ROOT / "spec-data" / SNAPSHOT / "ENTITY-CORE-PROTOCOL.md"
 EMIT_DEFAULT = ROOT / "requirements" / "ECP-INDEX.md"
 

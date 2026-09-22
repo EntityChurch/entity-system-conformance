@@ -1,0 +1,212 @@
+{
+  "header": [
+    "ECP-R7 — each entity in a received envelope's `included` map is hash-validated individually.",
+    "",
+    "Batch 3. The floor row is \"Envelope structure with per-entity hash validation (§3.1)\" and it",
+    "BUNDLES: the structure half carries a producer-side MUST (\"The content_hash MUST match the map key\")",
+    "that fails independently of receipt validation. Filed as ECP-R7-pending-b; routed (F27), not split.",
+    "",
+    "RE-AUTHORED 2026-09-14 against 0.8.2.24 (was 0.8.2.21). The OBLIGATION did not change and",
+    "its quoted text is byte-identical. What changed is that 0.8.2.24 PINS THE REFUSAL CODE on this exact",
+    "surface, which .21 left open and which this file's own reading flagged as F24's ask. See F64."
+  ],
+  "id": "ECP-R7",
+  "id_status": "allocated",
+  "title": "A received envelope carrying an included entity whose content_hash does not match its {type, data} is not processed",
+  "spec": "ENTITY-CORE-PROTOCOL §3.1 (Wire transport optimization)",
+  "spec_also": [
+    "§6.5 dispatch chain ('Validate each included entity hash')",
+    "§1.8 item 1 (both halves: self-consistency AND resolution integrity, 0.8.2.23)",
+    "§5.2a corollary 1 (the decode-boundary code, 0.8.2.24)",
+    "ENTITY-CBOR-ENCODING §5.4 (what `non_canonical_ecf` is FOR)",
+    "§4.7 (the connection-error registry — and it has no row for this)",
+    "§9.1 (the floor row this id binds)"
+  ],
+  "snapshot": "entity-core-protocol/v0.8.2.24",
+  "level": "MUST",
+  "level_basis": "keyword",
+  "profile": [
+    "core"
+  ],
+  "surface": "wire",
+  "status": "draft",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F24, F27, F64",
+  "reading": [
+    "§3.1: \"On the wire, implementations **MUST** validate each included entity's content_hash individually",
+    "per entity fidelity (§1.8). Implementations are **NOT REQUIRED** to compute or validate the envelope's",
+    "own content_hash during transport.\" §6.5 orders it: \"Validate root entity hash / Validate each",
+    "included entity hash / Root is EXECUTE? ...\".",
+    "",
+    "\"EACH\" IS THE WORD THE PROBE IS BUILT ON. The row does not say \"each included entity the handler",
+    "uses\". A peer that validates only the entities it reads (the signature, the capability) satisfies a",
+    "weaker rule. So the probe includes an entity the hello has no use for — a well-formed",
+    "`primitive/any` entity — and corrupts only that one. §3.1's \"Protocol scope\" paragraph says what",
+    "`included` is FOR; it does not relax the validation MUST, and a suite MUST NOT read it as doing so.",
+    "",
+    "THE ENVELOPE'S OWN HASH IS EXEMPT and nothing here touches it: §3.1's NOT REQUIRED.",
+    "",
+    "ROOT VALID, PARAMS VALID — so the refusal is attributable to the included entity alone and not to",
+    "ECP-R3's surface.",
+    "",
+    "⭐ THE CODE IS NOW PINNED, AND THIS FILE'S OWN F24 CAVEAT IS DISCHARGED (0.8.2.24). The .21 text of",
+    "this reading said: \"no code is pinned for this refusal (F24), so any refusal satisfies the row and",
+    "status/code are witnessed.\" §5.2a corollary 1 now says:",
+    "",
+    "  \"A peer that refuses at the decode boundary — before the envelope becomes a request — MUST answer",
+    "  `400 hash_mismatch` [MUST] (mood corrected 0.8.2.24) (§3.3; the same code and condition",
+    "  EXTENSION-CONTENT §6.3 and EXTENSION-TREE Appendix A already define for a mis-keyed `included`",
+    "  entry) and reaches none of these rows.\"",
+    "",
+    "THE PROBE'S ENTRY IS \"MIS-KEYED\" BY THE SPECIFICATION'S OWN DEFINITION, so the pin reaches it.",
+    "§1.8 item 1 mechanism (a) defines the condition: \"reject any entry whose key is not",
+    "`content_hash({type, data})` of the entity under it\". The probe's key equals the entity's CARRIED",
+    "content_hash and both equal the hash of the entity's ORIGINAL data; the data was then changed. So",
+    "`content_hash({type, data})` of what arrives is equal to neither. That is the named condition.",
+    "",
+    "AND ONE CODE IS NOW EXPLICITLY NON-CONFORMANT, which is the scoreable half:",
+    "",
+    "  \"`400 non_canonical_ecf` is NOT conformant here [MUST] (0.8.2.24): ENTITY-CBOR-ENCODING §5.4",
+    "  defines that code for CBOR tag-policy violations — any CBOR major-type-6 item in a data-field",
+    "  position — and a mis-keyed `included` entry carries no tag. Its encoding is canonical; what is",
+    "  false is the claim the key makes, and the remedy the code selects (re-encode) sends an honest",
+    "  caller to the wrong layer.\"",
+    "",
+    "Checked against the encoding document rather than taken on the cross-reference: ECF 1.7 §5.4",
+    "decoding paragraph scopes the code to tags and nothing else — \"any CBOR major-type-6 item",
+    "encountered in a data-field position is a rejection condition\". The probe's frame carries no tag.",
+    "",
+    "§4.7 DOES NOT GOVERN THIS, AND THAT WAS CHECKED RATHER THAN ASSUMED. §4.7 is the authoritative",
+    "(status, code) registry for CONNECTION-HANDSHAKE failures and says so, adding that §5.2a \"MUST NOT be",
+    "read as independent registries\". Its ten rows are negotiation, the three §4.6 proof-of-possession",
+    "steps, ingest dispatch, already-established, out-of-order and unknown-operation. **None of them is a",
+    "mis-keyed included entity**, and the corollary places this refusal \"before the envelope becomes a",
+    "request\" — earlier than any §4.6 step. So §4.7's precedence clause is not triggered: there is no row",
+    "here to be in tension with. The probe is a hello only because a hello needs no author, no capability",
+    "and no grant, which keeps the refusal attributable to the corrupted entity and to no posture.",
+    "",
+    "WHAT IS STILL NOT PINNED, AND IS THEREFORE WITNESSED RATHER THAN SCORED. The corollary pins what a",
+    "peer that refuses AT THE DECODE BOUNDARY must answer. It does not say a bare close is non-conformant,",
+    "and two live questions already cover that ground — CQ-34 (a silent drop is neither a refusal nor",
+    "processing, F61: 21 peers) and CQ-35 (a close with no coded frame, F62: 21 of 34 peers). This file",
+    "MUST NOT quietly pre-empt either ruling: a close and any other coded refusal are recorded as",
+    "`inconclusive_pending_ruling`, never scored, and named in the run's triage. **A requirement that",
+    "scores an arm its own open question owns is the check bug in the three-way table.**"
+  ],
+  "preconditions": {
+    "grants": [],
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "posture_axes": [
+      "seed_policy",
+      "close_wait_bound"
+    ]
+  },
+  "arm": [
+    {
+      "name": "unused-included-mismatch",
+      "kind": "conformant",
+      "given": "a fresh connection; a correct hello whose envelope `included` map holds one `primitive/any` entity {data: {\"x\": 1}}, keyed by its CORRECT hash, whose carried `content_hash` equals that key but whose data was changed to {\"x\": 2} after hashing",
+      "why": "§3.1's 'each', on an entity the hello never reads. Key and carried hash agree with each other, so the refusal cannot be ECP-R7-pending-b's key mismatch.",
+      "step": [
+        {
+          "op": "send_hello",
+          "capture": "included_bad",
+          "included": "one primitive/any entity whose data no longer matches its (key == content_hash)"
+        }
+      ],
+      "accept": [
+        {
+          "outcome": "coded_response",
+          "status": 400,
+          "code": "hash_mismatch",
+          "why": "⭐ PINNED 0.8.2.24 (§5.2a corollary 1). The decode-boundary refusal of a mis-keyed `included` entry, which is what this probe constructs."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "hello_answered",
+          "why": "THE FAILURE: the envelope was processed with an unvalidated included entity."
+        },
+        {
+          "outcome": "coded_response",
+          "status": 400,
+          "code": "non_canonical_ecf",
+          "why": "⭐ NEWLY NON-CONFORMANT 0.8.2.24, in terms: ECF §5.4 defines that code for tag-policy violations and this frame carries no tag. The remedy it selects (re-encode) sends an honest caller to the wrong layer. Under 0.8.2.21 this file ACCEPTED this outcome as 'any non-200'."
+        }
+      ],
+      "witness": [
+        {
+          "field": "status_and_code",
+          "why": "every refusal shape, scored or not — the .21 run witnessed `400 non_canonical_ecf` on 25 peers for the ADJACENT root surface (ECP-R3), so the distribution here is the measurement."
+        }
+      ],
+      "inconclusive": [
+        {
+          "outcome": "close",
+          "why": "CQ-35 is open and owns it (F62). Not scored either way by this file."
+        },
+        {
+          "outcome": "silence",
+          "why": "CQ-34 is open and owns it (F61: 21 peers silently drop and keep serving)."
+        },
+        {
+          "outcome": "coded_response_other",
+          "why": "a coded refusal with some third code is a refusal the peer clearly made; whether the pin forbids it is F64's remaining half, routed in round 6. Witnessed, not scored."
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "the same hello with the same included entity, uncorrupted",
+      "why": "MANDATORY ANTI-VACUITY. Proves a hello carrying an unused included entity is answered at all — without it, a peer that refuses any hello with a non-empty `included` passes the probe.",
+      "step": [
+        {
+          "op": "send_hello",
+          "capture": "included_good",
+          "included": "one primitive/any entity, correctly hashed and keyed"
+        }
+      ],
+      "accept": [
+        {
+          "outcome": "hello_answered",
+          "why": "the control's subject is the corrupted byte."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "close",
+          "why": "a refusal here voids the probe."
+        }
+      ],
+      "witness": [
+        {
+          "field": "outcome_if_coded_refusal",
+          "why": "a coded refusal of an unused included entity is not obviously non-conformant (§3.1's protocol-scope paragraph) — recorded, and if seen the probe is reported unscoreable rather than passed."
+        }
+      ]
+    },
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a peer that validates included entities lazily, when a handler dereferences them",
+      "expect": "the probe hello is answered; a corrupted entity it never read is accepted into the envelope and, if the peer later stores or forwards received included entities, served under a hash its bytes do not produce",
+      "why": "the shape 'each' rules out."
+    }
+  ],
+  "predicted_disagreement": {
+    "against": "THE COHORT, not a reference check — no core-profile check cites §3.1, so the oracle has no verdict here to disagree with. Recorded in this block anyway because the gate's rule is what makes it a prediction rather than a retrofit, and the thing predicted about is the peers.",
+    "prediction": "the peers that refuse this probe will answer `400 non_canonical_ecf`, not the newly-pinned `400 hash_mismatch` — so a block of peers that PASSed this file under 0.8.2.21 FAILs it under 0.8.2.24 with no peer having changed a line",
+    "basis": "The .21 run of the ADJACENT root-hash surface (ECP-R3) witnessed `400 non_canonical_ecf` on 25 of 34 peers and a close on 2 (RUN-2026-09-13-d §4, recorded as an unscored witness precisely because no code was pinned then). `non_canonical_ecf` is the cohort's habitual code for 'the hashes in this frame are wrong', which is the exact misuse 0.8.2.24 legislates against. This file's surface is the included map rather than the root, so the habit is inferred, not measured — that is what makes it a prediction. ⚠ The inference is cross-surface and D15 applies to it: the root distribution could not have shown the included distribution, and no run has yet asked this question.",
+    "if_true": "The cohort converged on a code the spec now forbids, and converged BEFORE the spec said anything — which is this seat's founding concern in miniature: a habit becomes the observed behaviour of every peer, and then it is indistinguishable from the protocol. It is NOT a defect in this file and NOT one finding per peer: it is one SPECIFICATION-TO-COHORT gap, routed once to arch with the census attached, and only then to peer owners. It also makes 0.8.2.24's pin load-bearing rather than editorial, which is worth telling arch since they wrote it as a mood correction.",
+    "if_false": "The cohort already answers `400 hash_mismatch` on the included surface and only misuses `non_canonical_ecf` on the root surface. Then the two surfaces are handled by different code paths in most peers, the pin is already satisfied where it was written, and F64's remaining half — does the pin reach ECP-R3's ROOT surface — becomes the ONLY live question, sharper than it is today. Nothing in this file changes either way; a false prediction here narrows round 6's ask rather than repairing anything of ours.",
+    "settles": "the first run of this file against 0.8.2.24, on the 34-peer cohort run (d) already measured"
+  },
+  "notes": {
+    "peer_attributable": true,
+    "oracle_check": "",
+    "oracle_note": "no encoding check cites §3.1. Bounded negative (D15): searched the EXECUTED core-profile set, not the register alone — the register lists 5 connectivity checks where 38 run."
+  }
+}

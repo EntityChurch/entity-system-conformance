@@ -1,0 +1,33 @@
+8
+# What this seat RELIES ON without having read it: distinct (document, section) pairs that our own
+# documents cite while docs/SOURCES.md records them unread.
+#
+# A RATCHET, exactly like requirements/UNEXECUTED-CEILING (D14). `make lint-sources` measures it
+# every run and fails if it rises. Lowered by hand when a document is read and dated in SOURCES.md;
+# NEVER raised. To add a citation into unread material, read the document instead — that is the
+# entire point.
+#
+# ⚠ DISTINCT PAIRS, not citation sites. The first cut counted sites and was wrong within the hour:
+# writing the STATUS.md entry that REPORTS this debt cited GUIDE-CONFORMANCE 7a three more times and
+# the ratchet refused the commit. Describing a gap is the opposite of relying on it, and a gate that
+# punishes the honest act is a gate people route around. Reading 7a still takes it to zero; citing a
+# section nobody has read still raises it; only re-mentioning a known gap is free.
+#
+# 8 at 2026-09-15, the first measurement, over 21 citation sites:
+#
+#   GUIDE-CONFORMANCE 7a   ⭐ THE ORIGINAL INCIDENT, STILL LIVE. The test-handler surface the four
+#   GUIDE-CONFORMANCE 7d      UNALLOCATED-reentry-* requirement files depend on, and a conformance
+#                             class we have never touched. Handoff item 2. Reading these two is the
+#                             single highest-value reduction available.
+#   GUIDE-CONFORMANCE 5.1a    the corpus-identity change sequence, cited by ADR-0002 for the
+#                             requirement_set_digest we just built. We read 5.1; 5.1a we did not.
+#   CONFORMANCE-PROPOSAL      the pre-split archive's, named by our own charter as prior art #2.
+#   VERIFICATION-ARCHITECTURE keystone's Kind A/B/C taxonomy. AGENTS.md asserts "we are Kind C by
+#                             construction" — from a handoff, about a document never opened.
+#                             Handoff item 5.
+#   SDK-OPERATIONS            cited NORMATIVELY by core 6.3, so this is not future scope.
+#   DOMAIN-LOCAL-FILES        the bridge-extension class ADR-0001 found we had not known about.
+#   APP-CONVENTION            scope unestablished; cited by ADR-0001 when scoping the 5-class corpus.
+#
+# Reading any one of these is a real reduction. Dropping the citation is also a reduction and it is
+# the WRONG one unless the citation was never load-bearing — say which, in the commit.

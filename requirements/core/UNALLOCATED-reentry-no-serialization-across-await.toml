@@ -1,0 +1,114 @@
+## UNALLOCATED — §6.11(a): a peer's outbound transport does not hold per-connection serialization
+## across the send+recv cycle of an outbound EXECUTE.
+##
+## Batch 2. Floor by §9.0's PROSE ("§6.11 ... part of the §9.1 floor under both profiles") and by no
+## §9.1 ROW — ECP-R60 names the seam's presence, not these properties. F14.
+##
+## ⚠ The suite is the COUNTERPARTY here, not a second peer — which reaches origination without choosing a
+## reference implementation, AND sits close to prohibition 1. Not settled: F17 / Q18.
+
+[requirement]
+id_status = "unallocated"
+under     = ""
+title     = "Two outbound EXECUTEs a handler originates concurrently toward one counterparty both leave the peer without the first awaiting its response"
+spec      = "ENTITY-CORE-PROTOCOL §6.11(a)"
+spec_also = ["§6.11 'Profile applicability' (binds --profile core)", "§6.13(b) (the handler-reachable outbound seam)", "§9.0 (floor membership, by prose)", "§4.8 (the inbound-side sibling — not this file)"]
+snapshot  = "core-0.8.2.21"
+level     = "MUST"
+profile   = ["core"]
+surface   = "host-seam"
+status    = "draft"
+routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F14"
+
+reading = """
+§6.11(a): "An implementation that pools connections per peer-pair MUST NOT hold per-connection
+serialization across the send+recv cycle of an outbound EXECUTE. Multiple outbound EXECUTE calls on the
+same pooled connection MUST be able to proceed concurrently." Profile applicability: "A peer claiming
+`--profile core` MUST satisfy §6.11(a)–(c)."
+
+CONDITIONAL ON POOLING, AND THE CONDITION IS NOT A LOOPHOLE. The MUST binds "an implementation that
+pools". A dial-per-dispatch peer is named "trivially conformant". So the observable is mechanism-free:
+the second EXECUTE LEAVES THE PEER while the first is unanswered — on the same connection or a new
+one. Both are accepted; only "the second waits for the first's response" is refused. The suite does not
+need to know which mechanism the peer uses, which is what §6.11 means by "the contract is purely
+behavioral".
+
+WHY host-seam. The peer must ORIGINATE, and "no core handler is specified to originate outbound
+EXECUTE" (§6.11). The originating handler is installed by the peer's own harness (a precondition,
+declared) and pointed at the suite's listener. The wire half — what the suite observes arriving — is
+ordinary wire observation; the trigger is the seam.
+
+THE SUITE AS COUNTERPARTY. The suite listens, completes the handshake as responder, and controls when
+it answers. It is not a peer (prohibition 1): it implements the responder side of legs 1–2 and holds
+responses; it serves no handler. The argument that this is a check harness and not a peer: the
+behaviours needed — withhold a response, reorder two, never answer — are ones NO conformant peer
+provides, so the charter's "a check needing a behaviour no available peer provides" route has nowhere
+to go; a fault-injecting counterparty is what exercises a MUST about tolerating a counterparty's
+timing. The argument against: it completes a responder handshake, and that is protocol implementation
+by any reading. NOT DECIDED HERE — F17, and Q18 in OPEN-QUESTIONS, for the operator and arch. Until
+decided, the four §6.11 files are authored and no suite implements them.
+"""
+
+[requirement.preconditions]
+grants       = ["the originating probe handler's grant covers an EXECUTE to the suite's peer_id (§1.4 PD-2 outbound sub-dispatch authorization)"]
+identities   = ["caller", "suite-as-counterparty"]
+handlers     = ["originating-probe: installed by the peer's harness; on trigger, originates N concurrent EXECUTEs to a given peer address via the §6.13(b) seam and reports each call's outcome"]
+posture_axes = ["seed_policy", "origination_trigger", "observation_window"]
+note         = "a peer whose harness cannot install an originating handler is UNMEASURABLE here — SKIP naming the missing seam hook, never PASS. That SKIP is itself evidence on ECP-R60 (the seam's presence), and is recorded as such."
+
+[[requirement.arm]]
+name  = "second-leaves-before-first-answered"
+kind  = "conformant"
+given = "the probe handler triggered to originate 2 concurrent EXECUTEs to the suite; the suite receives #1 and WITHHOLDS its response"
+why   = "§6.11(a)'s MUST, observed mechanism-free."
+  [[requirement.arm.step]]
+  op   = "listen_as_counterparty"
+  [[requirement.arm.step]]
+  op      = "trigger_origination"
+  count   = 2
+  [[requirement.arm.step]]
+  op      = "receive_inbound_execute"
+  capture = "first"
+  hold_response = true
+  [[requirement.arm.step]]
+  op      = "receive_inbound_execute_within_window"
+  capture = "second"
+  [[requirement.arm.accept]]
+  outcome = "second_arrives_same_connection"
+  why     = "a pooling peer honouring (a)."
+  [[requirement.arm.accept]]
+  outcome = "second_arrives_new_connection"
+  why     = "dial-per-dispatch, 'trivially conformant'."
+  [[requirement.arm.refuse]]
+  outcome = "second_absent_until_first_answered"
+  why     = "the serialization (a) forbids — the deadlock precursor §6.11's rationale describes."
+  [[requirement.arm.witness]]
+  field = "connection_reuse"
+  why   = "pooling vs dial-per-dispatch; decides whether UNALLOCATED-reentry-out-of-order-response-routing and -frame-write-atomicity are measurable on this peer."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the same trigger; the suite answers #1 immediately"
+why   = "MANDATORY ANTI-VACUITY. Proves the harness really originates two EXECUTEs (a probe handler that sends only one makes the conformant arm's refusal indistinguishable from a broken trigger). #2 MUST arrive once #1 is answered; if it does not, the run is SKIP — trigger defective — not FAIL."
+  [[requirement.arm.step]]
+  op      = "trigger_origination"
+  count   = 2
+  [[requirement.arm.step]]
+  op      = "receive_and_answer_inbound_execute"
+  capture = "first_answered"
+  [[requirement.arm.assert]]
+  kind    = "inbound_execute_count_within_window"
+  equals  = 2
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a pooled client holding a per-connection mutex from write through read of the response"
+expect = "#2 is not written until #1's response is read"
+why    = "the implementation shape that deadlocks at N=2 symmetric writers (§6.11 rationale)."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = ""
+oracle_note       = "§9.0 names the `concurrency` category as exercising §6.11, and `origination` as excluded from --profile core for want of a reference peer. Neither category is in this batch; not cross-referenced beyond that sentence."

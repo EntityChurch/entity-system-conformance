@@ -1,0 +1,92 @@
+## UNALLOCATED — §6.11(a′): frames written concurrently to one connection never interleave.
+##
+## Batch 2. Floor by §9.0's prose, no §9.1 row (F14). A property a finite run can only fail to
+## disprove — declared as a sample, not as coverage.
+
+[requirement]
+id_status = "unallocated"
+under     = ""
+title     = "While outbound EXECUTEs proceed concurrently on one connection, every frame the peer writes to it is contiguous"
+spec      = "ENTITY-CORE-PROTOCOL §6.11(a′)"
+spec_also = ["§1.6 (the frame — §6.11(a′) cites it as '§3.3', F9)", "§6.11 'Profile applicability'", "§9.0"]
+snapshot  = "core-0.8.2.21"
+level     = "MUST"
+profile   = ["core"]
+surface   = "host-seam"
+status    = "draft"
+routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F14"
+
+reading = """
+§6.11(a′): "While outbound dispatch on a shared/pooled connection proceeds concurrently (a), each wire
+frame (§3.3) MUST be written to the connection atomically with respect to other frames — the bytes of two
+distinct frames MUST NOT interleave on the connection."
+
+PARSED (AP-4): the MUST is conditioned by "While outbound dispatch on a shared/pooled connection
+proceeds concurrently". It binds the ORIGINATING side's writes on a pooled connection. It does not, on
+its words, bind a responder writing concurrent RESPONSES to inbound requests — though §4.8 permits
+exactly that concurrency and an interleaved response stream corrupts the caller identically. That gap
+is noted in F14 and NOT authored: extending the MUST to the response side would be writing the rule.
+
+A SAMPLE, DECLARED. Interleaving is a race. No finite run proves its absence; a run that sees none has
+failed to disprove it. The probe maximises the chance of seeing it — many concurrent EXECUTEs with
+payloads larger than typical socket write chunks, so a non-atomic writer issues partial writes — and the
+result is reported with its sample size. GUIDE-CONFORMANCE §5.2b.1's rule is honoured by saying so rather than by
+pretending a pass is coverage.
+
+VACUOUS on a dial-per-dispatch peer (one frame per connection cannot interleave with another on it).
+SKIP naming the mechanism, from the (a) file's `connection_reuse` witness.
+"""
+
+[requirement.preconditions]
+grants       = ["as UNALLOCATED-reentry-no-serialization-across-await"]
+identities   = ["caller", "suite-as-counterparty"]
+handlers     = ["originating-probe (as above), able to originate N >= 32 concurrent EXECUTEs with params of >= 256 KiB"]
+posture_axes = ["seed_policy", "origination_trigger", "sample_size"]
+
+[[requirement.arm]]
+name  = "contiguous-frames"
+kind  = "conformant"
+given = "N >= 32 concurrent large outbound EXECUTEs to the suite over a pooled connection"
+why   = "the MUST, under the pressure that exposes a yielding writer."
+  [[requirement.arm.step]]
+  op   = "listen_as_counterparty"
+  [[requirement.arm.step]]
+  op      = "trigger_origination"
+  count   = 32
+  payload = "256 KiB params each"
+  [[requirement.arm.step]]
+  op      = "read_raw_stream"
+  capture = "stream"
+  [[requirement.arm.assert]]
+  kind    = "stream_parses_as_contiguous_frames"
+  capture = "stream"
+  why     = "walk the byte stream by §1.6 prefixes; every frame's payload is exactly one CBOR data item that decodes as an envelope. Checked on raw bytes, before any library reassembles anything."
+  [[requirement.arm.witness]]
+  field = "frames_observed"
+  why   = "the sample size, reported with the verdict — a pass over 32 frames is weaker than one over 3 200."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "a fixture byte stream in which two valid frames' payloads are interleaved at a 64 KiB boundary"
+why   = "MANDATORY ANTI-VACUITY, suite-side: proves the stream walker rejects interleaving. A walker that resynchronises on the next decodable CBOR item — a natural 'robust' implementation — passes every stream, and only this fixture shows it."
+  [[requirement.arm.step]]
+  op      = "replay_fixture"
+  fixture = "two frames, interleaved"
+  capture = "fixture"
+  [[requirement.arm.assert]]
+  kind    = "stream_parses_as_contiguous_frames"
+  capture = "fixture"
+  expect  = "fails"
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer writing frames with an async write primitive that yields between partial writes and holds no per-connection write lock"
+expect = "under concurrency, bytes of two frames interleave; the counterparty's decode fails"
+why    = "§6.11(a′)'s own parenthetical: 'A yielding write primitive that interleaves two frames' bytes corrupts the receiver's decode.'"
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = ""
+oracle_note       = "see the (a) file."

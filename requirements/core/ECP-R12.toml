@@ -1,0 +1,91 @@
+## ECP-R12 — every system/hash a peer emits is one flat CBOR byte string: varint format code, then digest.
+##
+## Batch 3. The wire SHAPE of a hash, as distinct from its value (ECP-R2) and its receiver-side length
+## check (ECP-R41).
+
+[requirement]
+id         = "ECP-R12"
+id_status  = "allocated"
+title      = "Every system/hash value a peer emits is a single untagged CBOR byte string whose leading LEB128 varint is a format code and whose remaining length is that code's digest length"
+spec       = "ENTITY-CORE-PROTOCOL §1.2"
+spec_also  = ["§2.5 ('All hash values — `content_hash` fields, `included` map keys, and entity references in data — use the same flat byte representation')", "§7.3 (multicodec-style varint, normative)", "ENTITY-CBOR-ENCODING §5.3", "§9.1 (the floor row this id binds)"]
+snapshot   = "core-0.8.2.21"
+level      = "MUST"
+profile    = ["core"]
+surface    = "wire"
+status     = "draft"
+routed     = "docs/status/FINDINGS-FROM-AUTHORING.md F20"
+
+reading = """
+§1.2: "system/hash := bytes ; varint format-code + digest (variable) ; On wire: CBOR byte string
+(bstr)" and "A `system/hash` is a flat byte string. The leading bytes encode the format ... as a
+multicodec-style LEB128 varint; the remaining bytes are the raw digest." §2.5 extends the shape to
+every position: content_hash fields, included keys, and hash references in data.
+
+THREE WAYS TO FAIL IT, EACH SEEN IN THE WILD OF CBOR ENCODERS. (a) a text string — hex or the §1.2
+display form `"ecfv1-sha256:" + hex`, which §1.2 says is "UI only, never on wire"; (b) a structure —
+an array or map of {code, digest}; (c) a CBOR tag around the bstr — ENTITY-CBOR-ENCODING §6.3 forbids
+tags in data fields, and a tagged hash is not "flat". All three are asserted.
+
+THE LENGTH HALF IS ASSERTED FROM §1.2's TABLE, NOT FROM ECF §4.3. The two documents allocate different
+algorithms to codes 0x03 and 0x04 and disagree about whether the format code is an OCTET or a varint
+(F20). For the codes a posture-free run sees today (0x00, and 0x01 where negotiated) the two tables
+agree on length: 33 and 49 bytes. A hash whose code is 0x03 or 0x04 is witnessed, not scored, until F20
+is ruled — both tables give 32-byte digests for both codes, so length is unaffected, but which
+ALGORITHM is named is not, and ECP-R2's recomputation for those codes depends on it.
+
+WHICH POSITIONS ARE KNOWN TO BE HASHES. Only positions the suite can type without guessing: every
+entity's `content_hash`; every `included` key; and fields §3 types as `system/hash` in entities whose
+type the suite knows (signature target/signer; capability token grantee, parent, and granter when it is
+not a multi-granter). Bytes in an `primitive/any` data field are not assumed to be hashes.
+"""
+
+[requirement.preconditions]
+grants       = []
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["seed_policy", "content_hash_format"]
+
+[requirement.domain]
+axis    = "hash_position"
+members = ["entity content_hash", "included map key", "system/signature target", "system/signature signer", "system/capability/token grantee", "system/capability/token parent (when present)", "system/capability/token granter (single-sig form)"]
+note    = "members not present in a run's observed traffic are reported not-observed, never passed."
+
+[[requirement.arm]]
+name  = "flat-bstr"
+kind  = "conformant"
+given = "a completed handshake; every hash in a known hash position of every received frame"
+why   = "§1.2 / §2.5, once per domain member."
+  [[requirement.arm.step]]
+  op      = "connect"
+  capture = "handshake"
+  [[requirement.arm.assert]]
+  kind    = "each_hash_position_is_flat_bstr"
+  capture = "handshake"
+  why     = "major type 2, no tag, decodable leading LEB128 varint, and total length = varint length + §1.2 digest length for 0x00/0x01. Other codes: witnessed."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the assertion applied to fixture frames in which one content_hash is: the text `\"ecfv1-sha256:<hex>\"`; tag 37 wrapping the correct bstr; an array [0, digest]; the correct code with a 31-byte digest"
+why   = "MANDATORY ANTI-VACUITY, suite-side. The tagged fixture carries the correct bytes inside the tag, so an assertion that unwraps tags before checking passes it — that is the defect it exists to catch."
+  [[requirement.arm.step]]
+  op      = "replay_fixture"
+  fixture = "four frames, each with one hash position in a non-flat or mis-sized form"
+  capture = "fixture"
+  [[requirement.arm.assert]]
+  kind    = "each_hash_position_is_flat_bstr"
+  capture = "fixture"
+  expect  = "fails"
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer whose serializer emits hashes in their display form"
+expect = "a conformant receiver's `included` lookup by bstr key finds nothing; a tagged hash is refused 400 non_canonical_ecf"
+why    = "§1.2's 'never on wire' is the rule this catches."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = "encoding/hash_wire_format"
+oracle_note       = "provenance. It and `encoding/hash_algorithm_byte` cite ENTITY-CBOR-ENCODING §4.3 (the registry); wire encoding is §4.5, whose grammar reads `format-code = OCTET` against core's varint. Which reading those checks implement is a differential question (F20, F26)."

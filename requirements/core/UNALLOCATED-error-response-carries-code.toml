@@ -1,0 +1,115 @@
+## UNALLOCATED — an error EXECUTE_RESPONSE (status >= 400) carries a system/protocol/error result with
+## a string `code`.
+##
+## Batch 2. Reached by reading §3.3 whole and §6.12, which calls its absence "a protocol violation by
+## the responding handler". Stated declaratively, never with a keyword, and in no §9 row. F11.
+
+[requirement]
+id_status = "unallocated"
+under     = ""
+title     = "Every EXECUTE_RESPONSE with status >= 400 carries a `system/protocol/error` result whose `code` is a present string"
+spec      = "ENTITY-CORE-PROTOCOL §3.3 (error result)"
+spec_also = ["§6.12 (`protocol_error`: 'an error response (status >= 400) without a required `code` field — that is a protocol violation by the responding handler')", "§3.3 default-code force (0.8.2.7)", "§4.7 ('clients key error handling off result.data.code')"]
+snapshot  = "core-0.8.2.21"
+level     = "MUST"
+level_basis = "entailed"
+profile   = ["core"]
+surface   = "wire"
+status    = "draft"
+routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F11"
+
+reading = """
+§3.3: "Error responses use `system/protocol/error` as the result entity type", whose type declares
+`code: {type_ref: "primitive/string"}` without `optional: true` (only `message` is optional). §6.12
+names the absence from the other end: a response with `status >= 400` "without a required `code`
+field — that is a protocol violation by the responding handler". §3.3's default-code-force paragraph
+presupposes the slot exists: "`result.data.code` MUST be the named default".
+
+THE SAME ENTAILED SHAPE AS ECP-R6's RESPONDER ECHO, AND THAT IS WHY F11 EXISTS — BUT UNLIKE ECP-R6 THIS
+ONE HAS NO FLOOR ROW. No sentence says
+"MUST carry a code". The obligation is carried by (i) a declarative "use", (ii) a required field in a
+type, and (iii) a downstream section calling the absence a violation. Three independent passages
+agreeing is strong; it is still not a keyword, and a §9 floor row does not name it. Level MUST is
+argued: §6.12's "protocol violation" leaves no conformant way to omit the code, and default-code
+force (a keyworded MUST) cannot be satisfied by a response with no `code` slot at all.
+
+WHY IT IS ITS OWN REQUIREMENT AND NOT PART OF EVERY CODED ROW. Each coded row (ECP-R44, ECP-R45, …)
+asserts a SPECIFIC code for a specific input. This file asserts the SHAPE on any error, which is
+what a caller relies on before it can key on anything, and which fails independently: a peer can
+emit the right code for every tested row and a bare status (no result entity) on every untested
+path. It is observed on every error the suite provokes for any reason, so its coverage grows with
+the suite rather than with one probe.
+
+NOT ASSERTED: that `message` is present (optional); that the code is from any particular table
+(that is default-code force, per row); or that the string is NON-EMPTY — the type is
+`primitive/string`, which admits "", and an empty code on a row that names one is that row's
+default-code-force failure, not this file's. (Corrected 2026-09-12, review: this file first asserted
+non-empty.)
+"""
+
+[requirement.preconditions]
+grants       = []
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["seed_policy"]
+
+[[requirement.arm]]
+name  = "coded-errors"
+kind  = "conformant"
+given = "an established connection; at least three error-producing inputs of different classes — an unregistered local path (404), an undefined operation on the tree handler (501 or 403 by grant), an unauthenticated non-connect EXECUTE (401)"
+why   = "the shape on errors from three different emitting layers — resolution, handler, authentication — since a peer that codes one layer and not another is the realistic failure."
+  [[requirement.arm.step]]
+  op   = "connect"
+  [[requirement.arm.step]]
+  op      = "provoke_errors"
+  capture = "errors"
+  inputs  = ["unregistered_local_path", "undefined_tree_operation", "unauthenticated_tree_get"]
+  [[requirement.arm.assert]]
+  kind    = "each_error_result_type"
+  capture = "errors"
+  equals  = "system/protocol/error"
+  [[requirement.arm.assert]]
+  kind    = "each_error_code_is_string"
+  capture = "errors"
+  why     = "decoded `result.data.code`: present and a CBOR text string. An absent code, a byte string or an integer is the failure. Emptiness is not scored here (default-code force, per row)."
+  [[requirement.arm.witness]]
+  field = "codes_by_input"
+  why   = "the codes themselves; scored by their own rows, recorded here."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the suite's two assertions applied to a fixture set of error EXECUTE_RESPONSEs: one with status 404 and no result entity, one with status 404 and a `system/protocol/error` result whose data carries `message` but no `code`"
+why   = """MANDATORY ANTI-VACUITY, suite-side: no conformant peer can be made to omit the code, so the \
+discriminating power has to be shown on fixtures. A suite whose assertions pass whatever they are given \
+passes the conformant arm on every peer; this control proves each assertion rejects the absent-code shape. \
+(Corrected 2026-09-12, review: the control first asserted a 200 hello response was not typed as an error, \
+which a vacuous assertion also passes — and a fresh hello on an established connection answers 409 \
+`connection_sequence_error`, an error, so a conformant peer would have failed it.)"""
+  [[requirement.arm.step]]
+  op      = "replay_fixture"
+  fixture = "two error responses: status 404 with no `result`; status 404 with result type `system/protocol/error`, data `{message}` and no `code`"
+  capture = "fixture"
+  [[requirement.arm.assert]]
+  kind    = "each_error_result_type"
+  capture = "fixture"
+  equals  = "system/protocol/error"
+  expect  = "fails"
+  why     = "the first fixture has no result entity."
+  [[requirement.arm.assert]]
+  kind    = "each_error_code_is_string"
+  capture = "fixture"
+  expect  = "fails"
+  why     = "the second fixture has the right type and no code."
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer whose dispatcher sets `status` on failure and leaves `result` as an empty primitive/any"
+expect = "a 404 with no code; a requester records `protocol_error` (§6.12) instead of `handler_not_found`"
+why    = "the shape §6.12 had to name, from the consumer side."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = ""
+oracle_note       = "no `connectivity` check measures the shape independently of a specific code. Unsearched beyond the category."

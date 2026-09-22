@@ -1,0 +1,90 @@
+## ECP-R7-pending-b — in every envelope a peer emits, each `included` map key equals that entity's content_hash.
+##
+## Batch 3. The STRUCTURE half of "Envelope structure with per-entity hash validation (§3.1)". Its
+## number is arch's to append from ECP-R99 (CQ-2). Routed as F27.
+
+[requirement]
+id_status   = "pending-split"
+under       = "ECP-R7"
+split_index = "b"
+routed      = "docs/status/FINDINGS-FROM-AUTHORING.md F27"
+title       = "Each key of an emitted envelope's `included` map is a byte string equal to the content_hash carried by the entity it maps to"
+spec        = "ENTITY-CORE-PROTOCOL §3.1"
+spec_also   = ["§3.1.1 ('entities in the `included` map carry `content_hash` matching the map key')", "§2.5 (included map keys are system/hash)"]
+snapshot    = "core-0.8.2.21"
+level       = "MUST"
+profile     = ["core"]
+surface     = "wire"
+status      = "draft"
+
+reading = """
+§3.1: "`included`: Map of supporting entities keyed by their content hash (`system/hash` byte
+strings) ... Map keys are CBOR byte strings (bstr), not text strings." and "Entities in the `included`
+map carry `content_hash` per §1.1. The content_hash MUST match the map key. This redundancy is
+intentional — entities are self-describing and must survive serialization roundtrips through code
+that does not preserve map key context".
+
+WHY THIS IS A SECOND OBLIGATION UNDER THE ROW. ECP-R7 is a RECEIVER obligation (validate each). This
+sentence constrains the PRODUCER's envelope, and a peer can fail either alone: one that validates every
+included entity perfectly can still key its own `included` map by, say, the hex string of the hash or
+by the entity's path. The row's text — "Envelope structure with per-entity hash validation" — names
+both halves in one line. Routed, not split (CQ-2).
+
+WHY ONLY THE EMITTED SIDE. What a receiver does with a mismatched key is not stated: §3.1 says the hash
+"MUST match", not "reject if it does not". Asserting a receiver refusal would author the rule.
+
+WHAT IS COMPARED. Key bytes against the entity's carried `content_hash` bytes — byte equality, per
+§5.3 ("byte-wise equality of the full hash bytes"). Whether the carried hash is itself correct is
+ECP-R2's; whether the key is a well-formed bstr of the right length is ECP-R12's. This row is the
+equality and nothing else.
+"""
+
+[requirement.preconditions]
+grants       = []
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["seed_policy"]
+note         = "the authenticate response is the posture-free envelope that normally carries `included` (§6.9a.2's policy-derived grant). An empty `included` map is VACUOUS for this row and is reported as such, never as a pass."
+
+[[requirement.arm]]
+name  = "keys-match"
+kind  = "conformant"
+given = "a completed handshake; every envelope received from the peer"
+why   = "§3.1's MUST, on every included entry observed."
+  [[requirement.arm.step]]
+  op      = "connect"
+  capture = "handshake"
+  [[requirement.arm.assert]]
+  kind    = "each_included_key_equals_content_hash"
+  capture = "handshake"
+  why     = "for every (key, entity) in every received `included`: key is a CBOR bstr AND key bytes == entity.content_hash bytes."
+  [[requirement.arm.witness]]
+  field = "included_entry_count"
+  why   = "0 means the row was not exercised on this run — reported vacuous."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the assertion applied to fixture envelopes: one keyed by hex text of the hash; one where two entries' keys are swapped"
+why   = """MANDATORY ANTI-VACUITY, suite-side. The swapped-key fixture is the one that matters: every key \
+is a valid hash of SOME included entity, so an assertion that only checks 'the key is a known hash' \
+passes it."""
+  [[requirement.arm.step]]
+  op      = "replay_fixture"
+  fixture = "envelope A: included keyed by lowercase hex text; envelope B: two entries' bstr keys swapped"
+  capture = "fixture"
+  [[requirement.arm.assert]]
+  kind    = "each_included_key_equals_content_hash"
+  capture = "fixture"
+  expect  = "fails"
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer that builds `included` keyed by the entity's tree path, or by hex text"
+expect = "a receiver looking entities up by hash (§3.2: 'All referenced entities MUST be in the envelope's included map') finds none of them"
+why    = "the lookup §3.1's keying exists to make possible."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = ""

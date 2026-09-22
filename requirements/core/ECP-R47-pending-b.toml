@@ -23,8 +23,8 @@ with `400 invalid_request` -- it is a malformed request, not a version incompati
 TWO INPUTS, ONE CODE, AND THEY ARE SEPARATE ARMS ANYWAY. Absent and empty are different wire shapes
 -- one omits the key, one sends a zero-length array -- and an implementation that checks
 `if (hello.protocols == null)` passes the first and fails the second. The spec names both explicitly,
-so both are exercised; this is §5.2b's rule at the granularity of a single field ("one probe against
-one arm is a sample, not coverage").
+so both are exercised; this is `GUIDE-CONFORMANCE` §5.2b's rule (`entity-system-architecture`; not in this snapshot) at the
+granularity of a single field ("one probe against one arm is a sample, not coverage").
 
 They are ONE requirement rather than two because they are one obligation with one remedy: §4.5's
 whole argument for the code split is that the remedy differs between codes, and here the remedy is

@@ -53,7 +53,22 @@ SPEC_DATA = ROOT / "spec-data"
 # and an empty result is indistinguishable from "the corpus is clean" in any gate that
 # does not separate the two states. This one does, which is the only reason it was not
 # a green run over zero rows.
-ROW = re.compile(r"^\|\s*`([^`]+\.md)`\s*\|.*\|\s*`?([0-9a-f]{64})`?\s*\|\s*$", re.MULTILINE)
+#
+# WIDENED 2026-09-12 FROM `*.md` TO ANY FILE, SUBDIRECTORIES INCLUDED. The ECF document declares its
+# normative conformance contract to be a CBOR fixture (`ENTITY-CBOR-ENCODING` Appendix E), not prose.
+# The first snapshot pinned the three `.md` documents and omitted it, and this gate could not have
+# said so: a `.cbor` beside the documents was invisible to a `*.md` glob in BOTH directions -- never
+# reported as unpinned, never verifiable if pinned. A snapshot's scope is "the normative text", and
+# normative text is not a file extension.
+ROW = re.compile(r"^\|\s*`([^`]+)`\s*\|.*\|\s*`?([0-9a-f]{64})`?\s*\|\s*$", re.MULTILINE)
+
+# A path a pinned document NAMES as an artifact: backticked, with a directory component, and an
+# artifact extension. Added 2026-09-12 (D13 / AP-2's second instance): the first snapshot was scoped by
+# a document list, and ENTITY-CBOR-ENCODING names its normative conformance fixture by exactly this
+# form — `test-vectors/ecf-conformance/conformance-vectors.cbor` — in a sentence nobody's pointer reached.
+# Bare filenames are ignored (they restate a path named elsewhere); a directory-qualified artifact path
+# that resolves to nothing pinned is a snapshot whose scope was set by the pointer, not by the content.
+NAMED_ARTIFACT = re.compile(r"`((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+\.(?:cbor|diag|json|jsonl|toml))`")
 
 # A floor on the corpus. The fragile part of this gate is a glob, and its failure mode is
 # a clean run over nothing — which reads as "every snapshot verified".
@@ -94,7 +109,7 @@ def verify(snapshot: Path) -> list[str]:
         raise GateError(f"{_where(snapshot)}: no MANIFEST.md")
 
     pinned = parse_manifest(manifest)
-    present = {p.name for p in snapshot.glob("*.md")} - {"MANIFEST.md"}
+    present = {p.relative_to(snapshot).as_posix() for p in snapshot.rglob("*") if p.is_file()} - {"MANIFEST.md"}
     findings: list[str] = []
 
     for name in sorted(set(pinned) - present):
@@ -103,6 +118,16 @@ def verify(snapshot: Path) -> list[str]:
     # requirement can cite and nobody can re-verify.
     for name in sorted(present - set(pinned)):
         findings.append(f"{snapshot.name}/{name}: present, pinned by NOTHING in MANIFEST.md")
+
+    # Every artifact a pinned document names must itself be pinned (D13).
+    for doc in sorted(n for n in set(pinned) & present if n.endswith(".md")):
+        for artifact in sorted(set(NAMED_ARTIFACT.findall((snapshot / doc).read_text()))):
+            if artifact not in pinned:
+                findings.append(
+                    f"{snapshot.name}/{doc}: names `{artifact}`, which this snapshot does not pin. "
+                    f"A document that names its normative artifact by path has put that artifact in "
+                    f"scope; a snapshot of its prose alone is a snapshot scoped by a pointer (D13)."
+                )
 
     for name in sorted(set(pinned) & present):
         actual = _sha256(snapshot / name)
@@ -164,12 +189,16 @@ def self_test() -> int:
     body = b"# A SPEC\n\n**Version**: 1.0\n"
     digest = hashlib.sha256(body).hexdigest()
 
-    def build(tmp: Path, *, doc: bytes, row_digest: str, extra: bool = False) -> Path:
+    def build(tmp: Path, *, doc: bytes, row_digest: str, extra: bool = False,
+              extra_binary: bool = False) -> Path:
         snap = tmp / "spec-data" / "probe-1.0"
         snap.mkdir(parents=True)
         (snap / "A-SPEC.md").write_bytes(doc)
         if extra:
             (snap / "UNPINNED.md").write_text("# nobody pinned me\n")
+        if extra_binary:
+            (snap / "vectors").mkdir()
+            (snap / "vectors" / "fixture.cbor").write_bytes(b"\xa0")
         (snap / "MANIFEST.md").write_text(
             "# SNAPSHOT `probe-1.0`\n\n"
             "| File | Version header | sha256 |\n|---|---|---|\n"
@@ -190,6 +219,9 @@ def self_test() -> int:
                                             row_digest=digest)),
         ("a document pinned but deleted", dict(doc=None, row_digest=digest)),
         ("a document present but pinned by nothing", dict(doc=body, row_digest=digest, extra=True)),
+        # The case the `*.md` glob could not see: a normative fixture, in a subdirectory, unpinned.
+        ("a non-markdown fixture in a subdirectory pinned by nothing",
+         dict(doc=body, row_digest=digest, extra_binary=True)),
     ]
     for label, kw in planted:
         with tempfile.TemporaryDirectory() as d:
@@ -205,6 +237,18 @@ def self_test() -> int:
                     file=sys.stderr,
                 )
                 return 1
+
+    # D13, isolated: the document is pinned at its TRUE digest and names a fixture the snapshot never
+    # took. The only admissible finding is the named-artifact one — a digest finding would pass this
+    # control for the wrong reason, which is the defect a self-test exists to rule out.
+    naming = body + b"\nThe conformance contract is `vectors/fixture.cbor`.\n"
+    with tempfile.TemporaryDirectory() as d:
+        snap = build(Path(d), doc=naming, row_digest=hashlib.sha256(naming).hexdigest())
+        got = verify(snap)
+        if len(got) != 1 or "names `vectors/fixture.cbor`" not in got[0]:
+            print(f"SELF-TEST FAILED: a document naming an unpinned artifact path produced {got!r}; "
+                  f"expected exactly the named-artifact finding (D13).", file=sys.stderr)
+            return 1
 
     # The could-not-look arm: a manifest with no digest rows must NOT read as clean.
     with tempfile.TemporaryDirectory() as d:
@@ -222,7 +266,7 @@ def self_test() -> int:
 
     print(
         f"spec-snapshot-gate self-test: OK — clean snapshot accepted, "
-        f"{len(planted)} planted defects refused, could-not-look distinguished from clean"
+        f"{len(planted) + 1} planted defects refused, could-not-look distinguished from clean"
     )
     return 0
 

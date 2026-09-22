@@ -1,0 +1,100 @@
+## UNALLOCATED — every frame a peer authors is canonical ECF: decoding it and re-encoding canonically reproduces its bytes.
+##
+## Batch 3. The SENDER half of §1.11's boundary contract. ECP-R2 covers the bytes that are HASHED; this
+## covers the bytes that are SENT, which include the envelope and every field outside a hashed {type, data}.
+
+[requirement]
+id_status = "unallocated"
+under     = ""
+title     = "Every frame payload a peer authors, decoded and canonically re-encoded, is byte-identical to the payload received"
+spec      = "ENTITY-CORE-PROTOCOL §1.11 ('An implementation MUST NOT: Emit any byte sequence at the boundary that is not canonical ECF.')"
+spec_also = ["ENTITY-CBOR-ENCODING §5.2 ('Senders MUST use deterministic encoding.')", "ENTITY-CBOR-ENCODING §4.1 Rules 1–6, 4a", "ENTITY-CBOR-ENCODING §9.1 (Encoder Requirements)"]
+snapshot  = "core-0.8.2.21"
+level     = "MUST NOT"
+profile   = ["core"]
+surface   = "wire"
+status    = "draft"
+routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F22"
+
+reading = """
+§1.11 (normative): "(a) it emits canonical conformant bytes at the boundary to other peers" and "MUST
+NOT: Emit any byte sequence at the boundary that is not canonical ECF." ENTITY-CBOR-ENCODING §5.2: "All
+protocol messages are CBOR-encoded using deterministic encoding (RFC 8949 §4.2). Senders MUST use
+deterministic encoding."
+
+WHY IT IS NOT ECP-R2. The floor row is "ECF encoding for content HASHING". A peer can hash {type, data}
+canonically — it must, or ECP-R2 fails — and still serialize the frame around it with an ordinary
+encoder: the envelope map `{root, included}` in insertion order, the entity wrapper's `content_hash` key
+placed first, a length prefix one byte too long. None of that changes any hash. All of it is non-canonical
+bytes at the boundary, which a peer following reading R of the disputed input rule must refuse. So the
+sender half has its own failure and no row.
+
+WHAT "RE-ENCODES IDENTICALLY" MEANS HERE. Decode the payload with a lossless decoder; re-encode under
+§4.1 Rules 1–6 and 4a; compare bytes. Byte-equal ⇒ canonical.
+
+THE ONE AMBIGUITY, FENCED. Rule 2 says "sorted by encoded length, then lexicographically"; the document
+also cites RFC 8949 §4.2.1, which is bytewise; they diverge only for a map whose keys mix CBOR major types
+(F22). Peer-authored protocol frames contain text-keyed maps and the bstr-keyed `included` map — no single
+map mixes key types — so this is moot for them. If a received frame DOES contain a mixed-key map (e.g. in
+relayed content), the suite re-encodes under BOTH orderings and scores the frame canonical if either
+matches, witnessing which.
+
+RELAYED CONTENT IS IN SCOPE. §5.4 requires relayed entities to be forwarded as their original bytes, and
+§1.11 (b) requires those to have been canonical on receipt, so a relay never has a reason to emit
+non-canonical bytes. A peer-authored frame is the posture-free surface; relayed content is not probed.
+"""
+
+[requirement.preconditions]
+grants       = []
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["seed_policy"]
+
+[requirement.domain]
+axis    = "emitted_frame"
+members = ["hello EXECUTE_RESPONSE", "authenticate EXECUTE_RESPONSE", "a 4xx EXECUTE_RESPONSE (e.g. to an unregistered path)"]
+
+[[requirement.arm]]
+name  = "canonical"
+kind  = "conformant"
+given = "a completed handshake and one request answered with an error, each response payload captured raw from the frame"
+why   = "§1.11 (a) / ECF §5.2, once per member. The error response is included because error paths are commonly built by a different code path than success."
+  [[requirement.arm.step]]
+  op      = "connect"
+  capture = "handshake"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "error_response"
+  uri       = "x-conformance-probe/unregistered"
+  operation = "get"
+  [[requirement.arm.assert]]
+  kind    = "each_frame_reencodes_identically"
+  capture = "handshake,error_response"
+  why     = "raw payload bytes == canonical_encode(lossless_decode(payload))."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the assertion applied to fixture payloads: the canonical hello response re-serialized with (i) `root`/`included` keys swapped, (ii) one integer as 18 01, (iii) an indefinite-length included map"
+why   = """MANDATORY ANTI-VACUITY, suite-side. Every fixture decodes to exactly the same values as the \
+canonical payload, so an assertion that compares DECODED values passes all three. It must compare bytes."""
+  [[requirement.arm.step]]
+  op      = "replay_fixture"
+  fixture = "three value-equal, byte-different re-serializations of one canonical response"
+  capture = "fixture"
+  [[requirement.arm.assert]]
+  kind    = "each_frame_reencodes_identically"
+  capture = "fixture"
+  expect  = "fails"
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer hashing {type, data} with a canonical encoder but framing with its platform's default CBOR encoder"
+expect = "every ECP-R2 check passes and every emitted frame fails here; a receiver on reading R refuses its frames"
+why    = "the specific split this file exists to catch."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = "encoding/ecf_key_ordering"
+oracle_note       = "provenance. It cites ENTITY-CBOR-ENCODING §4.2 (Content Hash Computation); the ordering rule is §4.1 Rule 2. Whether it measures emitted-frame order or hashed order is not known from the citation (F26)."

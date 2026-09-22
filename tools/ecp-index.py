@@ -195,9 +195,15 @@ def main(argv: list[str]) -> int:
         print(f"ecp-index: wrote {target.relative_to(ROOT)}")
 
     hinted = sum(r["bundle_hint"] for r in index)
+    # Arch asked for this caveat to live in the OUTPUT and not only in the docs, and they are right:
+    # a count printed beside a list reads as a result. Measured on ECP-R66 — the heuristic flagged it
+    # for the WRONG conjunction and missed the fourth obligation entirely, which was found by reading
+    # §4.10(a) whole. A bundling heuristic ORDERS THE READING; it does not find the bundles.
     print(
-        f"ecp-index: {len(index)} rows — ECP-R1…ECP-R{len(index)} @ snapshot {SNAPSHOT} "
-        f"({hinted} carry a bundling hint; heuristic, not a verdict)"
+        f"ecp-index: {len(index)} rows — ECP-R1…ECP-R{len(index)} @ snapshot {SNAPSHOT}\n"
+        f"  {hinted} rows carry a bundling hint — A READING ORDER, NEVER A RESULT. Measured wrong in\n"
+        f"  both directions on ECP-R66: flagged for the wrong conjunction, blind to the real fourth\n"
+        f"  obligation. Bundles are found by reading the section whole and are ROUTED, never split here."
     )
     return 0
 

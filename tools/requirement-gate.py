@@ -45,6 +45,14 @@ SURFACES = ("wire", "host-seam", "offline", "cross-peer", "unreachable")
 STATUSES = ("draft", "reviewed", "ratified", "disputed")
 ID_STATUSES = ("allocated", "pending-split", "unallocated")
 ARM_KINDS = ("conformant", "negative-control", "non-conformant")
+# ADDED 2026-09-12 (batch 3) — THE FIRST FIELD ADDED SINCE THE FORMAT'S FIRST CUT, AND IT RESTARTS
+# CQ-12's RATIFICATION CLOCK ON PURPOSE. Batch 2 authored two MUSTs whose level was ARGUED from
+# entailment rather than quoted from a keyword (F11) and said a third would make that a format change;
+# batch 3's emitted-type-conformance file is it. A level stated only in prose is this seat's founding
+# defect in a new place: a suite scoring an argued MUST as a failure is exercising an authority
+# prohibition 2 says we do not have, and nothing machine-readable said which MUSTs those were.
+# Absent = "keyword". "entailed" must carry its argument in `reading`, and the count is printed.
+LEVEL_BASES = ("keyword", "entailed")
 
 REQUIRED = ("title", "spec", "snapshot", "level", "surface", "status", "id_status")
 ECP_ID = re.compile(r"^ECP-R([1-9][0-9]?|9[0-8])$")   # the allocated space: ECP-R1…ECP-R98
@@ -81,6 +89,12 @@ def validate(req: dict, name: str) -> list[str]:
 
     level, surface = req.get("level"), req.get("surface")
     status, id_status = req.get("status"), req.get("id_status")
+    basis = req.get("level_basis", "keyword")
+    if basis not in LEVEL_BASES:
+        add(f"{name}: level_basis={basis!r} not in {', '.join(LEVEL_BASES)}")
+    elif basis == "entailed" and "ENTAIL" not in str(req.get("reading", "")).upper():
+        add(f"{name}: level_basis=entailed but `reading` never argues the entailment. An entailed "
+            f"level is one we ARGUED; the argument is the only thing that makes it reviewable.")
     if level and level not in LEVELS:
         add(f"{name}: level={level!r} is outside §8.5a's closed six ({', '.join(LEVELS)})")
     if surface and surface not in SURFACES:
@@ -199,7 +213,7 @@ def main(argv: list[str]) -> int:
         return 2
 
     findings, tally = [], {s: 0 for s in ID_STATUSES}
-    disputed = unreachable = predictions = 0
+    disputed = unreachable = predictions = entailed = 0
     for path in paths:
         try:
             req = load(path)
@@ -211,6 +225,7 @@ def main(argv: list[str]) -> int:
         disputed += req.get("status") == "disputed"
         unreachable += req.get("surface") == "unreachable"
         predictions += bool(req.get("predicted_disagreement"))
+        entailed += req.get("level_basis") == "entailed"
 
     for finding in findings:
         print(f"  FINDING {finding}", file=sys.stderr)
@@ -220,7 +235,8 @@ def main(argv: list[str]) -> int:
     # protocol's binding text sits outside the §9 inventory (F4), and it is reported every run.
     print(f"  allocated {tally.get('allocated', 0)} · pending-split "
           f"{tally.get('pending-split', 0)} · unallocated {tally.get('unallocated', 0)}"
-          f"   |   disputed {disputed} · unreachable {unreachable} · predictions {predictions}")
+          f"   |   disputed {disputed} · unreachable {unreachable} · predictions {predictions}"
+          f" · entailed {entailed}")
     return 1 if findings else 0
 
 
@@ -270,6 +286,8 @@ def self_test() -> int:
          mutate(predicted_disagreement={"against": "x", "prediction": "p", "basis": "b",
                                         "if_true": "t"}), "ECP-R1.toml"),
         ("a level outside §8.5a's closed six", mutate(level="REQUIRED"), "ECP-R1.toml"),
+        ("a level_basis outside keyword/entailed", mutate(level_basis="implied"), "ECP-R1.toml"),
+        ("an entailed level whose reading argues nothing", mutate(level_basis="entailed"), "ECP-R1.toml"),
     ]
     for label, doc, fname in planted:
         doc = {k: v for k, v in doc.items() if v is not None}

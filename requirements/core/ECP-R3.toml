@@ -1,0 +1,114 @@
+## ECP-R3 — a received entity whose content_hash does not match {type, data} is rejected.
+##
+## Batch 3. Probed on the EXECUTE ROOT entity, pre-authorization. The included-map surface is ECP-R7's
+## and the tree:put surface is ECP-R40's (which pins a code); both are cross-referenced, not re-scored.
+
+[requirement]
+id         = "ECP-R3"
+id_status  = "allocated"
+title      = "A received EXECUTE whose root entity's content_hash does not equal the hash of its {type, data} is not processed"
+spec       = "ENTITY-CORE-PROTOCOL §1.8 item 1"
+spec_also  = ["§7.2 (NORMATIVE: 'if not hash_equals(expected, received_entity.content_hash): REJECT')", "§6.5 dispatch chain ('Validate root entity hash')", "§3.4 (params: SHOULD, may defer — see scope)", "ENTITY-CBOR-ENCODING §5.2 ('Receivers MUST validate content hashes by re-encoding to ECF')", "§9.1 (the floor row this id binds)"]
+snapshot   = "core-0.8.2.21"
+level      = "MUST"
+profile    = ["core"]
+surface    = "wire"
+status     = "draft"
+routed     = "docs/status/FINDINGS-FROM-AUTHORING.md F24"
+
+reading = """
+§1.8: "Implementations MUST maintain fidelity throughout the system: 1. Validate on receipt: Compute
+expected hash from `{type, data}`, compare with `content_hash`, reject on mismatch." §7.2 gives the
+algorithm as NORMATIVE and ends in REJECT. §6.5's dispatch chain places it before anything else a
+frame does: "Decode CBOR frame → envelope / Validate root entity hash / Validate each included entity
+hash / Root is EXECUTE? ...". ECF §5.2: "never trust a claimed hash without verification."
+
+WHICH RECEIVED ENTITIES — THE TEXT DOES NOT AGREE WITH ITSELF, SO THE PROBE PICKS THE SURFACE IT DOES
+NOT DISPUTE. §3.4 says of `params` and `result`: "Implementations SHOULD validate `params.content_hash`
+... Implementations MAY defer validation to handler processing time rather than dispatch time." That
+is a SHOULD with a deferral, against §1.8's unconditional MUST. The ROOT is named by §6.5 without
+qualification, and §3.4's own argument ("The outer EXECUTE ... content_hash covers the params bytes
+... so the EXECUTE hash is valid even if the params hash is not independently checked") presupposes
+the root hash IS checked. So: root scored; params witnessed, never scored (F24).
+
+THE PROBE IS A HELLO, SO NO POSTURE CAN BE BLAMED. §4.2 puts `system/protocol/connect` before any
+grant. A hello needs no author, no capability, no signature — so a refusal of a mis-hashed hello can
+only be about the hash, and an answered one proves the hash was not checked.
+
+WHAT A REJECTION LOOKS LIKE IS NOT PINNED, SO IT IS NOT ASSERTED. No code is assigned to a root-hash
+mismatch outside `tree:put` (§6.3: `400 hash_mismatch`). §4.7's MUST-emit table covers handshake
+failures, and a hash mismatch is not one of its rows. So any refusal — a coded error response of any
+status and code, or a close — satisfies the row. The failure is the peer ANSWERING the hello as a
+hello. Status and code are witnessed: they are what F24 asks arch to pin.
+"""
+
+[requirement.preconditions]
+grants       = []
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["seed_policy", "close_wait_bound"]
+note         = "pre-authorization surface; no grant can be a confound. `close_wait_bound` is how long the run waits to tell a close from a slow answer — recorded."
+
+[[requirement.arm]]
+name  = "root-hash-mismatch"
+kind  = "conformant"
+given = "a fresh connection; a well-formed hello EXECUTE, correctly framed, whose root `content_hash` has its last digest byte flipped; `params` hash correct"
+why   = "§1.8 item 1 / §7.2 on the surface §6.5 names first."
+  [[requirement.arm.step]]
+  op      = "send_hello"
+  capture = "mismatched"
+  corrupt = "root.content_hash: flip the final digest byte"
+  [[requirement.arm.accept]]
+  outcome = "coded_response"
+  why     = "any non-200 EXECUTE_RESPONSE: the row requires rejection and pins no code."
+  [[requirement.arm.accept]]
+  outcome = "close"
+  why     = "a close is a rejection. Not the §4.7 connect-auth rule, which requires a coded frame first — this is not one of its rows."
+  [[requirement.arm.refuse]]
+  outcome = "hello_answered"
+  why     = "THE FAILURE: a 200 hello response means the root was processed without its hash being validated."
+  [[requirement.arm.witness]]
+  field = "status_and_code"
+  why   = "unpinned today; F24 asks for a code. Cohort data, never scored."
+
+[[requirement.arm]]
+name  = "params-hash-mismatch"
+kind  = "conformant"
+given = "the same hello with the ROOT hash correct and the `params` entity's content_hash last byte flipped (root recomputed over the corrupted params bytes)"
+why   = "WITNESS-ONLY ARM. §3.4 makes params validation SHOULD with deferral permitted, so either outcome is conformant today. Recorded because it is the input that discriminates the two readings F24 routes."
+  [[requirement.arm.step]]
+  op      = "send_hello"
+  capture = "params_mismatched"
+  corrupt = "params.content_hash: flip the final digest byte; recompute root over the result"
+  [[requirement.arm.witness]]
+  field = "outcome"
+  why   = "answered or refused, with code. Never scored until F24 is ruled."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "a fresh connection; the identical hello construction with every hash correct"
+why   = """MANDATORY ANTI-VACUITY. The corrupted and control hellos share one construction path and differ \
+in one byte, so a refusal in the probe is attributable to that byte and not to the suite's hello, its \
+framing, or a peer that refuses every hello built this way."""
+  [[requirement.arm.step]]
+  op      = "send_hello"
+  capture = "correct"
+  [[requirement.arm.accept]]
+  outcome = "hello_answered"
+  why     = "the control's subject is the byte, not hello validity in general."
+  [[requirement.arm.refuse]]
+  outcome = "close"
+  why     = "a close on the correct hello means the probe's refusal proves nothing about the hash."
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer that trusts the wire-supplied content_hash and uses it as the entity's identity"
+expect = "the mis-hashed hello is answered; later, an entity stored under a hash its bytes do not produce is served to another peer, which rejects it"
+why    = "§1.8 item 2's 'Trust validated hash' is only safe if item 1 ran. This is the shape §4.6's Hardening SHOULD warns about on the authenticate surface."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = ""
+oracle_note       = "no `encoding` reference check cites §1.8 or §7.2. Whether one in another category measures root-hash validation is unsearched — bounded: the six encoding checks' citations only."

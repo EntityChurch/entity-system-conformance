@@ -20,8 +20,8 @@ routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F4"
 
 reading = """
 §4.5, on the single-active-value shape: "An empty `hash_formats` intersection MUST be rejected with
-`400 incompatible_hash_format` (§4.7)." The field table restates it, and §4.5a's closing paragraph
-restates it a third time: "Two peers whose `hash_formats` sets are disjoint cannot establish a
+`400 incompatible_hash_format` (§4.7)." §4.5a's closing paragraph restates it (the §4.5 field
+table's `hash_formats` row does not — corrected 2026-09-12, review): "Two peers whose `hash_formats` sets are disjoint cannot establish a
 connection (empty intersection -> reject, §4.7)."
 
 WHY THE MUST IS LOAD-BEARING RATHER THAN TIDY. §4.5a makes the negotiated value the connection's
@@ -100,11 +100,16 @@ peer_attributable = true
 oracle_check      = "negotiation/format_disjoint_reject"
 oracle_note       = "provenance."
 
-# ⭐ PREDICTION, filed before any suite exists.
+# ⭐ PREDICTION — filed 2026-09-11 before any suite existed. SETTLED 2026-09-12.
 [requirement.predicted_disagreement]
 against    = "negotiation/format_advertised"
 prediction = "the reference check requires the responder's hello to CARRY a non-empty `hash_formats` list including `ecfv1-sha256`, and a conformant peer that omits the optional field fails it"
 basis      = "§3.8 declares `hash_formats` `optional: true`; §4.5 gives it a default for exactly the absent case ('If `hash_formats` is absent, defaults to [\"ecfv1-sha256\"]'). The register describes the check as \"responder's hello carries a non-empty hash_formats list including ecfv1-sha256\". §4.5 asks a peer to advertise broadly with a SHOULD, never a MUST."
 if_true    = "the check asserts a MUST the specification does not state — CHECK BUG, or a genuine floor obligation that is missing from the spec. Either way it is a finding, and which one it is decides whose tree it goes to."
 if_false   = "there is a MUST-advertise obligation we did not find, and this file is incomplete."
-unsettled  = "read from the register's description, not the check's source ([prohibition 3]). Only a run settles it — and against a peer that OMITS the field, which no reference peer may do."
+settled    = "2026-09-12 — UPHELD ON THE TEXT, without waiting for a run. ROUTING-2026-09-12-c §3.2: §4.5's field table reads `hash_formats | Required: No | Default: [\"ecfv1-sha256\"]`, so a responder omitting it is conformant and the check fails it. Filed for entity-core-go as check-design — held in the core-go batch, NOT yet routed (no packet exists). This file is unchanged by the ruling."
+mechanism  = """⭐ THE MECHANISM IS NOW NAMEABLE, WHICH THE PREDICTION COULD ONLY ASSERT. \
+`NEGOTIATE-FORMAT-1`'s definition opens "Peer A advertises [...], peer B advertises [...]" -- that is \
+the vector's SETUP, and its assertion is on the NEGOTIATED OUTCOME. The check's `a` arm promoted the \
+given-clause to an obligation. Transferable, and worth more than this row: A VECTOR'S GIVEN-CLAUSE IS \
+NOT AN OBLIGATION, AND A HARNESS THAT ASSERTS IT HAS INVENTED A MUST."""

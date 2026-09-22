@@ -22,18 +22,34 @@ declares `id_status`, and **all three states are real and countable**:
 | `pending-split` | the §9 row it belongs to **bundles**; this obligation is the 2nd or 3rd under one id, and arch appends its number from `ECP-R99` — **the split is routed, never performed here** | `ECP-R66-pending-b.toml` |
 | `unallocated` | ⭐ **a binding MUST in the specification body with NO §9 row at all.** Not a bundled row — an absent one | `UNALLOCATED-<slug>.toml` |
 
-> **`unallocated` is the state nobody expected, and its count is a measurement worth having.** §9.1 is
-> introduced as *"the universal MUST-implement floor"*. If a MUST in the body has no §9 row, then
-> either §9 is a summary rather than an inventory, or the floor has a hole — and **those have
-> opposite consequences for what a conformant peer must do.** Routed to arch; see
-> `docs/status/FINDINGS-FROM-AUTHORING.md`.
+> ⭐ **`unallocated` is the state nobody expected, and it is now a sanctioned measurement: the
+> FLOOR-GAP WORKLIST.** Ruled 2026-09-12 (`CQ-9`): §9 is the membership authority for **the floor**
+> and never was an enumeration of the protocol's obligations — **418 `MUST` tokens in §1–§8 against
+> 66 floor rows.** So a body MUST binds whether or not §9 lists it, `ECP-R<n>` keys §9 rows, and a
+> non-zero `unallocated` count reads ***"the floor is missing a row"***, never *"the ids do not
+> reach"*. **Ship it and count it** — `make lint` prints the figure every run.
+
+**Discharging one `unallocated` row** — the procedure, not a judgement call: *is this obligation
+cross-peer observable, and does a peer violating it fail to interoperate?*
+
+- **yes** → it belongs on the floor. A §9 row is a normative change and takes a proposal (L1, and
+  **not ours to write**); the row is added, `ECP` extends **by append**, the file becomes
+  `allocated`.
+- **no** → it binds, it is testable, and it is **not floor**. The check measures it and **declares
+  it non-floor**, so a peer failing it does not read as failing conformance.
+
+⚠ **And the count is a floor on the gap, never a ceiling.** Batch 1 filed three; arch's own reading
+of §4.5 **and §4.5a** found **six**. We reached the obligations our reference checks pointed at and
+stopped — `AP-2`. **A batch's unit is a specification SECTION, not a check category.**
 
 **We never mint an id in arch's namespace.** `pending-split` and `unallocated` files carry no
 `ECP-R<n>` of their own; they name the row they belong under, or none.
 
 ## What every file carries
 
-The id + status · the spec sections · **the snapshot** · the level · a `reading` that quotes the
+The id + status · the spec sections · **the snapshot** · the level **and its basis** (`level_basis`:
+`keyword`, the default, or `entailed` — a level we ARGUED because no keyword states it; counted every
+run, added 2026-09-12) · a `reading` that quotes the
 normative text and **argues the interpretation** · the observable surface · **preconditions as
 data** · and **both arms plus a negative control**.
 

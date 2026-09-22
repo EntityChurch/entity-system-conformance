@@ -1,0 +1,136 @@
+## ECP-R44 — an operation absent from a registered handler's manifest answers 501
+## unsupported_operation, and the 501 code slot for this failure carries no synonym.
+##
+## Batch 2 (`connectivity`). Read range: §3.3 whole, §6.2's status-code block, §6.5.
+
+[requirement]
+id         = "ECP-R44"
+id_status  = "allocated"
+title      = "An EXECUTE naming an operation a registered handler does not implement is answered 501 unsupported_operation"
+spec       = "ENTITY-CORE-PROTOCOL §3.3 (501 row)"
+spec_also  = ["§6.2 (the general restatement, 0.8.2.6)", "§6.7 (501 is emitted after check_permission)", "§9.1 (the floor row this id binds)"]
+snapshot   = "core-0.8.2.21"
+level      = "MUST"
+profile    = ["core"]
+surface    = "wire"
+status     = "draft"
+
+reading = """
+§3.3's 501 row: "Default `code` = `unsupported_operation` — a handler IS registered at the path and
+does not implement the named operation (§6.2). `unknown_operation` is a synonym and MUST NOT be
+emitted." §6.2 generalises it past the capability handler whose subsection it sits in: "This
+sentence is general and is not scoped to the capability handler" — and names the failure that forced
+the sentence: two implementations emitted `400 unknown_operation` from every non-capability handler.
+
+ONE OBLIGATION, NOT TWO. The row reads like a pair — emit X, never emit Y — and a conversion could
+split it. It is one, because §3.3 states the unit explicitly: "The unit of conformance is the CODE
+SLOT — the set of `code` values an implementation emits at a given status — and never a single
+spelling." The ban on `unknown_operation` (and §9.1's list: `not_implemented`, `not_supported`,
+`not_available`) is not a second obligation; it is what "the slot holds the default" means. Recorded
+because the judgement could go the other way.
+
+WHAT THIS ROW DOES NOT BAN. §9.1 (0.8.2.8): "A domain code defined for a DIFFERENT failure that also
+answers 501 is not a synonym" — `unsupported_mode` is the worked case. So the refuse set below lists
+the synonyms for THIS failure and nothing else; a suite MUST NOT refuse every non-default 501 code.
+
+THE HANDLER MUST BE ONE THE PEER IS REQUIRED TO REGISTER, and the operation one it is not required to
+implement. §6.2: "Implementations MUST provide the tree, handlers, connection, and capability
+handlers." The capability handler is unsuitable — all four of its operations are MUST-provide, so there
+is no operation name there that a conformant peer may lack other than an invented one, and an
+invented one is what we use anyway. The tree handler is chosen because it is registered on every peer
+(§6.2 MUST); the probe operation is a name no specification in the snapshot defines. (Not claimed:
+that the tree handler's operation set is closed. EXTENSION-TREE adds operations and is not in this
+snapshot, which is why the probe name is invented rather than picked from a list of absent ones.)
+
+AUTHORIZATION: §6.7, "501 is emitted post check_permission, so it leaks nothing." So unlike ECP-R45
+this row DOES depend on the caller being permitted on the handler — a narrow-grant caller may
+legitimately get 403 first. That is a precondition, declared, and a 403 is reported as SKIP
+(precondition unmet), never as a failure of this row and never as a pass.
+
+⚠ §6.2 SAYS THE OPPOSITE IN THE SAME BREATH, AND THE TENSION IS UNRULED (review 2026-09-12, F19). §6.2's
+501 bullet: "a handler IS registered at the path, but does not implement the named operation. The
+caller's authority is irrelevant; the operation does not exist on this handler." Read alone, that
+says a narrow-grant caller gets 501, not 403 — i.e. manifest before permission. §6.5's chain and
+§6.7's "501 is emitted post `check_permission`" say permission first. Both can be reconciled ("irrelevant
+to WHICH CODE the slot holds" vs "irrelevant to WHETHER the slot is reached"), but we do not pick. This
+file keeps the 403-as-SKIP posture, which scores neither reading as a failure, and runs the conformant
+arm under a covering grant so both readings predict 501.
+"""
+
+[requirement.preconditions]
+grants       = ["system/tree: any operation"]
+identities   = ["caller"]
+handlers     = ["system/tree (MUST-registered, §6.2)"]
+posture_axes = ["seed_policy"]
+note         = "the grant must cover the tree handler for the probe operation name, or the peer is entitled to answer 403 before reaching the manifest (§6.5 order). A 403 is SKIP — precondition unmet — with the grant set recorded."
+
+[[requirement.arm]]
+name  = "unimplemented-op"
+kind  = "conformant"
+given = "an established connection with a grant covering the tree handler; an EXECUTE to `system/tree` naming an operation no specification defines"
+why   = "§3.3's 501 row and its mandatory default."
+  [[requirement.arm.step]]
+  op   = "connect"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "probe"
+  uri       = "system/tree"
+  operation = "conformance-probe-undefined-op"
+  note      = "DECLARED: if any specification ever defines this operation name on the tree handler, this probe stops measuring this row. Re-check at each snapshot re-take."
+  [[requirement.arm.assert]]
+  kind    = "status"
+  capture = "probe"
+  equals  = 501
+  [[requirement.arm.assert]]
+  kind    = "error_code"
+  capture = "probe"
+  equals  = "unsupported_operation"
+  why     = "the decoded code. The slot is the unit; the default is mandatory for the generic case."
+  [[requirement.arm.refuse]]
+  outcome = "coded_response"
+  status  = 400
+  code    = "unknown_operation"
+  why     = "the exact defect §6.2 records — different status AND different code for this failure."
+  [[requirement.arm.refuse]]
+  outcome = "coded_response"
+  status  = 501
+  code    = ["unknown_operation", "not_implemented", "not_supported", "not_available"]
+  why     = "§9.1's named synonyms of this row's code. Status right, slot wrong."
+  [[requirement.arm.refuse]]
+  outcome = "coded_response"
+  status  = 404
+  code    = "handler_not_found"
+  why     = "the handler IS registered; 404 tells the caller to stop asking for a handler that exists."
+  [[requirement.arm.witness]]
+  field = "code_if_403"
+  why   = "a 403 is SKIP (precondition), and the code is recorded so the grant set can be diagnosed."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the same connection and grant; an EXECUTE to `system/tree` naming `get`, an operation the tree handler defines"
+why   = """MANDATORY ANTI-VACUITY. Proves the 501 arm discriminates on the OPERATION NAME and not on the \
+handler being unreachable, the grant being insufficient, or a peer answering 501 to everything on this \
+path. Asserts only that the defined operation is not refused as unsupported — a domain 404 for an \
+absent binding satisfies it."""
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "defined"
+  uri       = "system/tree"
+  operation = "get"
+  [[requirement.arm.assert]]
+  kind       = "error_code"
+  capture    = "defined"
+  not_equals = "unsupported_operation"
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer whose non-capability handlers fall through to a generic unknown-operation branch"
+expect = "400 unknown_operation"
+why    = "§6.2's recorded defect, stated as the shape the refuse set exists to catch."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = "connectivity/unsupported_operation_on_registered_handler"
+oracle_note       = "provenance only. Citations (§3.3 / §9.1) resolve."

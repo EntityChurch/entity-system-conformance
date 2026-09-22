@@ -1,0 +1,97 @@
+## ECP-R7 — each entity in a received envelope's `included` map is hash-validated individually.
+##
+## Batch 3. The floor row is "Envelope structure with per-entity hash validation (§3.1)" and it
+## BUNDLES: the structure half carries a producer-side MUST ("The content_hash MUST match the map key")
+## that fails independently of receipt validation. Filed as ECP-R7-pending-b; routed (F27), not split.
+
+[requirement]
+id         = "ECP-R7"
+id_status  = "allocated"
+title      = "A received envelope carrying an included entity whose content_hash does not match its {type, data} is not processed"
+spec       = "ENTITY-CORE-PROTOCOL §3.1 (Wire transport optimization)"
+spec_also  = ["§6.5 dispatch chain ('Validate each included entity hash')", "§1.8 item 1", "§9.1 (the floor row this id binds)"]
+snapshot   = "core-0.8.2.21"
+level      = "MUST"
+profile    = ["core"]
+surface    = "wire"
+status     = "draft"
+routed     = "docs/status/FINDINGS-FROM-AUTHORING.md F24, F27"
+
+reading = """
+§3.1: "On the wire, implementations **MUST** validate each included entity's content_hash individually
+per entity fidelity (§1.8). Implementations are **NOT REQUIRED** to compute or validate the envelope's
+own content_hash during transport." §6.5 orders it: "Validate root entity hash / Validate each
+included entity hash / Root is EXECUTE? ...".
+
+"EACH" IS THE WORD THE PROBE IS BUILT ON. The row does not say "each included entity the handler
+uses". A peer that validates only the entities it reads (the signature, the capability) satisfies a
+weaker rule. So the probe includes an entity the hello has no use for — a well-formed
+`primitive/any` entity — and corrupts only that one. §3.1's "Protocol scope" paragraph says what
+`included` is FOR; it does not relax the validation MUST, and a suite MUST NOT read it as doing so.
+
+THE ENVELOPE'S OWN HASH IS EXEMPT and nothing here touches it: §3.1's NOT REQUIRED.
+
+ROOT VALID, PARAMS VALID — so the refusal is attributable to the included entity alone and not to
+ECP-R3's surface. As in ECP-R3, no code is pinned for this refusal (F24), so any refusal satisfies the
+row and status/code are witnessed.
+"""
+
+[requirement.preconditions]
+grants       = []
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["seed_policy", "close_wait_bound"]
+
+[[requirement.arm]]
+name  = "unused-included-mismatch"
+kind  = "conformant"
+given = "a fresh connection; a correct hello whose envelope `included` map holds one `primitive/any` entity {data: {\"x\": 1}}, keyed by its CORRECT hash, whose carried `content_hash` equals that key but whose data was changed to {\"x\": 2} after hashing"
+why   = "§3.1's 'each', on an entity the hello never reads. Key and carried hash agree with each other, so the refusal cannot be ECP-R7-pending-b's key mismatch."
+  [[requirement.arm.step]]
+  op       = "send_hello"
+  capture  = "included_bad"
+  included = "one primitive/any entity whose data no longer matches its (key == content_hash)"
+  [[requirement.arm.accept]]
+  outcome = "coded_response"
+  why     = "any non-200: the row pins no code."
+  [[requirement.arm.accept]]
+  outcome = "close"
+  why     = "a rejection."
+  [[requirement.arm.refuse]]
+  outcome = "hello_answered"
+  why     = "THE FAILURE: the envelope was processed with an unvalidated included entity."
+  [[requirement.arm.witness]]
+  field = "status_and_code"
+  why   = "unpinned (F24)."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the same hello with the same included entity, uncorrupted"
+why   = """MANDATORY ANTI-VACUITY. Proves a hello carrying an unused included entity is answered at all — \
+without it, a peer that refuses any hello with a non-empty `included` passes the probe."""
+  [[requirement.arm.step]]
+  op       = "send_hello"
+  capture  = "included_good"
+  included = "one primitive/any entity, correctly hashed and keyed"
+  [[requirement.arm.accept]]
+  outcome = "hello_answered"
+  why     = "the control's subject is the corrupted byte."
+  [[requirement.arm.refuse]]
+  outcome = "close"
+  why     = "a refusal here voids the probe."
+  [[requirement.arm.witness]]
+  field = "outcome_if_coded_refusal"
+  why   = "a coded refusal of an unused included entity is not obviously non-conformant (§3.1's protocol-scope paragraph) — recorded, and if seen the probe is reported unscoreable rather than passed."
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer that validates included entities lazily, when a handler dereferences them"
+expect = "the probe hello is answered; a corrupted entity it never read is accepted into the envelope and, if the peer later stores or forwards received included entities, served under a hash its bytes do not produce"
+why    = "the shape 'each' rules out."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = ""
+oracle_note       = "no encoding check cites §3.1."

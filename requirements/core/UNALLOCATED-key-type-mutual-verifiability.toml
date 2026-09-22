@@ -2,15 +2,16 @@
 ## `key_types`, or the hello is refused with 400 unsupported_key_type.
 ##
 ## A BINDING MUST IN §4.5 WITH NO §9 ROW — see UNALLOCATED-hash-format-intersection's header and
-## FINDINGS F4. This one carries a second finding of its own: the reject POINT is explicitly
-## multi-valued, which makes the obvious check shape wrong.
+## FINDINGS F4. ⛔ CORRECTED 2026-09-12 (batch 2): this file originally read the reject point as
+## unpinned (F6) and accepted a reject at `authenticate` as conformant. §4.5 pins it at hello for
+## this input; the later surfaces are ADDITIONAL, not alternative. See F6's correction.
 
 [requirement]
 id_status = "unallocated"
 under     = ""
 title     = "A hello whose `key_types` accept-set excludes the responder's own key_type is refused with 400 unsupported_key_type"
 spec      = "ENTITY-CORE-PROTOCOL §4.5"
-spec_also = ["§4.6 (authenticate — the permitted alternative reject point)", "§1.5 (key_type in the peer-id form)", "§4.7"]
+spec_also = ["§4.6 (authenticate — a permitted ADDITIONAL reject point, never a substitute for hello)", "§1.5 (key_type in the peer-id form)", "§4.7"]
 snapshot  = "core-0.8.2.21"
 level     = "MUST"
 profile   = ["core"]
@@ -33,18 +34,39 @@ intersects the two sets and demands a non-empty result is testing the single-act
 would pass a hello whose set overlaps the responder's advertised set while excluding the responder's
 actual key.
 
-⚠ THE REJECT POINT IS EXPLICITLY NOT PINNED, AND THIS BREAKS THE OBVIOUS CHECK. §4.5's v7.66 closeout
-clarification: hello-time reject is "the canonical earliest reject point", and "Implementations MAY
-ALSO reject an unsupported `key_type` later in the handshake (at `authenticate`, on `peer_id` decode,
-or on first wire `system/peer` entity received) AS A FALLBACK or DEFENSE-IN-DEPTH; rejecting at
-multiple surfaces is conformant." It then says the v7.66 `AGILITY-UNKNOWN-1` vector "is satisfied if
-`400 unsupported_key_type` is emitted at ANY handshake surface."
+⛔ THE REJECT POINT IS PINNED AT HELLO FOR THIS INPUT — CORRECTED 2026-09-12. The first version of this
+reading said the opposite, and it is kept below the correction because the misreading is the lesson.
 
-So this requirement asserts THE CODE AND THE OUTCOME, and treats the SURFACE as an observation
-rather than an assertion: a peer that accepts the hello and refuses at `authenticate` with
-`400 unsupported_key_type` is conformant and MUST NOT be scored against. A check that asserts the
-refusal arrives in the hello response is asserting the canonical guidance, which §4.5 marks as
-guidance -- in its own words, a later reject is "a conformant but non-canonical reject point."
+§4.5's v7.66 closeout, parsed rather than skimmed: "when `key_types` intersection is empty, the
+responder MUST return `400 unsupported_key_type` (per §4.7) AT THE HELLO STEP. Implementations MAY
+ALSO reject an unsupported `key_type` later in the handshake ... AS A FALLBACK or DEFENSE-IN-DEPTH;
+rejecting at multiple surfaces is conformant."
+
+  * "MAY ALSO" is additive. It permits rejecting at authenticate IN ADDITION to hello; it does not
+    permit rejecting at authenticate INSTEAD. "Rejecting at multiple surfaces is conformant" says the
+    same: multiple, not other.
+  * "is satisfied if `400 unsupported_key_type` is emitted at any handshake surface" (§4.5, verbatim;
+    corrected 2026-09-12 — an earlier edit elided the code) is stated for the `AGILITY-UNKNOWN-1` vector,
+    which is a different input. We transplanted its satisfaction mode onto this one.
+  * "a conformant but non-canonical reject point" (the accept-set bullet) attaches to a peer that
+    ADVERTISES A NARROWED SET, causing its COUNTERPARTY to reject later. It is about advertisement
+    narrowing, not about the responder-side gate this file drives, which the same bullet calls "the
+    MUST".
+
+So a responder that completes hello and refuses only at `authenticate` has failed this row, and the
+accept arm for that outcome is removed. This is AP-4's shape a second time (the qualifier "ALSO" and
+the antecedent of "any surface" were never parsed) — see the catalog.
+
+RESIDUAL, ROUTED AS A READING QUESTION, NOT RESOLVED HERE: (i) the MUST sentence says "when
+`key_types` INTERSECTION is empty", which is the intersection model the accept-set bullet and §4.7's
+retired `incompatible_key_type` row both say §4.5 no longer uses; the input it means is plainly the
+responder-side gate, but the wording is a remnant. (ii) Arch agreed with F6 in
+`ROUTING-2026-09-12-c-entity-system-conformance-all-four-asks-ruled-plus-CQ-3-and-your-F7-negative-was-two-directories-wide`
+§8 without quoting the hello-step MUST, so the reversal is a correction we owe them.
+
+— ORIGINAL READING (superseded, kept as the record) —
+"the SURFACE [is] an observation rather than an assertion: a peer that accepts the hello and refuses
+at `authenticate` with `400 unsupported_key_type` is conformant and MUST NOT be scored against."
 
 THE OBSERVATION IS STILL WORTH RECORDING. Which surface a peer rejects at is real, comparable
 cohort data and is exactly the kind of fact that later becomes a spec decision. It is emitted as a
@@ -74,18 +96,19 @@ why   = "§4.5's responder-side MUST."
   code    = "unsupported_key_type"
   at      = "hello"
   why     = "§4.5's canonical earliest reject point."
-  [[requirement.arm.accept]]
+  [[requirement.arm.refuse]]
   outcome = "coded_response"
   status  = 400
   code    = "unsupported_key_type"
   at      = "authenticate"
-  why     = "§4.5's explicit MAY — 'rejecting at multiple surfaces is conformant', and the vector 'is satisfied if 400 unsupported_key_type is emitted at ANY handshake surface'. Scoring this as a failure would fail a conformant peer for a documented choice."
+  only_at = true
+  why     = "CORRECTED 2026-09-12 (was an accept arm). A reject ONLY at authenticate, after hello succeeded, fails §4.5's 'MUST return ... at the hello step'. A reject at authenticate IN ADDITION to the hello reject cannot occur on this probe (the hello refusal ends the handshake) and is conformant where it does occur."
   [[requirement.arm.refuse]]
   outcome = "handshake_completes"
   why     = "THE FAILURE: a connection established where the responder's signatures cannot be verified by the caller. Every capability the responder mints on it is unverifiable at the other end."
   [[requirement.arm.witness]]
   field = "reject_surface"
-  why   = "recorded, never scored — which surface a peer rejects at is cohort data and is the input to any future decision to pin one."
+  why   = "recorded, never scored beyond the arms above — which surface(s) a peer rejects at is cohort data, and after the F6 correction it is also the direct evidence for the refuse arm."
 
 [[requirement.arm]]
 name  = "control"
@@ -113,10 +136,11 @@ peer_attributable = true
 oracle_check      = "negotiation/keytype_disjoint_reject"
 oracle_note       = "provenance. `format_agility/agility_unknown_1` cites the same clause from the other side (AGILITY-UNKNOWN-1) and is the one row in the register that already reflects the any-surface reading."
 
+# ⭐ PREDICTION — filed 2026-09-11 before any suite existed. SETTLED 2026-09-12.
 [requirement.predicted_disagreement]
 against    = "negotiation/keytype_advertised"
 prediction = "the reference check requires the responder's hello to carry a non-empty `key_types` set including `ed25519`, which §3.8 makes optional and §4.5 gives a default for"
 basis      = "identical in shape to the `format_advertised` prediction — the same optional-field-asserted-as-mandatory reading, in the same category, on the sibling field."
 if_true    = "two checks, one defect class, and the pair is stronger evidence than either alone."
 if_false   = "there is a MUST-advertise obligation we did not find."
-unsettled  = "register description only; settled by a run against a peer that omits the field."
+settled    = "2026-09-12 — UPHELD ON THE TEXT. ROUTING-2026-09-12-c §3.2: §4.5's table reads `key_types | Required: No | Default: [\"ed25519\"]`. Same defect as the `hash_formats` arm, same mechanism — the vector's given-clause (`both advertise key_types superset of {ed25519, ed448}`) promoted to an obligation. Filed for entity-core-go as check-design — held in the core-go batch, NOT yet routed (no packet exists); this file is unchanged."

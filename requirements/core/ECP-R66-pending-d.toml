@@ -24,7 +24,7 @@ peer's CONFIGURATION rather than of any response, so it is not a thing an exchan
 
 DECLARED `unreachable`, WHICH IS A STATE AND NOT A BLANK. `GUIDE-CONFORMANCE` §5.2a governs the
 class -- a rule with no peer-observable surface is gated by a pinned-input vector or declared -- and
-§5.2b.1 governs the temptation: "a proxy that cannot fail the way the real case fails MUST NOT be
+`GUIDE-CONFORMANCE` §5.2b.1 (`entity-system-architecture`; not in this snapshot) governs the temptation: "a proxy that cannot fail the way the real case fails MUST NOT be
 recorded as covering it." The available proxy is "send something large and see it refused", which is
 ECP-R66 and which passes identically against a peer whose bound is merely LARGER than the probe.
 **It reads as coverage while missing the case, which is worse than a declared exclusion.**

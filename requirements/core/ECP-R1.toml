@@ -1,0 +1,118 @@
+## ECP-R1 — TCP wire framing: every frame is a 4-byte big-endian length followed by that many bytes
+## of CBOR payload.
+##
+## Batch 2 (`connectivity`). Reached because `connectivity/tcp_connect` cites `§8`, and §8 in this
+## snapshot is Constants and says nothing about TCP. The text lives at §1.6. See FINDINGS F9.
+
+[requirement]
+id         = "ECP-R1"
+id_status  = "allocated"
+title      = "Over TCP, the peer reads and writes frames as a 4-byte big-endian length prefix followed by exactly that many bytes of CBOR"
+spec       = "ENTITY-CORE-PROTOCOL §1.6"
+spec_also  = ["§4.1 (the first exchange on a connection is hello)", "§4.10(a) (the finite inbound bound the control relies on)", "§9.1 (the floor row this id binds — which also covers §1.6's WebSocket rules, see ECP-R1-pending-b/c)"]
+snapshot   = "core-0.8.2.21"
+level      = "MUST"
+profile    = ["core"]
+surface    = "wire"
+status     = "draft"
+routed     = "docs/status/FINDINGS-FROM-AUTHORING.md F9"
+
+reading = """
+§1.6: "Frame := [4 bytes: length (big-endian)] [length bytes: CBOR payload]. This defines the default
+TCP framing."
+
+THE LEVEL IS THE FLOOR ROW'S, NOT A KEYWORD'S. §1.6's TCP paragraph carries no RFC 2119 keyword: it
+DEFINES the frame. The MUST comes from §9.1, whose first row is "Wire framing (§1.6)". A definition
+placed on the floor is an obligation to use it; there is no conformant alternative TCP framing,
+because §1.6 says other framings belong to OTHER transports ("Other transports (QUIC, shared
+memory, etc.) define their own framing and limits."). Recorded because a reader looking for "MUST" in §1.6's TCP text will not find one,
+and that is not a gap — see F11 for where the same shape is a gap.
+
+WHAT IS OBSERVABLE. Both directions:
+  (i)  the peer PARSES the prefix as big-endian and reads exactly that many bytes -- observed by the
+       peer answering a hello sent this way;
+  (ii) the peer WRITES frames this way -- observed by the response's first 4 bytes, read big-endian,
+       equalling the byte length of the CBOR item that follows, with nothing left over before the
+       next frame.
+A check asserting only "the TCP connection was accepted" measures the operating system's listen
+socket, not §1.6. A check asserting only that a hello was answered measures (i) and not (ii).
+
+NOT ASSERTED: the SHOULD "TCP implementations SHOULD use a reasonable default frame limit (e.g.,
+16 MiB)". It is §4.10(a)'s territory, where the finite bound is a MUST in its own right (ECP-R66,
+ECP-R66-pending-d), and a second requirement on the same bound at a weaker level would score one
+behaviour twice.
+
+NOT ASSERTED: the ~4 GiB ceiling. It is arithmetic ("supports frames up to"), not an obligation.
+"""
+
+[requirement.preconditions]
+grants       = []
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["transport"]
+note         = "transport = tcp. The address the peer listens on is part of the run's posture."
+
+[[requirement.arm]]
+name  = "framed-hello-answered-framed"
+kind  = "conformant"
+given = "a fresh TCP connection; a hello EXECUTE framed per §1.6"
+why   = "§1.6 in both directions, via the first exchange §4.1 requires."
+  [[requirement.arm.step]]
+  op      = "tcp_open"
+  [[requirement.arm.step]]
+  op      = "send_raw_frame"
+  capture = "hello"
+  payload = "a well-formed hello envelope (§4.1, §3.8)"
+  prefix  = "u32 big-endian, = len(payload)"
+  [[requirement.arm.assert]]
+  kind    = "frame_prefix_matches_payload"
+  capture = "hello"
+  why     = "(ii): the first 4 response bytes, big-endian, equal the length of exactly one CBOR data item that follows. Checked on the bytes, before any decode — a lenient decoder that tolerates trailing bytes would hide a wrong prefix."
+  [[requirement.arm.assert]]
+  kind    = "decodes_as_envelope"
+  capture = "hello"
+  why     = "(i) is shown by an answer existing at all; that the answer is an EXECUTE_RESPONSE envelope shows the peer read our frame as one hello and not as a fragment."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "a fresh TCP connection; the SAME hello bytes with the length prefix written LITTLE-endian"
+why   = """MANDATORY ANTI-VACUITY. Proves the conformant arm's answer depended on the peer reading the \
+prefix BIG-endian, not on a peer that sniffs both byte orders or ignores the prefix and parses CBOR \
+greedily. For a hello of a few hundred bytes the little-endian prefix read big-endian is > 2^24 \
+bytes, so a big-endian reader waits for, or refuses, an enormous frame — and §4.10(a) permits either. \
+The assertion is only that the hello is NOT answered as a hello."""
+  [[requirement.arm.step]]
+  op      = "tcp_open"
+  [[requirement.arm.step]]
+  op      = "send_raw_frame"
+  capture = "le_hello"
+  payload = "the identical hello payload"
+  prefix  = "u32 little-endian, = len(payload)"
+  note    = "the payload length MUST be chosen so the two byte orders differ and the big-endian reading exceeds 16 MiB; a palindromic length makes this control vacuous."
+  [[requirement.arm.accept]]
+  outcome = "no_response_within_bound"
+  why     = "a big-endian reader is waiting for the rest of a very large frame."
+  [[requirement.arm.accept]]
+  outcome = "close"
+  why     = "a big-endian reader refused an over-bound frame (§4.10(a) permits a close)."
+  [[requirement.arm.accept]]
+  outcome = "coded_response"
+  status  = 413
+  code    = "payload_too_large"
+  why     = "§4.10(a)'s coded refusal."
+  [[requirement.arm.refuse]]
+  outcome = "hello_answered"
+  why     = "the peer did not use the big-endian prefix to delimit the frame."
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer that delimits inbound messages by attempting a CBOR decode on the stream, ignoring the prefix"
+expect = "answers both the big-endian and the little-endian hello"
+why    = "the shape the control separates from a conformant peer. It interoperates with every client that frames correctly, which is why nothing but a control like this one finds it."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = "connectivity/tcp_connect"
+oracle_note       = "provenance only. Its citation `§8` does not resolve to TCP text in this snapshot (§8 is Constants); this file is authored from §1.6. F9."

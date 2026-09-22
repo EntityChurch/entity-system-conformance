@@ -1,0 +1,117 @@
+## UNALLOCATED — §6.11(c): per-request deadlines are enforced per request, not with a connection-wide
+## deadline primitive.
+##
+## Batch 2. Floor by §9.0's prose, no §9.1 row (F14). §6.12's `recv_timeout` restates the same
+## prohibition and adds the code the timed-out caller sees.
+
+[requirement]
+id_status = "unallocated"
+under     = ""
+title     = "One outbound request's deadline expiring on a shared connection neither fails nor extends another in-flight request on it"
+spec      = "ENTITY-CORE-PROTOCOL §6.11(c)"
+spec_also = ["§6.12 (`recv_timeout` / 503 — the deadline's outcome, restating the prohibition)", "§6.11 'Profile applicability'", "§9.0"]
+snapshot  = "core-0.8.2.21"
+level     = "MUST"
+profile   = ["core"]
+surface   = "host-seam"
+status    = "draft"
+routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F14"
+
+reading = """
+§6.11(c): "Per-request deadlines MUST be enforced at the request layer, not via connection-wide
+deadline primitives (e.g., `net.Conn.SetDeadline` or equivalent) that would race across concurrent
+in-flight requests on the same connection."
+
+THE TEXT NAMES A MECHANISM, THE OBLIGATION IS A BEHAVIOUR. §6.11 says the contract is "purely
+behavioral" and the mechanism "impl-private and unobservable". So the requirement is the behaviour the
+forbidden mechanism breaks, in BOTH directions a connection-wide deadline races:
+  * SHORTENING — request #1's deadline, set on the connection, fires while #2 (later deadline) is still
+    awaiting, and #2 fails early;
+  * EXTENDING — #2's later deadline, set on the connection after #1's, overwrites it, and #1 does not
+    time out when it should.
+One probe exposes both: stagger the two deadlines and answer #2 between them.
+
+WHAT THE TIMED-OUT CALL SEES. §6.12: `recv_timeout`, status 503, constructed locally. Its in-process
+representation is §9.4 implementation-defined ("Handler execution context representation"), so the
+CODE is recorded as a witness and not asserted; the TIMING is asserted.
+
+TEARDOWN AFTER A TIMEOUT IS NOT FORBIDDEN (review 2026-09-12). §6.11(c) forbids "connection-wide
+deadline primitives", not closing the connection. A peer that tears down the pooled connection when #1
+times out fails #2 as a consequence of the teardown, not of a raced deadline — an operational choice
+this text does not rule on. The suite is the counterparty, so it SEES the teardown: #2 failing while
+the connection stays open is the SHORTENING failure; #2 failing because the peer closed the connection
+after #1's timeout is recorded as a witness and the #2 half is reported not-measured, never FAIL.
+
+DEADLINES ARE AN INPUT the probe handler must accept (or the peer's configured value, declared). A
+peer with a single fixed deadline cannot stagger two -> SKIP naming it.
+"""
+
+[requirement.preconditions]
+grants       = ["as UNALLOCATED-reentry-no-serialization-across-await"]
+identities   = ["caller", "suite-as-counterparty"]
+handlers     = ["originating-probe (as above), accepting a per-call deadline and reporting per call: outcome and time-to-outcome"]
+posture_axes = ["seed_policy", "origination_trigger", "clock_tolerance", "deadline_D"]
+
+[[requirement.arm]]
+name  = "independent-deadlines"
+kind  = "conformant"
+given = "on one pooled connection: #1 originated at t0 with deadline D; #2 at t0 + D/2 with deadline D (expires t0 + 1.5D). The suite never answers #1 and answers #2 at t0 + 1.2D"
+why   = "§6.11(c): #1's expiry at t0+D must not fail #2, and #2's later deadline must not delay #1's expiry."
+  [[requirement.arm.step]]
+  op   = "listen_as_counterparty"
+  [[requirement.arm.step]]
+  op        = "trigger_origination_staggered"
+  schedule  = [{ call = 1, at = "0", deadline = "D" }, { call = 2, at = "D/2", deadline = "D" }]
+  [[requirement.arm.step]]
+  op      = "respond_at"
+  target  = 2
+  at      = "1.2D"
+  [[requirement.arm.step]]
+  op      = "read_probe_handler_report"
+  capture = "report"
+  [[requirement.arm.assert]]
+  kind    = "call_timed_out_near"
+  capture = "report"
+  call    = 1
+  at      = "D ± clock_tolerance"
+  why     = "the EXTENDING failure is #1 timing out near 1.5D instead."
+  [[requirement.arm.assert]]
+  kind    = "call_succeeded"
+  capture = "report"
+  call    = 2
+  why     = "the SHORTENING failure is #2 failing at ~D WHILE THE CONNECTION STAYS OPEN. If the peer closed the connection after #1's timeout, this assertion is not-measured and the witness below records it."
+  [[requirement.arm.witness]]
+  field = "teardown_after_timeout"
+  why   = "whether the peer closed the pooled connection when #1 timed out. Not forbidden by §6.11(c); recorded, never scored."
+  [[requirement.arm.witness]]
+  field = "call_1_code"
+  why   = "§6.12 says recv_timeout/503; representation is impl-defined, so recorded."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "a single call with deadline D, never answered"
+why   = "MANDATORY ANTI-VACUITY. Proves the probe handler's deadline input is honoured at all: the call MUST time out near D. Without this, a peer that ignores the supplied deadline passes the conformant arm's #2 half and fails the #1 half for a reason that is not §6.11(c); if this arm fails, the run is SKIP — deadline input not honoured — not FAIL."
+  [[requirement.arm.step]]
+  op       = "trigger_origination_staggered"
+  schedule = [{ call = 1, at = "0", deadline = "D" }]
+  [[requirement.arm.step]]
+  op      = "read_probe_handler_report"
+  capture = "single"
+  [[requirement.arm.assert]]
+  kind    = "call_timed_out_near"
+  capture = "single"
+  call    = 1
+  at      = "D ± clock_tolerance"
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a pooled Go client calling conn.SetDeadline before each outbound send"
+expect = "#2's SetDeadline overwrites #1's; #1 times out near 1.5D — or, in the other ordering, #1's deadline aborts the read #2 is waiting on"
+why    = "the mechanism §6.11(c) names, shown to be observable through behaviour alone."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = ""
+oracle_note       = "see the (a) file."

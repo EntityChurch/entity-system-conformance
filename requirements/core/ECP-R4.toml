@@ -1,0 +1,109 @@
+## ECP-R4 — an entity the peer stores is served back byte-identical, including content it does not model.
+##
+## Batch 3. The row bundles "preserve" with a second obligation that fails independently — "MUST NOT
+## reject" (§2.10, §1.3). Filed as ECP-R4-pending-b; routed (F27), not split.
+
+[requirement]
+id         = "ECP-R4"
+id_status  = "allocated"
+title      = "An entity accepted by system/tree:put is returned by system/tree:get with identical type, data and content_hash bytes, including unknown fields, null-valued fields and unrecognised hash references"
+spec       = "ENTITY-CBOR-ENCODING §5.4 (declared canonical home) · ENTITY-CORE-PROTOCOL §1.8"
+spec_also  = ["§2.10 ('Unknown fields MUST be preserved on storage and forwarding')", "§1.3 ('Implementations receiving null MUST preserve it when forwarding')", "ENTITY-CBOR-ENCODING §4.6 ('Unknown formats MUST be preserved when forwarding entities')", "§9.1 (the floor row this id binds)"]
+snapshot   = "core-0.8.2.21"
+level      = "MUST"
+profile    = ["core"]
+surface    = "wire"
+status     = "draft"
+routed     = "docs/status/FINDINGS-FROM-AUTHORING.md F23, F27"
+
+reading = """
+The floor row: "Entity fidelity, including unknown-field and unknown-format-code preservation (§1.8,
+§2.10) ... The mechanism and its two conformant forms live in ENTITY-CBOR-ENCODING.md §5.4".
+
+§5.4 states the observable property itself, which is what makes this measurable without caring how a
+peer is built: "a forwarded entity re-presents the exact bytes that hash to its validated content hash,
+and all received content — known fields, unknown fields, CBOR tags, null-vs-absent — survives the
+round-trip." Store-original and lossless-re-encode are both conformant (§5.4's (a)+(b)); the suite
+does not distinguish them and MUST NOT.
+
+"CBOR TAGS" IN THAT SENTENCE IS NOT A DOMAIN MEMBER HERE. §6.3 of the same document requires a tagged
+frame to be refused, so a tagged entity never reaches storage on a conformant peer. §5.4's list names
+tags among preserved content; §6.3 forbids receiving them. F21 routes the contradiction; this file
+follows §6.3 (and `UNALLOCATED-cbor-tag-rejected` measures it).
+
+THE SURFACE. A core peer's only wire path that stores a caller's entity and serves it back is
+`system/tree:put` then `get` (§6.3). Put is a receipt path, so the entity must be validly hashed and
+structurally admitted first (ECP-R3, ECP-R40); a refused put makes this row UNMEASURABLE for that
+member, reported, never passed.
+
+WHAT "UNKNOWN-FORMAT-CODE PRESERVATION" CAN MEAN FOR A CORE PEER. An entity's OWN content_hash under a
+format the peer does not support must be refused (§1.2; §4.7 row 5; ECF §4.7's verification path) —
+so it cannot be preserved. The preservable case is a hash REFERENCE inside `data`: bytes the peer has no
+reason to interpret. That is the member below. The texts never draw this line (F23).
+
+WHAT IS COMPARED. The returned entity's `type`, `data` and `content_hash`, each as CBOR bytes, against
+what was put. Not the `data` decoded to a native structure — that comparison is exactly the lossy-parse
+round-trip §5.4 exists to rule out.
+"""
+
+[requirement.preconditions]
+grants       = ["system/tree: put", "system/tree: get"]
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["seed_policy"]
+note         = "put and get on one path the suite owns."
+
+[requirement.domain]
+axis    = "content_the_peer_does_not_model"
+members = ["an unknown top-level data field", "an unknown field nested two maps deep", "a declared-optional-looking field whose value is null", "a data field holding bytes shaped like a hash under unallocated format code 0x7E", "an unknown entity type string", "a float requiring half precision (1.5 → F9 3E00)", "a map whose keys sort differently by insertion than canonically"]
+note    = "every member is canonical ECF as put — the row is about preservation, not about repairing non-canonical input (that is disputed, F21)."
+
+[[requirement.arm]]
+name  = "round-trip"
+kind  = "conformant"
+given = "an authenticated connection; for each member, put an entity carrying it at a fresh path, then get that path"
+why   = "§5.4's cross-impl-observable property, once per member."
+  [[requirement.arm.step]]
+  op        = "connect"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "put"
+  uri       = "system/tree"
+  operation = "put"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "get"
+  uri       = "system/tree"
+  operation = "get"
+  [[requirement.arm.assert]]
+  kind    = "returned_entity_bytes_equal_put"
+  capture = "get"
+  why     = "type, data and content_hash compared as encoded CBOR bytes, never as decoded values."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the assertion applied to fixture get-responses: one with the unknown field stripped and content_hash recomputed to match; one with null dropped; one with keys re-sorted by insertion"
+why   = """MANDATORY ANTI-VACUITY, suite-side. The stripped-and-rehashed fixture is internally consistent — \
+its hash is correct for its bytes — so an assertion that only validates the returned entity's own hash \
+passes it. That is the precise lossy-parse defect §5.4 names, and the assertion must fail it."""
+  [[requirement.arm.step]]
+  op      = "replay_fixture"
+  fixture = "three self-consistent get responses, each missing one member's content"
+  capture = "fixture"
+  [[requirement.arm.assert]]
+  kind    = "returned_entity_bytes_equal_put"
+  capture = "fixture"
+  expect  = "fails"
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer that parses into typed structures and re-serializes on get"
+expect = "unknown fields vanish and the returned entity carries a different content_hash; the original author's signature no longer verifies against the served bytes"
+why    = "§5.4 item 5's own consequence: 'a stripped field is a different entity'."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = ""
+oracle_note       = "no encoding check cites §1.8, §2.10 or §5.4."

@@ -1,0 +1,105 @@
+## ECP-R1-pending-b — over WebSocket, each binary message carries exactly one length-prefixed frame.
+##
+## Batch 2. §9.1's "Wire framing (§1.6)" row covers §1.6 wholesale, and §1.6 carries a TCP frame
+## definition AND binding WebSocket MUSTs. Routed as a bundle (F15), not split here.
+
+[requirement]
+id_status   = "pending-split"
+under       = "ECP-R1"
+split_index = "b"
+routed      = "docs/status/FINDINGS-FROM-AUTHORING.md F15"
+title       = "Over WebSocket, every binary message the peer sends contains exactly one complete length-prefixed frame"
+spec        = "ENTITY-CORE-PROTOCOL §1.6 (WebSocket transport)"
+snapshot    = "core-0.8.2.21"
+level       = "MUST"
+profile     = ["core"]
+surface     = "wire"
+status      = "draft"
+
+reading = """
+§1.6: "Each WebSocket binary message MUST contain exactly one length-prefixed frame. Implementations
+MUST NOT split a frame across multiple WebSocket messages or batch multiple frames into a single
+WebSocket message." And for stream adapters: "MUST ensure each frame write produces a single WebSocket
+message."
+
+THREE MUST SENTENCES, ONE OBLIGATION. "Exactly one" is the conjunction of "not fewer" (no split) and
+"not more" (no batch); the second sentence restates the first by its two failure modes, and the third
+restates it for one implementation technique. They fail together — there is no peer that satisfies
+"exactly one" and violates "no split". So one file, two refusals.
+
+OBSERVABLE ON THE PEER'S OWN OUTPUT ONLY. The suite can inspect the WebSocket messages the peer
+SENDS. What the peer does with a split or batched INBOUND message is not stated (§1.6 gives receivers
+a MAY — "MAY validate that the WebSocket message length equals 4 + the length prefix value" — and
+no MUST), so no arm sends malformed messages and expects a particular refusal.
+
+VACUOUS ON A PEER THAT OFFERS NO WEBSOCKET TRANSPORT. §1.6 does not make WebSocket mandatory. A peer
+with no WebSocket listener has no messages to inspect; the run reports SKIP naming the absent
+transport, which is a declared precondition, not a pass.
+
+BATCHING NEEDS PRESSURE TO BE SEEN. A peer that writes through a buffered stream adapter batches only
+when two frames are written close together. The conformant arm therefore provokes several responses
+in quick succession (pipelined requests); a single request-response exchange cannot fail on the
+batching half.
+"""
+
+[requirement.preconditions]
+grants       = []
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["transport"]
+note         = "transport = websocket, with the peer's WebSocket endpoint declared. Absent endpoint -> SKIP naming it."
+
+[[requirement.arm]]
+name  = "one-frame-per-message"
+kind  = "conformant"
+given = "a WebSocket connection; a handshake, then N >= 8 EXECUTEs sent pipelined without awaiting responses"
+why   = "§1.6's MUST on the peer's output, under the write pressure that exposes batching."
+  [[requirement.arm.step]]
+  op   = "ws_open"
+  [[requirement.arm.step]]
+  op   = "connect"
+  [[requirement.arm.step]]
+  op      = "send_pipelined_executes"
+  count   = 8
+  capture = "responses"
+  [[requirement.arm.assert]]
+  kind    = "ws_each_message_is_one_frame"
+  capture = "responses"
+  why     = "for every binary message received: message length == 4 + big-endian prefix. Covers both failure modes in one comparison."
+  [[requirement.arm.refuse]]
+  outcome = "message_shorter_than_frame"
+  why     = "a split frame."
+  [[requirement.arm.refuse]]
+  outcome = "message_longer_than_frame"
+  why     = "batched frames."
+  [[requirement.arm.witness]]
+  field = "text_message_count"
+  why   = "a text-mode message is ECP-R1-pending-c's failure and is scored THERE ONLY — §1.6's 'exactly one length-prefixed frame' sentence governs binary messages. Recorded here so a suite implementing only this file does not read a text frame as a pass; never scored twice. (Corrected 2026-09-12, review: this was a refuse, which scored one behaviour in two files.)"
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the suite's own recording of a fixture stream in which two frames are concatenated into one binary message"
+why   = """MANDATORY ANTI-VACUITY — and a SUITE-SIDE control, because no conformant peer can be asked to \
+batch. Proves the assertion can fire: a suite whose comparison is written wrong (e.g. checks only \
+the first frame) passes every peer, and only a fixture it must reject shows otherwise."""
+  [[requirement.arm.step]]
+  op      = "replay_fixture"
+  fixture = "two valid frames in one WebSocket binary message"
+  capture = "fixture"
+  [[requirement.arm.assert]]
+  kind    = "ws_each_message_is_one_frame"
+  capture = "fixture"
+  expect  = "fails"
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer that wraps its TCP stream writer around a WebSocket connection with an adapter that flushes on buffer fill"
+expect = "under pipelined load, two or more frames arrive in one binary message"
+why    = "the adapter class §1.6's third sentence was written for."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = ""
+oracle_note       = "none in `connectivity`. Unsearched beyond the category — bounded."

@@ -1,0 +1,105 @@
+## UNALLOCATED — a responder does not send the reverse (leg-3) authenticate to an initiator that has
+## not indicated it accepts inbound dispatch.
+##
+## Batch 2. Reached by reading §4.1 for `connectivity/tcp_connect`, whose own citation (§8) does not
+## resolve to connection text (F9). The floor gap itself is F18. Directly relevant to THIS repo: a conformance harness is named
+## in §4.1 as a client-style initiator.
+
+[requirement]
+id_status = "unallocated"
+under     = ""
+title     = "After legs 1–2, a responder sends no authenticate EXECUTE to a client-style initiator"
+spec      = "ENTITY-CORE-PROTOCOL §4.1"
+spec_also = ["§4.6 (authenticate)", "§3.3 ('these are the only two wire message types')"]
+snapshot  = "core-0.8.2.21"
+level     = "MUST NOT"
+profile   = ["core"]
+surface   = "wire"
+status    = "draft"
+routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F18"
+
+reading = """
+§4.1: "A responder MUST NOT proactively send a leg-3 `authenticate` to an initiator that has not
+indicated it accepts inbound dispatch. A client-style initiator (request/response only; does not serve
+inbound EXECUTEs — browser, CLI, CONFORMANCE HARNESS) is a fully conformant participant and MUST be
+able to complete the handshake via legs 1–2 alone, without receiving leg 3. An unsolicited inbound
+`authenticate` corrupts a client-style initiator's next read."
+
+"HAS NOT INDICATED" IS CURRENTLY ALWAYS TRUE. §4.1: "The signalling mechanism by which a serving
+initiator opts into leg 3 ... is DEFERRED — no reference impl currently sends leg 3." With no
+mechanism, no initiator CAN indicate it, so today the MUST NOT is unconditional in effect. Recorded
+because the day the mechanism lands, this file needs an arm for "indicated", and the snapshot re-take
+is where that is caught.
+
+NOT floor-listed, and plainly cross-peer observable and interop-breaking (the spec says what breaks:
+the initiator's next read) — so a floor candidate under CQ-9's procedure.
+
+THE INITIATOR-SIDE HALF ("MUST be able to complete the handshake via legs 1–2 alone") binds the
+initiator. Its responder-side consequence — the connection is usable after leg 2 — is what the control
+below exercises, and it is not a separate responder obligation.
+
+WHAT IS FORBIDDEN IS ONE MESSAGE, NOT EVERY INBOUND EXECUTE. The MUST NOT names "a leg-3
+`authenticate`" and nothing wider. No sentence in the snapshot forbids a responder sending some other
+EXECUTE on the connection, so an inbound EXECUTE that is not a `system/protocol/connect` `authenticate`
+is recorded as a witness and never scored here. (Corrected 2026-09-12, review: the assertion first
+failed ANY inbound EXECUTE, which asserted more than §4.1 forbids — `F1`'s shape.)
+
+OBSERVATION WINDOW. An unsolicited authenticate could arrive at any time; the suite watches from the
+leg-2 response to its first authenticated request's response, and records the window. A leg 3 sent
+later than that is not seen, which is stated, not hidden.
+"""
+
+[requirement.preconditions]
+grants       = []
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["seed_policy", "observation_window"]
+
+[[requirement.arm]]
+name  = "no-leg-3"
+kind  = "conformant"
+given = "a handshake completed with legs 1–2 by an initiator that serves nothing; then one authenticated EXECUTE"
+why   = "§4.1's MUST NOT."
+  [[requirement.arm.step]]
+  op   = "connect_legs_1_2"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "first"
+  uri       = "system/tree"
+  operation = "get"
+  [[requirement.arm.assert]]
+  kind      = "no_inbound_execute_before"
+  capture   = "first"
+  uri       = "system/protocol/connect"
+  operation = "authenticate"
+  why       = "no frame received between the leg-2 response and `first`'s response is an EXECUTE to `system/protocol/connect` with operation `authenticate`. That message is the failure, and only that message."
+  [[requirement.arm.witness]]
+  field = "other_inbound_executes"
+  why   = "any other inbound EXECUTE in the window (uri, operation). Not forbidden by §4.1; recorded, never scored."
+  [[requirement.arm.witness]]
+  field = "observation_window_ms"
+  why   = "a negative over a window is bounded by the window."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the same run"
+why   = """MANDATORY ANTI-VACUITY. Proves the absence of leg 3 is not an artefact of a handshake that never \
+completed (a responder that is still waiting sends nothing either): the first authenticated EXECUTE is \
+ANSWERED, and answered as an authenticated request, not refused 401."""
+  [[requirement.arm.assert]]
+  kind       = "status"
+  capture    = "first"
+  not_equals = 401
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a responder implementing §4.1's diagram literally, sending the reverse authenticate after replying to the initiator's"
+expect = "an inbound EXECUTE authenticate arrives where the initiator expected its next EXECUTE_RESPONSE"
+why    = "the corruption §4.1 names; it presents to a client-style initiator as a garbled response, far from its cause."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = ""
+oracle_note       = "none in `connectivity` cites §4.1."

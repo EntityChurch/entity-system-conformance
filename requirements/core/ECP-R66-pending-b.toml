@@ -78,7 +78,7 @@ why   = "§4.10(b)'s MUST. The chain is otherwise VALID — every signature veri
   kind    = "error_code"
   capture = "presented"
   equals  = "chain_depth_exceeded"
-  why     = "the decoded `result.data.code` (§5.2b.1), and not `bounds_exceeded` — that is the continuation brake's code and the two MUST NOT share a reason string."
+  why     = "the decoded `result.data.code` (GUIDE-CONFORMANCE §5.2b.1), and not `bounds_exceeded` — that is the continuation brake's code and the two MUST NOT share a reason string."
 
 [[requirement.arm]]
 name  = "control"

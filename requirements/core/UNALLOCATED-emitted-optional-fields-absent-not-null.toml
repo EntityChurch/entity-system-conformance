@@ -1,0 +1,83 @@
+## UNALLOCATED — SHOULD — a peer constructing an entity leaves an unset optional field absent rather than null.
+##
+## Batch 3. §1.3's SHOULD. A WARN, never a gate. No §9.2 row.
+
+[requirement]
+id_status = "unallocated"
+under     = ""
+title     = "In entities the peer constructs, a §3-declared optional field with no value is absent, not present with null"
+spec      = "ENTITY-CORE-PROTOCOL §1.3 ('Optional fields: SHOULD be absent (key not present) rather than present with a null or zero value when constructing new entities.')"
+spec_also = ["§1.3 ('Absent key and null key produce different bytes and different hashes.')", "§3.6 'Optional field defaults' table"]
+snapshot  = "core-0.8.2.21"
+level     = "SHOULD"
+profile   = ["core"]
+surface   = "wire"
+status    = "draft"
+routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F27"
+
+reading = """
+§1.3: "Optional fields: SHOULD be absent (key not present) rather than present with a null or zero value
+when constructing new entities. Absent key and null key produce different bytes and different hashes.
+However, the presence of an optional field with a null or zero value is semantically valid".
+
+WHY A SHOULD GETS A FILE. Two independently built peers constructing the "same" capability for the same
+grantee produce different content hashes if one writes `expires_at: null` and the other omits it. §1.3's
+note says cross-implementation comparison of independently constructed entities "is not a protocol goal",
+which is why this is SHOULD — but the cost lands on dedup and on any conformance comparison across the
+cohort, and a WARN is how it becomes visible.
+
+"NULL OR ZERO". The SHOULD names both. Only NULL is asserted: a zero can be a meaningful value
+(`max_delegation_depth: 0` means "cannot delegate", which differs from absent = "unrestricted", §3.6's
+defaults table). Flagging zeros would warn on correct entities. Zeros are witnessed.
+
+SCOPE. Only fields §3 declares `optional: true`, in entities the peer CONSTRUCTS (handshake responses,
+its minted grant). Relayed entities are §1.8's and must keep their nulls (§1.3: "MUST preserve it when
+forwarding").
+"""
+
+[requirement.preconditions]
+grants       = []
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["seed_policy"]
+
+[[requirement.arm]]
+name  = "absent-not-null"
+kind  = "conformant"
+given = "a completed handshake; every peer-constructed entity of a §3 type the suite knows"
+why   = "§1.3's SHOULD. A null optional is a WARN."
+  [[requirement.arm.step]]
+  op      = "connect"
+  capture = "handshake"
+  [[requirement.arm.assert]]
+  kind    = "no_declared_optional_field_is_null"
+  capture = "handshake"
+  why     = "per §3 type definition; undeclared (extra) fields are not optional fields and are out of scope."
+  [[requirement.arm.witness]]
+  field = "zero_valued_optionals"
+  why   = "recorded, never warned: a zero may be the meaningful value."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the assertion applied to a fixture token carrying `expires_at: null`, and to a fixture token carrying `max_delegation_depth: 0` inside delegation_caveats"
+why   = "MANDATORY ANTI-VACUITY, suite-side: the null fixture must fail; the zero fixture must NOT — proving the check does not over-read 'null or zero'."
+  [[requirement.arm.step]]
+  op      = "replay_fixture"
+  fixture = "token with a null optional (must fail); token with a zero-valued optional (must pass)"
+  capture = "fixture"
+  [[requirement.arm.assert]]
+  kind    = "no_declared_optional_field_is_null"
+  capture = "fixture"
+  expect  = "fails on the null fixture; passes on the zero fixture"
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer serializing from a struct with every optional field emitted"
+expect = "its minted tokens hash differently from a byte-for-byte-equivalent token minted by a peer that omits unset fields"
+why    = "the divergence the SHOULD exists to minimise."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = ""

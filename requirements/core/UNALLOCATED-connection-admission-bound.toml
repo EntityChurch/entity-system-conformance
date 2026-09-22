@@ -1,13 +1,17 @@
 ## UNALLOCATED — §4.10(c)'s connection-admission SHOULD.
 ##
-## TWO THINGS ARE WRONG WITH THIS ROW AND THEY ARE INDEPENDENT:
-##   1. It has NO §9 inventory row — §9.1's ECP-R66 explicitly excludes it ("not part of this MUST"),
-##      and §9.2's nine SHOULD rows do not include it. A SHOULD the reference oracle scores, that the
-##      conformance inventory does not list.
-##   2. As written it cannot be failed. See `status = "disputed"`.
+## TWO THINGS WERE WRONG WITH THIS ROW AND ONE IS NOW RULED:
+##   1. It has NO §9 inventory row — and arch's adjudication SHARPENED this: it is not a hole in
+##      §9.1, which names and excludes it correctly ("not part of this MUST"). It is a hole in §9.2,
+##      which never added it. A row is proposed at the SHOULD tier.
+##   2. "As written it cannot be failed" — RULED 2026-09-12 (CQ-10): reading B, and not merely as the
+##      narrower choice. See [requirement.ruled].
 ##
-## THE FIRST USE OF `disputed`, and it is used rather than argued for. Arch said they would rather
-## see it used once than ratified in the abstract (ROUTING-2026-09-11-l §5).
+## SHIPPED `disputed` 2026-09-11; RULED 2026-09-12. The vocabulary worked exactly as intended — one
+## real case, both readings stated, declined to pick, SKIP rather than Warn, one requirement blocked
+## and nothing else. Arch: "that is the vocabulary working. Keep using it this way."
+## This file KEEPS the dispute's record rather than deleting it: the argument is why the row reads
+## as it does, and a ruling with its question erased is a conclusion nobody can re-check.
 
 [requirement]
 id_status = "unallocated"
@@ -19,8 +23,8 @@ snapshot  = "core-0.8.2.21"
 level     = "SHOULD"
 profile   = ["core"]
 surface   = "wire"
-status    = "disputed"          # ⭐ shipped disputed rather than guessed at
-routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F4 and F5"
+status    = "draft"             # was `disputed` 2026-09-11 → RULED 2026-09-12, see [requirement.ruled]
+routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F4 and F5 — ANSWERED, ROUTING-2026-09-12-c §2"
 
 reading = """
 §4.10(c): "A peer SHOULD bound concurrent connections and refuse over-bound connections cleanly
@@ -28,7 +32,8 @@ reading = """
 commonly owned by the layer below the peer (systemd socket limits, a reverse proxy, the OS fd
 limit), so a peer MAY rely on an external admission layer rather than self-limiting."
 
-⛔ THE DISPUTE, STATED PLAINLY: **as written, no observation can fail this row.** The two outcomes a
+⛔ THE DISPUTE AS FILED, KEPT BECAUSE THE RULING IS ONLY LEGIBLE AGAINST IT: **as written, no
+observation appeared able to fail this row.** The two outcomes a
 suite can see against a peer under connection pressure are
 
   (i)  connections are refused        -> satisfied by self-limiting;
@@ -56,10 +61,23 @@ TWO READINGS WITH REAL DEGREES OF FREEDOM, AND WE DECLINE TO PICK ONE ([prohibit
   accept. Then the antecedent is "a refusal occurred", the row is vacuously satisfied when none does,
   and that vacuity is honest and declared rather than hidden.
 
-WE LEAN TO B as the narrower reading that changes no peer's conformance and is checkable today, with
-A as the more useful one if the ecosystem wants connection admission actually measured. **We are not
-entitled to choose.** Until arch rules, a suite implementing this row reports it as
-`SKIP — disputed, see ECP §4.10(c)`, which is honest, and never as a Warn, which is not.
+✅ RULED 2026-09-12: **B — and the ruling corrects our reasoning, not just our uncertainty.** We had
+B as *"narrower, changes no peer's status, checkable today"*, which is true and undersells it. **B is
+what the sentence's grammar gives.** §4.10(c) has two conjuncts — *bound* concurrent connections
+**and** *refuse* over-bound connections cleanly — and the carve-out attaches to **self-limiting**,
+which is the FIRST conjunct only. It excuses bounding. It does not excuse the refusal shape, and it
+does not need to: **a peer relying on an external layer has no over-bound connections arriving to
+refuse.** The second conjunct is therefore **vacuous, not excused** — and vacuity you can declare is
+not the same thing as an obligation you cannot fail. That distinction is the whole of the answer and
+we did not see it.
+
+Reading A is rejected on cost and on `L17`: it needs a new posture axis, which is a normative
+capability claim requiring a declared site a peer can carry plus a check to enforce it — a large
+change to buy a SHOULD, and our own diagnosis (*"nothing in the exchange reports it"*) is the
+argument against it.
+
+**So a suite STOPS reporting `SKIP — disputed` on this row** and runs the `reading-b-clean-refusal`
+arm below, reporting vacuous-satisfied where no refusal occurs.
 
 AND THE SEPARATE STRUCTURAL PROBLEM: this obligation has no §9 row, so it has no id. It is not one
 of ECP-R1…R98 and it is not a bundled sibling of any of them. §9.1 removes it by name and §9.2 does
@@ -71,20 +89,22 @@ question about what §9 IS, not about this clause.
 grants        = []
 identities    = ["caller"]
 handlers      = []
-posture_axes  = ["seed_policy", "external_admission (PROPOSED — does not exist; Reading A needs it)"]
+posture_axes  = ["seed_policy"]   # Reading A would have needed an `external_admission` axis; A was REJECTED 2026-09-12 on cost and L17, so no new axis is minted.
 
-[requirement.dispute]
+[requirement.ruled]
 question      = "Is §4.10(c) an obligation on the deployment (declare which side of the carve-out you are on), or on the refusal shape (if you refuse, refuse cleanly)?"
 why_it_matters = "under the first, a peer that bounds nothing and has no external layer is non-conformant and currently scores a Warn. Under the second it is conformant and the Warn is the defect."
 owner         = "entity-system-architecture"
 our_lean      = "B — narrower, changes no peer's status, checkable today"
-blocked_work  = "one requirement; nothing else in the first 55"
+ruling        = "B, 2026-09-12. ROUTING-2026-09-12-c §2. The carve-out attaches to the FIRST conjunct (self-limiting) only; the refusal-shape conjunct is vacuous rather than excused, because a peer relying on an external layer has no over-bound connections arriving."
+correction    = "our lean was right for a weaker reason than the real one. We argued from cost and checkability; the answer is in the sentence's grammar. Recorded because 'right answer, wrong argument' is the state that does not survive being re-derived by someone else."
+filed         = "the dispute stood for one day and blocked one requirement. That is what the vocabulary is for."
 
 [[requirement.arm]]
 name  = "reading-b-clean-refusal"
 kind  = "conformant"
 given = "the peer has refused a connection under admission pressure"
-why   = "Reading B's arm, authored so the dispute is CONCRETE rather than a complaint. Runnable the moment B is ruled; deleted the moment A is."
+why   = "Reading B's arm, authored so the dispute was CONCRETE rather than a complaint. ✅ B is ruled — this arm is now THE arm, and it runs."
   [[requirement.arm.accept]]
   outcome = "coded_response"
   status  = 503

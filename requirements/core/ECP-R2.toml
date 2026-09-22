@@ -1,0 +1,101 @@
+## ECP-R2 — the content_hash a peer emits is the ECF hash of {type, data} under the format code it names.
+##
+## Batch 3 (`encoding`). Read range: core §1.2, §1.2a, §1.3, §1.8, §1.11, §2.5, §3.1, §3.4, §4.5a,
+## §7.1–§7.3; ENTITY-CBOR-ENCODING whole; the Appendix E corpus. See FINDINGS batch 3.
+
+[requirement]
+id         = "ECP-R2"
+id_status  = "allocated"
+title      = "Every entity a peer emits carries content_hash = varint(format_code) || digest(ECF({type, data})) for the format code that hash declares"
+spec       = "ENTITY-CORE-PROTOCOL §1.2 (Hash computation), §1.3"
+spec_also  = ["§7.1 (NORMATIVE)", "§4.5a items 1–2 (which format a given emitted entity is authored under)", "ENTITY-CBOR-ENCODING §4.1, §4.2", "ENTITY-CBOR-ENCODING Appendix E `content_hash` vectors", "§9.1 (the floor row this id binds)"]
+snapshot   = "core-0.8.2.21"
+level      = "MUST"
+profile    = ["core"]
+surface    = "wire"
+status     = "draft"
+
+reading = """
+§1.2: "content_hash(entity): encoded = ecf_v1_encode({type: entity.type, data: entity.data}) ...
+return bytes([0x00]) + digest" with "Input: `{type, data}` only. `content_hash` itself is NOT hashed"
+and "Encoding: ECF v1 (deterministic CBOR per RFC 8949 §4.2, rules in §1.3)". §7.1 restates it under
+the heading NORMATIVE, whose meaning §7 fixes: "All implementations MUST produce identical output for
+identical input." The floor row is "ECF encoding for content hashing (§1.2, §1.3)".
+
+WHICH FORMAT, AND THIS IS WHERE A NAIVE CHECK FAILS A CONFORMANT PEER. §1.2's pseudocode and §7.1 both
+hard-code SHA-256 and the `0x00` prefix. They are not the whole rule: §1.2's own table allocates other
+codes, and §4.5a splits emitted entities in two — "Every entity a peer authors on the wire/identity
+surface ... MUST be content-hashed under the active format" (item 1), with the `system/peer` identity
+entity pinned to `0x00` (item 1a), while "Content entities (handler-produced results, stored data ...)
+are NOT required to be re-authored under the active format — they carry their own home-format (§1.2)
+`content_hash` ... the receiver validates them by their declared format byte" (item 2).
+
+So this requirement asserts the COMPUTATION, not the choice of format: the suite reads the leading
+varint of each emitted hash, recomputes under THAT code, and compares. Whether the chosen code was the
+right one for the surface is §4.5a's obligation and batch 1's territory — not scored here. Asserting
+"every emitted hash starts 0x00" would fail a conformant SHA-384-home peer returning its stored content.
+
+WHAT "ECF" MEANS FOR THE RECOMPUTATION. §1.3's six rules, with ENTITY-CBOR-ENCODING §4.1's bytes. One
+known ambiguity is fenced off rather than resolved: the documents give map-key order as "by encoded
+byte length, then lexicographically" and also cite RFC 8949 §4.2.1, which orders bytewise; the two
+agree for maps whose keys share one CBOR major type and diverge otherwise (FINDINGS F22). A hashed
+entity whose data contains a map mixing key major types is recorded as a witness and not scored.
+
+A FORMAT THE SUITE CANNOT COMPUTE is a SKIP for that entity, recorded with the code — never a pass.
+"""
+
+[requirement.preconditions]
+grants       = []
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["seed_policy", "content_hash_format"]
+note         = "posture-free on the handshake surface. `content_hash_format` records the negotiated active format and, where the peer declares it, its home format — both change which codes the suite will see, neither changes the assertion."
+
+[requirement.domain]
+axis    = "emitted_entity"
+members = ["hello EXECUTE_RESPONSE root", "hello response `result` entity", "authenticate EXECUTE_RESPONSE root", "authenticate response `result` entity", "each entity in the authenticate response `included` map"]
+note    = "coverage is once per member. Every entity observed is checked; the members name the surfaces a posture-free run is guaranteed to reach."
+
+[[requirement.arm]]
+name  = "recomputes"
+kind  = "conformant"
+given = "a completed handshake (legs 1–2) on a fresh connection"
+why   = "§1.2 / §7.1's NORMATIVE computation, once per domain member, under each hash's own declared format code."
+  [[requirement.arm.step]]
+  op      = "connect"
+  capture = "handshake"
+  [[requirement.arm.assert]]
+  kind    = "each_emitted_content_hash_recomputes"
+  capture = "handshake"
+  why     = "decode the leading LEB128 varint, recompute digest(ECF({type, data})) under that code, compare bytes. Mixed-key-type maps and codes the suite cannot compute are witnessed, not scored."
+  [[requirement.arm.witness]]
+  field = "format_codes_seen"
+  why   = "which codes the peer emitted on which member — cohort data for §4.5a, never scored here."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the suite's recomputation applied to three fixture entities: one with a single flipped digest byte; one whose hash was computed over {type, data, content_hash}; one whose data map was encoded in insertion order (\"z\" before \"a\") before hashing"
+why   = """MANDATORY ANTI-VACUITY, suite-side: no conformant peer can be made to emit a wrong hash. The \
+three fixtures are the three wrong implementations this row exists to catch; the assertion must fail \
+each, or it is comparing something other than the computation."""
+  [[requirement.arm.step]]
+  op      = "replay_fixture"
+  fixture = "three wrong-hash entities: flipped digest byte; content_hash included in the hash input; non-canonical key order before hashing"
+  capture = "fixture"
+  [[requirement.arm.assert]]
+  kind    = "each_emitted_content_hash_recomputes"
+  capture = "fixture"
+  expect  = "fails"
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer that hashes the bytes it serialized with a non-deterministic encoder (map insertion order)"
+expect = "its emitted hashes recompute only by coincidence; a conformant receiver's §1.8 validation rejects its entities"
+why    = "the failure §1.3 exists to prevent, and the reason §7 classifies the algorithm NORMATIVE rather than CONFORMANCE."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = "encoding/entity_hash_valid"
+oracle_note       = "provenance only. That check cites §1.5 (Identity); the computation is §1.2/§7.1. Whether it measures §3.5's system/peer hashable basis instead — which is peer_canonicalization's (PEER-CANON-1) — is a coverage question, F26."

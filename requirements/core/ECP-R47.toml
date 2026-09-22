@@ -18,9 +18,11 @@ status    = "draft"
 
 reading = """
 §4.5: "`400 incompatible_protocol` (§4.7) is reserved for a NON-EMPTY set that does not intersect
-the responder's: that code tells the caller 'we compared and share nothing'." And §4.5's field table:
-`protocols` is "Required with no default ... Intersection of the §8.4 protocol version identifiers
-(`entity-core/1.0`), must be non-empty."
+the responder's: that code tells the caller 'we compared and share nothing'." And §4.5's prose:
+`protocols` is "**Required with no default**, so there is no floor to fall back to"; its field table
+row reads `Required: Yes`, `Default: —`, "Intersection of the §8.4 protocol version identifiers
+(`entity-core/1.0`), must be non-empty." (Attribution corrected 2026-09-12, review: "Required with no
+default" is the prose's, not the table's.)
 
 THE NON-EMPTY QUALIFIER IS THE REQUIREMENT, not a detail. §4.5 pins the two codes to two different
 inputs and says why: "The remedies differ -- send the field versus change the version -- and §4.7
@@ -70,7 +72,7 @@ why   = "§4.5's MUST, at the code §4.5 reserves for exactly this input."
   kind    = "error_code"
   capture = "disjoint"
   equals  = "incompatible_protocol"
-  why     = "the decoded `result.data.code` (§5.2b.1). NOT `invalid_request` — that is the absent-or-empty arm's code and §4.5 rules the two apart by remedy."
+  why     = "the decoded `result.data.code` (GUIDE-CONFORMANCE §5.2b.1). NOT `invalid_request` — that is the absent-or-empty arm's code and §4.5 rules the two apart by remedy."
 
 [[requirement.arm]]
 name  = "control"

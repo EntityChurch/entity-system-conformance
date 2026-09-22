@@ -1,0 +1,63 @@
+## UNALLOCATED — UNREACHABLE — an implementation's ECF encoder and decoder pass every vector in the pinned Appendix E corpus.
+##
+## Batch 3. The document's DECLARED conformance contract, and the one obligation in the range no wire
+## suite can measure: it binds an encoder's output for arbitrary inputs, which a peer does not expose.
+
+[requirement]
+id_status = "unallocated"
+under     = ""
+title     = "The implementation produces the canonical bytes of every encode_equal vector, and rejects every decode_reject vector, in conformance-vectors.cbor sha256 9695b1f1…c6dc"
+spec      = "ENTITY-CBOR-ENCODING Appendix E (normative)"
+spec_also = ["ENTITY-CBOR-ENCODING opening paragraph ('The normative conformance contract for this specification is Appendix E')", "§E.3 (harness)", "§E.6 (a report cites spec-version, corpus name and artifact sha256)", "§5.4 last paragraph (round-trip for re-encode implementations)", "ENTITY-CORE-PROTOCOL §9.1 fidelity row ('gated by that document's Appendix E')", "spec-data/core-0.8.2.21/test-vectors/ecf-conformance/"]
+snapshot  = "core-0.8.2.21"
+level     = "MUST"
+profile   = ["core"]
+surface   = "unreachable"
+status    = "draft"
+routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F25"
+
+reading = """
+ENTITY-CBOR-ENCODING, before §1: "The normative conformance contract for this specification is `Appendix
+E: Conformance Test Vectors`. An implementation of ECF is conformant iff it produces the required
+canonical bytes (and rejects the required non-canonical bytes) for every vector in the current published
+version of the appendix's fixture file." §E.6: "Conformance reports MUST cite the corpus name and the
+sha256 of the `conformance-vectors.cbor` artifact". The core floor row for fidelity says the mechanism is
+"gated by that document's Appendix E".
+
+THE CORPUS IS PINNED WITH THIS SNAPSHOT (completed 2026-09-12; see MANIFEST): 71 vectors — float 14, int
+14, length 8, map_keys 6, nested 6, primitive 6, tag_reject 5, content_hash 4, envelope 2, peer_id 3,
+signature 3.
+
+WHY NO WIRE SURFACE REACHES IT. An `encode_equal` vector gives an arbitrary `input` value — a float at an
+f16 boundary, an integer at 2^63 — and requires the encoder's bytes for it. A peer encodes only what the
+protocol causes it to emit; no core operation asks a peer to encode a caller-chosen value and return the
+bytes. ECP-R4's put/get round-trip reaches the DECODER and the relay path for such values, never the
+encoder's canonicalization of them (the caller supplies canonical bytes, and the peer preserves them).
+The `tag_reject` vectors DO have a wire proxy, and it is measured: `UNALLOCATED-cbor-tag-rejected`.
+
+WHAT THE SUITE CAN CHECK, AND DOES NOT CALL COVERAGE. Whether an implementation's conformance report
+cites this corpus by sha256 (§E.6). That is a check on the claim, not on the encoder.
+"""
+
+[requirement.preconditions]
+grants       = []
+identities   = []
+handlers     = []
+posture_axes = []
+
+[requirement.unreachable]
+class         = "GUIDE-CONFORMANCE §5.2a — a pinned-input vector gate: the crossing is the shared file, not a live peer"
+why_no_proxy  = "encode_equal inputs are arbitrary values no core operation asks a peer to encode and return; the nearest wire path (tree put/get) returns the caller's own canonical bytes and cannot fail the way a non-canonical encoder fails. decode_reject's tag vectors have a proxy, measured separately; its other decode behaviours have no vectors to proxy."
+discharged_by = ["the implementation's own §E.3 harness over the pinned artifact, reported with (spec-version, corpus name, sha256) per §E.6", "a host-seam exposing the encoder, where a peer's harness offers one"]
+reported_as   = "SKIP naming the corpus sha256 and the discharge; the §E.6 citation, if the implementation publishes one, recorded as a witness — never PASS"
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "an implementation whose CBOR library encodes a large-magnitude, half-precision-representable float at a wider width (the cbor2 W2 defect the corpus's float seed records)"
+expect = "every wire check passes until the first protocol entity carries such a float; its content_hash then diverges from every other implementation's"
+why    = "Appendix E §E.5's own history: a latent encoder corner undetectable by any protocol traffic that did not happen to carry the value."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = ""

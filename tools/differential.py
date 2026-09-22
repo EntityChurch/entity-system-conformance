@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import tomllib
 from pathlib import Path
@@ -42,6 +43,29 @@ def oracle_map(req_dir: Path) -> dict[str, list[str]]:
         rid = req.get("id") or p.stem
         oc = str(req.get("notes", {}).get("oracle_check", ""))
         out[rid] = [c.strip() for c in oc.replace(";", ",").split(",") if c.strip()]
+    return out
+
+
+SECTION = re.compile(r"§\s*(\d+(?:\.\d+)*[a-z]?)")
+
+
+def core_sections(texts: list[str]) -> set[str]:
+    """The core-document § numbers a list of citations names. §9.x is dropped: it is the floor table, which nearly every
+    requirement and many checks cite, so matching on it would list everything."""
+    out = set()
+    for t in texts:
+        if "ENTITY-CBOR-ENCODING" in t or "ENTITY-NATIVE-TYPE-SYSTEM" in t or "GUIDE-" in t:
+            continue
+        out |= {m for m in SECTION.findall(t) if not m.startswith("9")}
+    return out
+
+
+def requirement_sections(req_dir: Path) -> dict[str, set[str]]:
+    out = {}
+    for p in sorted(req_dir.glob("*.toml")):
+        req = tomllib.loads(p.read_text())["requirement"]
+        also = req.get("spec_also", [])
+        out[req.get("id") or p.stem] = core_sections([str(req.get("spec", ""))] + [str(x) for x in (also if isinstance(also, list) else [also])])
     return out
 
 
@@ -89,6 +113,8 @@ def main() -> int:
     a = ap.parse_args()
 
     omap = oracle_map(a.requirements)
+    rsecs = requirement_sections(a.requirements)
+    blind_candidates: dict[str, set[str]] = {}
     body: list[str] = []
     totals: dict[str, dict[str, int]] = {}
     executed: dict[str, set[str]] = {}
@@ -136,6 +162,11 @@ def main() -> int:
                             cls = "—"
                         elif oc == "—":
                             cls = f"ORACLE BLIND ({ours})" if ours != "FAIL" else "**ORACLE BLIND (FAIL)**"
+                            # "The oracle has no check" is a negative, and the register cannot see runtime-named checks
+                            # (F54). Every executed check citing a section this requirement cites is listed, every run.
+                            cands = {k for k, c in checks.items() if rsecs.get(rid, set()) & core_sections([str(c.get("spec_ref", ""))])}
+                            if cands:
+                                blind_candidates.setdefault(rid, set()).update(cands)
                         else:
                             cls = classify(ours, theirs, same)
                         if ours:
@@ -179,6 +210,12 @@ def main() -> int:
              f"**{pairs} peer runs.**", ""]
     for pair, t in sorted(totals.items()):
         lines.append(f"- **{pair}:** " + " · ".join(f"{k} {v}" for k, v in sorted(t.items())))
+    if blind_candidates:
+        lines += ["", "**ORACLE BLIND is a negative — check it (F54).** Executed oracle checks citing a core section the requirement "
+                  "cites (§9 excluded). A real join goes in the requirement's `oracle_check`; a non-join is left, and this list "
+                  "is how the next session sees it was looked at:", ""]
+        for rid, cands in sorted(blind_candidates.items()):
+            lines.append(f"- `{rid}` ({', '.join('§' + x for x in sorted(rsecs.get(rid, set())))}): " + ", ".join(f"`{c}`" for c in sorted(cands)))
     lines += ["", "**Joint coverage (requirement ids executed):** " + " · ".join(f"{s} {len(v)}" for s, v in sorted(executed.items()))
               + f" · together {len(set().union(*executed.values())) if executed else 0}", ""]
     a.out.write_text("\n".join(lines + body) + "\n")

@@ -3,4 +3,4 @@
 # Set 2026-09-13 when suite 1 first ran: 50 files had been authored and 0 executed (AP-9). A requirement
 # nobody has run has not been shown to measure anything, so the count may only go DOWN. Lower this number
 # when a suite implements more; tools/requirement-gate.py fails the tree if the count rises above it.
-41
+25

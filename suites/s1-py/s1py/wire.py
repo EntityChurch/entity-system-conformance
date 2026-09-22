@@ -27,7 +27,8 @@ READ_LIMIT = 64 * 1024 * 1024
 
 @dataclass
 class Outcome:
-    """What one read produced. `kind` is one of: response, execute, other_frame, close, timeout, undecodable."""
+    """What one read produced. `kind` is one of: response, execute, other_frame, close, timeout, undecodable — or
+    unreachable, when no connection was ever opened (never an observation of the peer, F57)."""
 
     kind: str
     status: int | None = None
@@ -44,7 +45,7 @@ class Outcome:
     def brief(self) -> str:
         if self.kind == "response":
             return f"{self.status} {self.code or '-'} (request_id {self.request_id!r})"
-        if self.kind in ("close", "timeout", "undecodable"):
+        if self.kind in ("close", "timeout", "undecodable", "unreachable"):
             return f"{self.kind}{': ' + self.detail if self.detail else ''}"
         return f"{self.kind} {self.detail}"
 
@@ -88,11 +89,22 @@ def request_id(tag: str) -> str:
     return f"cnf-s1py-{tag}-{os.urandom(4).hex()}"
 
 
+# How many connections this process FAILED TO OPEN. A connection that never opened is not the peer refusing anything: until
+# 2026-09-13 (d) such a failure was classified as a close, and a run against an address with no peer behind it scored
+# FAILs, INCONCLUSIVEs and one PASS (F57). checks.run() reads this counter around every check and turns any verdict
+# reached while it moved into could-not-look.
+UNREACHABLE = [0]
+
+
 class Conn:
     def __init__(self, addr: str, timeout: float):
         host, _, port = addr.rpartition(":")
         self.timeout = timeout
-        self.sock = socket.create_connection((host.strip("[]"), int(port)), timeout=timeout)
+        try:
+            self.sock = socket.create_connection((host.strip("[]"), int(port)), timeout=timeout)
+        except OSError:
+            UNREACHABLE[0] += 1
+            raise
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.closed = False
 
@@ -198,6 +210,8 @@ class Session:
     # Inbound EXECUTEs, as (phase, Outcome). phase "handshake" = before the leg-2 response; "session" = after.
     unsolicited: list = field(default_factory=list)
     leg2_at: float = 0.0
+    # Every frame the handshake READ, as (label, Outcome) with raw bytes — what the emitted-side requirements inspect.
+    received: list = field(default_factory=list)
 
     def read_response(self, timeout: float | None = None) -> Outcome:
         """The next EXECUTE_RESPONSE. An inbound EXECUTE in between is recorded (§4.1 forbids an unsolicited
@@ -228,17 +242,53 @@ class Session:
         return frame(envelope(execute_entity(rid, uri, operation, params=params, resource=resource)))
 
 
-def hello_payload(me: Identity, rid: str | None = None, key_types: list[str] | None = None) -> bytes:
+ABSENT = object()  # a hello field OMITTED from the map — a different wire shape from an empty list (§4.5)
+
+
+def hello_payload(me: Identity, rid: str | None = None, key_types: list[str] | None = None,
+                  protocols: list[str] | object = None, hash_formats: list[str] | None = None) -> bytes:
     data = {
         "peer_id": me.peer_id,
         "nonce": os.urandom(32),
-        "protocols": [PROTOCOL_VERSION],
+        "protocols": [PROTOCOL_VERSION] if protocols is None else protocols,
         "timestamp": int(time.time() * 1000),
     }
+    if protocols is ABSENT:  # required with no default (§3.8, §4.5): omitting it is an input some requirements send
+        del data["protocols"]
     if key_types is not None:  # optional (§3.8); absent means ["ed25519"] (§4.5)
         data["key_types"] = key_types
+    if hash_formats is not None:  # optional (§3.8); absent means ["ecfv1-sha256"] (§4.5)
+        data["hash_formats"] = hash_formats
     params = entity("system/protocol/connect/hello", data)
     return envelope(execute_entity(rid or request_id("hello"), CONNECT, "hello", params=params))
+
+
+def flip_last(h: bytes) -> bytes:
+    return h[:-1] + bytes([h[-1] ^ 0x01])
+
+
+def probe_entity(type_: str, data: object, corrupt: bool = False) -> dict:
+    """An entity whose content_hash is computed over the PROBE bytes of {type, data} (tags and duplicate keys included),
+    optionally with its final digest byte flipped. Hashing what is actually sent is what keeps a refusal attributable to the
+    one defect a probe carries, rather than to a hash mismatch it did not mean to send."""
+    import hashlib
+    ch = b"\x00" + hashlib.sha256(cbor.encode_probe({"type": type_, "data": data})).digest()
+    return {"type": type_, "data": data, "content_hash": flip_last(ch) if corrupt else ch}
+
+
+def hello_probe(me: Identity, extra: tuple = (), corrupt_root: bool = False, corrupt_params: bool = False,
+                included: dict | None = None, wrap_tag: int | None = None) -> bytes:
+    """A §3.8 hello with extra data PAIRS appended (a key may repeat; a value may be a Tag), every hash over the bytes sent
+    unless told to corrupt one. `wrap_tag` puts a tag around the whole payload. Returns the framed bytes."""
+    base = (("peer_id", me.peer_id), ("nonce", os.urandom(32)), ("protocols", [PROTOCOL_VERSION]),
+            ("timestamp", int(time.time() * 1000)))
+    params = probe_entity("system/protocol/connect/hello", cbor.Pairs(base + tuple(extra)), corrupt=corrupt_params)
+    root = probe_entity(EXECUTE, {"request_id": request_id("hello-probe"), "uri": CONNECT, "operation": "hello",
+                                  "params": params}, corrupt=corrupt_root)
+    env: object = {"root": root, "included": included or {}}
+    if wrap_tag is not None:
+        env = cbor.Tag(wrap_tag, env)
+    return frame(cbor.encode_probe(env))
 
 
 @dataclass
@@ -255,12 +305,13 @@ def handshake(addr: str, me: Identity, timeout: float, sign_message: str = "hash
     try:
         conn = Conn(addr, timeout)
     except OSError as e:
-        return HandshakeFailure("tcp_open", Outcome("close", detail=f"{e.__class__.__name__}: {e}"))
+        return HandshakeFailure("tcp_open", Outcome("unreachable", detail=f"{e.__class__.__name__}: {e}"))
     hello_rid = request_id("hello")
     err = conn.send(frame(hello_payload(me, hello_rid, key_types)))
     if err:
         return HandshakeFailure("hello", Outcome("close", detail=err))
     o = conn.read()
+    received = [("hello response", o)]
     if o.kind != "response" or o.status != 200:
         conn.close()
         return HandshakeFailure("hello", o)
@@ -287,8 +338,10 @@ def handshake(addr: str, me: Identity, timeout: float, sign_message: str = "hash
         o = conn.read()
         if o.kind == "execute":
             session_unsolicited.append(("handshake", o))
+            received.append(("inbound EXECUTE during handshake", o))
             continue
         break
+    received.append(("authenticate response", o))
     if o.kind != "response" or o.status != 200:
         conn.close()
         return HandshakeFailure("authenticate", o)
@@ -299,4 +352,4 @@ def handshake(addr: str, me: Identity, timeout: float, sign_message: str = "hash
         o.detail = "authenticate response carries no system/capability/grant token hash"
         return HandshakeFailure("authenticate", o)
     included = o.envelope.get("included") if isinstance(o.envelope.get("included"), dict) else {}
-    return Session(conn, me, sign_message, rdata, token, dict(included), session_unsolicited, time.monotonic())
+    return Session(conn, me, sign_message, rdata, token, dict(included), session_unsolicited, time.monotonic(), received)

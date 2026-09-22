@@ -65,6 +65,14 @@ unconstructible ... Such a peer is conformant; the check MUST record a declared 
 catch-all, and MUST NOT report the fallback's answer as a failure of this row." That is a binding
 instruction to every suite, including this one. The suite needs the peer's handler index to know
 which case it is in; `system/handler/*` is the §6.2 index (ECP-R36) and is read, not assumed.
+EXECUTED 2026-09-13 ON 36 PEERS — THE PROBE PINS ONE POINT OF A DOMAIN THE ROW COVERS WHOLE (F53). Keystone asm-arm64,
+asm-x86_64 and riscv64 answer an unregistered path `404 handler_not_found` for an UNDEFINED operation, but serve `get` on
+the same path through a fallback: `404 not_found` with a resource, `403 capability_denied` without. Their handler index
+shows no catch-all pattern, so this is not §3.3's total-handler SKIP: §6.6 resolves a handler by PATH, and the answer to
+"is a handler registered here" cannot depend on the operation. `not_found` is also an undefined spelling. The reference
+oracle probes with an undefined operation only, and passed all three; this file probes with `get`. Measured members:
+resource present/absent, URI peer-relative/fully qualified, `system/` namespace or not, `get` or an undefined operation.
+Suite 1 scores the file's member and records the rest as witnesses. Domain enumeration as scored arms: CQ-33.
 """
 
 [requirement.preconditions]

@@ -55,6 +55,15 @@ says a narrow-grant caller gets 501, not 403 — i.e. manifest before permission
 to WHICH CODE the slot holds" vs "irrelevant to WHETHER the slot is reached"), but we do not pick. This
 file keeps the 403-as-SKIP posture, which scores neither reading as a failure, and runs the conformant
 arm under a covering grant so both readings predict 501.
+EXECUTED 2026-09-13 ON 36 PEERS — THE PROBE PINS ONE POINT OF A DOMAIN THE ROW COVERS WHOLE (F52). This file's probe
+carries no `resource`; the reference oracle's carries one. Keystone elixir, haskell and ocaml answer the resource-less
+probe `400 ambiguous_resource` and the resource-bearing one `501 unsupported_operation`, so the two instruments
+disagreed on the same peers. §3.3 settles the peers: `path_required` / `ambiguous_resource` apply to "an operation WHOSE
+OWN SPECIFICATION requires a resource", an undefined operation has no specification, and "answering
+`ambiguous_resource` for an absent resource inverts them". The row's domain is every request naming an operation the
+registered handler does not implement — resource present or absent, URI peer-relative or fully qualified. The arms
+below score the resource-less member; suite 1 records the resource-bearing member as a witness. Whether a requirement
+may enumerate its domain members as scored arms is a format question (CQ-33).
 """
 
 [requirement.preconditions]

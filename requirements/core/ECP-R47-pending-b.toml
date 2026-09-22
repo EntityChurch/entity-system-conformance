@@ -105,5 +105,5 @@ why    = "the natural implementation error, since the four neighbouring fields D
 
 [requirement.notes]
 peer_attributable = true
-oracle_check      = ""
-oracle_note       = "no reference check measures it — see ECP-R47's note and FINDINGS F4."
+oracle_check      = "connectivity/connect_absent_protocols"
+oracle_note       = "provenance only. ⛔ CORRECTED 2026-09-13 (F54): this note said no reference check measures it; `connectivity/connect_absent_protocols` does, in the executed set (a runtime-named check the register cannot see). Its reported message names the EMPTY member only; this file names two members, absent and empty."

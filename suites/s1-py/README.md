@@ -10,6 +10,7 @@ oracle** (`AP-10`; `make lint-suite-independence`).
 | `s1py/ed25519.py` | Ed25519, pure Python | RFC 8032 §5.1 — not a library, so not the library the Go cohort shares |
 | `s1py/ident.py` | content hash, peer id, Base58, signatures | core §1.2, §1.5, §3.5, §7.1–§7.4 |
 | `s1py/wire.py` | §1.6 framing, envelopes, the §4 handshake; every read returns an *outcome*, never an exception | core §1.6, §3, §4 |
+| `s1py/emitted.py` | predicates over what a peer emits (hash recomputation and shape, `included` keys, canonical frames, §3 field types, null optionals); each control re-runs one over fixtures that must fail | core §1.2, §1.3, §2.5, §3.1, §3.5, §3.6; ENCODING §4.1 |
 | `s1py/checks.py` | one function per requirement; arms named as in the TOML | the requirement files |
 | `run.py` | slot-compatible argv, the verdict document | `docs/DESIGN-THE-SUITE-CONTRACT.md` §1–§2 |
 | `launcher.sh` | the one file a slot execs | — |
@@ -24,9 +25,11 @@ alpine images, all `--network=none`. Nothing is installed on the host.
 
 ## Verdicts
 
-PASS (conformant arm held **and** the negative control discriminated) · FAIL · INCONCLUSIVE (the control did not
-discriminate: never a pass) · SKIP (precondition unmet, could not look, or an outcome the requirement's arms do not
-classify, which is a finding about the *requirement*). Each result carries witnesses, including **the grant the
+PASS (conformant arm held **and** the negative control discriminated) · WARN (a SHOULD-level requirement not met) · FAIL ·
+INCONCLUSIVE (the control did not discriminate: never a pass) · SKIP (precondition unmet, could not look, or an outcome the
+requirement's arms do not classify, which is a finding about the *requirement*). **A verdict reached while any connection to the
+peer failed to open is withheld as SKIP** (`F57`): a connection that never opened is not the peer refusing anything, and
+`tests/test_manifest.py` `NoPeer` holds every check to that. Each result carries witnesses, including **the grant the
 handshake actually issued**: the posture as observed on the wire, not as read from a launch script.
 
 Top-level `peer/status/code/trusted` and `summary.*` exist because Keystone's census reads them (`F41`). `trusted` means
@@ -42,7 +45,8 @@ make differential               # every instrument, by requirement id → output
 ```
 
 Diagnostic flags: `-requirements ECP-R1,ECP-R6` · `-sign-message hash33|digest32|ecf` (F30) · `-posture-grants <label>`
-· `-posture-pre-dispatch-layer` · `-list-requirements`.
+· `-posture-pre-dispatch-layer` · `-declared-max-payload <bytes>` (the peer's §4.10(a) bound, from its posture; absent, `ECP-R66`
+SKIPs) · `-list-requirements`.
 
 **Python hazards this suite had to refuse, recorded so the next suite in the next language looks for its own:** `True`
 is an `int` (a `status: true` is not status 1: `wire.classify`); `1`, `1.0` and `True` collapse to one dict key where

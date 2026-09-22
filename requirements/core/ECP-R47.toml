@@ -100,5 +100,5 @@ why    = "§4.5's own warning — 'silently non-interoperable, and undetectable 
 
 [requirement.notes]
 peer_attributable = true
-oracle_check      = ""
-oracle_note       = "⚠ NO reference check in the `negotiation` category measures the `protocols` dimension — all four measure `hash_formats` and `key_types`, which have no §9 row at all. See FINDINGS-FROM-AUTHORING F4: the inventory row and the reference category are disjoint."
+oracle_check      = "connectivity/connect_incompatible_protocol"
+oracle_note       = "provenance only. ⛔ CORRECTED 2026-09-13 (F54): this note said no reference check measures the `protocols` dimension. True of the `negotiation` category and of the register's 1239 declaration sites; FALSE of the executed set, where `connectivity/connect_incompatible_protocol` (cites §4.7) is named at runtime and so is invisible to the register. Found by joining executed reports, not by reading the oracle's source. F4's 'measured by 0 reference checks' falls with it."

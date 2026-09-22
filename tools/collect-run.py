@@ -140,6 +140,15 @@ def main() -> int:
             print(f"collect-run: {a.source}/{a.instrument}/{peer}: STALE — report is {age/3600:.1f}h old", file=sys.stderr)
             missing += 1
             continue
+        rep = json.loads(src.read_text())
+        summ = rep.get("summary") or {}
+        if summ.get("total") and summ.get("unreachable") == summ.get("total"):
+            # F57: every check withheld its verdict because the peer could not be reached. Not a run of that peer, and
+            # filing it would overwrite the last one that was.
+            print(f"collect-run: {a.source}/{a.instrument}/{peer}: REFUSING — the peer was unreachable for all "
+                  f"{summ['total']} checks; nothing was measured", file=sys.stderr)
+            missing += 1
+            continue
         out = dest / f"{peer}.json"
         if src.resolve() != out.resolve():
             shutil.copyfile(src, out)

@@ -88,7 +88,10 @@ def _float(x: float) -> bytes:
     return b"\xfb" + struct.pack(">d", x)
 
 
-def encode(v: object) -> bytes:
+def encode(v: object, key_order: str = "length-first") -> bytes:
+    """ECF. `key_order="bytewise"` is RFC 8949 §4.2.1's ordering, which ENTITY-CBOR-ENCODING also cites and which differs
+    from Rule 2 only for maps whose keys mix major types (F22). It exists so a requirement can FENCE that ambiguity —
+    re-encode under both and record which one matched — never to choose between them."""
     # bool before int: in Python `True` IS an int, and CBOR true is not the integer 1.
     if v is True:
         return b"\xf5"
@@ -107,10 +110,11 @@ def encode(v: object) -> bytes:
         b = v.encode("utf-8")
         return _head(3, len(b)) + b
     if isinstance(v, (list, tuple)):
-        return _head(4, len(v)) + b"".join(encode(x) for x in v)
+        return _head(4, len(v)) + b"".join(encode(x, key_order) for x in v)
     if isinstance(v, dict):
-        items = [(encode(k), encode(val)) for k, val in v.items()]
-        items.sort(key=lambda kv: (len(kv[0]), kv[0]))  # ECF Rule 2: length first, then bytewise
+        items = [(encode(k, key_order), encode(val, key_order)) for k, val in v.items()]
+        # ECF Rule 2: length first, then bytewise. (RFC 8949 §4.2.1 bytewise only when key_order says so.)
+        items.sort(key=(lambda kv: kv[0]) if key_order == "bytewise" else (lambda kv: (len(kv[0]), kv[0])))
         for (a, _), (b, _) in zip(items, items[1:]):
             if a == b:
                 raise CBORError("duplicate map key after encoding (ECF Rule 5)")
@@ -120,6 +124,31 @@ def encode(v: object) -> bytes:
     if v is UNDEFINED:
         return b"\xf7"
     raise CBORError(f"cannot encode {type(v).__name__}")
+
+
+# ── probe encoding: deliberately NOT ECF ────────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class Pairs:
+    """A map written pair by pair, so a probe can carry the same key twice. Never a Python dict: a dict cannot hold it."""
+
+    items: tuple
+
+
+def encode_probe(v: object) -> bytes:
+    """ECF in every respect EXCEPT that a Tag is written as a tag and a Pairs map keeps its duplicates (sorted with the
+    same Rule 2 order, stable). For building the non-conformant inputs a refusal requirement sends, and the content hashes
+    over those exact bytes. Nothing a conformant frame needs is built with this."""
+    if isinstance(v, Tag):
+        return _head(6, v.number) + encode_probe(v.value)
+    if isinstance(v, Pairs):
+        items = sorted(((encode_probe(k), encode_probe(val)) for k, val in v.items), key=lambda kv: (len(kv[0]), kv[0]))
+        return _head(5, len(items)) + b"".join(k + val for k, val in items)
+    if isinstance(v, dict):
+        return encode_probe(Pairs(tuple(v.items())))
+    if isinstance(v, (list, tuple)):
+        return _head(4, len(v)) + b"".join(encode_probe(x) for x in v)
+    return encode(v)
 
 
 # ── decoding ────────────────────────────────────────────────────────────────────────────────────

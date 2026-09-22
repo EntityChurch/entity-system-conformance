@@ -69,18 +69,26 @@ why   = "§2.10 / §1.3's MUST NOT, measured as 'B is answered the way A is'."
 [[requirement.arm]]
 name  = "control"
 kind  = "negative-control"
-given = "hello A and hello B' where B' adds the member AND a CBOR tag on it"
-why   = """MANDATORY ANTI-VACUITY. B' must be answered DIFFERENTLY from A (ENTITY-CBOR-ENCODING §6.3: \
-400 non_canonical_ecf). This proves the pair comparison can detect a refusal at all — without it, a \
-suite whose 'same outcome' assertion never looks past the transport passes every peer."""
+given = "the same_outcome_class assertion applied to fixture outcome pairs: (200, 400 non_canonical_ecf), (200, close), (200, 200 with a different code slot); and to (200, 200)"
+why   = """MANDATORY ANTI-VACUITY, suite-side. The first three pairs must FAIL the assertion and the last must pass. \
+This proves the pair comparison can detect a refusal at all — without it, a suite whose 'same outcome' assertion \
+never looks past the transport passes every peer. \
+⛔ CHANGED 2026-09-13 (d), found by running (F58): this control was hello B' = the member wrapped in a CBOR tag, \
+which must be refused under ENTITY-CBOR-ENCODING §6.3. That borrowed another requirement's verdict: on a peer \
+that accepts tags (UNALLOCATED-cbor-tag-rejected FAIL, measured on entity-core-go) this requirement could only \
+ever be INCONCLUSIVE, whatever the peer did with unknown fields. The control's stated subject is the comparator, \
+so it is now tested on the comparator. The tagged twin is still sent, as a witness."""
   [[requirement.arm.step]]
-  op      = "send_hello"
-  capture = "tagged_member"
-  extra   = "the member wrapped in tag 1"
+  op      = "replay_fixture"
+  capture = "fixture"
+  fixture = "four outcome pairs: three differing (must fail the assertion), one equal (must pass)"
   [[requirement.arm.assert]]
   kind    = "same_outcome_class"
-  capture = "baseline,tagged_member"
-  expect  = "fails"
+  capture = "fixture"
+  expect  = "fails on the three differing pairs; passes on the equal pair"
+  [[requirement.arm.witness]]
+  field = "tagged_member"
+  why   = "hello B' (the member wrapped in tag 1), as the control was first written. Cohort data for UNALLOCATED-cbor-tag-rejected, never scored here."
 
 [[requirement.arm]]
 name   = "non-conformant-witness"

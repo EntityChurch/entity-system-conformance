@@ -67,6 +67,8 @@ def parse(argv: list[str]):
     ap.add_argument("-sign-message", "--sign-message", choices=ident.SIGN_MESSAGES, default="hash33")
     ap.add_argument("-posture-grants", "--posture-grants", default=None)
     ap.add_argument("-posture-pre-dispatch-layer", "--posture-pre-dispatch-layer", action="store_true")
+    ap.add_argument("-declared-max-payload", "--declared-max-payload", type=int, default=None,
+                    help="the peer's CONFIGURED §4.10(a) bound in bytes, from its posture. Absent = undeclared: ECP-R66 SKIPs")
     ap.add_argument("-list-requirements", "--list-requirements", action="store_true")
     return ap.parse_known_args(argv)
 
@@ -93,11 +95,12 @@ def main(argv: list[str]) -> int:
         selected = [r for r in selected if checks.CATEGORY.get(r) == a.category]
 
     broken = self_check()
-    ctx = checks.Ctx(a.addr, a.read_timeout, a.sign_message, a.posture_pre_dispatch_layer, a.quiet_wait)
+    ctx = checks.Ctx(a.addr, a.read_timeout, a.sign_message, a.posture_pre_dispatch_layer, a.quiet_wait,
+                     a.declared_max_payload)
     started = time.time()
     results = [] if broken else [checks.run(r, ctx) for r in selected]
 
-    counts = {v: sum(1 for r in results if r.verdict == v) for v in ("PASS", "FAIL", "INCONCLUSIVE", "SKIP")}
+    counts = {v: sum(1 for r in results if r.verdict == v) for v in ("PASS", "WARN", "FAIL", "INCONCLUSIVE", "SKIP")}
     if broken:
         status, code = "ERROR", "self-check"
     elif counts["FAIL"]:
@@ -119,6 +122,7 @@ def main(argv: list[str]) -> int:
             "declared_by_invocation": a.posture_grants is not None,
             "grants": a.posture_grants or "not passed to the instrument — collected from the launching harness (tools/collect-run.py)",
             "pre_dispatch_layer": a.posture_pre_dispatch_layer,
+            "declared_limits": {"max_payload": a.declared_max_payload},
             "transport": "tcp",
         },
         "sign_message": a.sign_message,
@@ -127,9 +131,11 @@ def main(argv: list[str]) -> int:
                                               "unrecognized": unknown or None}.items() if v},
         "started_at": int(started), "duration_s": round(time.time() - started, 3),
         # Keystone's census reads these two groups (F41): summary counts, and a one-line probe row.
-        "summary": {"total": len(results), "passed": counts["PASS"], "warned": 0, "failed": counts["FAIL"],
+        "summary": {"total": len(results), "passed": counts["PASS"], "warned": counts["WARN"], "failed": counts["FAIL"],
                     "skipped": counts["SKIP"] + counts["INCONCLUSIVE"], "inconclusive": counts["INCONCLUSIVE"],
-                    "peer_attributable": sum(1 for r in results if r.peer_attributable)},
+                    "peer_attributable": sum(1 for r in results if r.peer_attributable),
+                    # checks whose verdict was withheld because a connection to the peer could not be opened (F57)
+                    "unreachable": sum(1 for r in results if "connections_not_opened" in r.witnesses)},
         "peer": a.peer or a.addr, "status": status, "code": code,
         # trusted = the instrument itself is sound for this run: its self-check passed, no suite defect, and every
         # verdict it reached had a negative control that ran. It says nothing about whether the peer passed.

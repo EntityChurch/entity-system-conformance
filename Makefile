@@ -12,7 +12,9 @@
 # library runs in a container. `lint` stays containerised so the interpreter version is pinned.
 
 .PHONY: help build corpus test lint lint-native lint-ignored lint-sources lint-spec-data lint-requirements lint-items check clean \
-        install-probe keystone-s1 keystone-oracle generator-s1 generator-oracle core-go-s1 core-go-oracle differential \
+        install-probe require-suite require-peers peers peer-identity inbox lint-inbox lint-suite-slot \
+        keystone-suite generator-suite core-go-suite \
+        keystone-s1 keystone-oracle generator-s1 generator-oracle core-go-s1 core-go-oracle differential \
         substrate-go peer-up peer-down oracle-run register
 .DEFAULT_GOAL := help
 
@@ -49,21 +51,26 @@ help:
 	@echo "  lint        spec-data digests + ECP id index + requirement schema + source read-state, in $(PYTHON_IMAGE)"
 	@echo "  lint-native the same on host python3 (in the host contract; unpinned interpreter version)"
 	@echo "  check       build + test + lint"
-	@echo "  build       the prototype suite (suites/py-prototype) -> $(SUITE_BIN) + $(SUITE_BIN).d (pinned interpreter, requirement digests)"
-	@echo "  test        the suite's codec vs the ECF corpus, Ed25519 vs RFC 8032, in the pinned interpreter"
+	@echo "  build       suite 1 ($(S1)) -> $(S1_BIN) + $(S1_BIN).d (pinned interpreter, requirement digests)"
+	@echo "              ⛔ builds ONE suite. Any other suite is DELIVERED as an executable, not built here."
+	@echo "  test        suite 1's codec vs the ECF corpus, Ed25519 vs RFC 8032, in the pinned interpreter"
 	@echo
-	@echo "  keystone-s1     the suite on KEYSTONE_PEERS via keystone census --probe  (default: $(KEYSTONE_PEERS))"
-	@echo "  keystone-oracle validate-peer on the same peers via the same driver"
-	@echo "  generator-s1 / generator-oracle   the same pair on GENERATOR_TARGETS via host-launch"
-	@echo "  core-go-s1 / core-go-oracle   the same pair against core-go entity-peer (after peer-up)"
+	@echo "  ⭐ the run path takes SUITE=<name> (default $(SUITE)); see require-suite for what a suite must supply"
+	@echo "  keystone-suite  SUITE on KEYSTONE_PEERS via keystone census --probe  (default set: $(KEYSTONE_PEERS))"
+	@echo "  generator-suite SUITE on GENERATOR_TARGETS via host-launch (CLIENT slot)"
+	@echo "  core-go-suite   SUITE against core-go entity-peer (after peer-up)"
+	@echo "  keystone-s1 / generator-s1 / core-go-s1   the three above pinned to SUITE=$(S1), building it first"
+	@echo "  keystone-oracle / generator-oracle / core-go-oracle   validate-peer on the same peers, same drivers"
+	@echo "  require-suite   SUITE=<name>: what that suite still has to supply before it can run"
 	@echo "  differential    join all collected runs by requirement id -> $(OUT)/DIFFERENTIAL.md"
 	@echo "  corpus      canonical CBOR build of requirements/ -> $(OUT)/requirement-corpus.cbor + its digest"
 	@echo
 	@echo "  peers           expand the declared peer set (suites/*/PEERS.diag) — membership is a RULE, not a list"
 	@echo "  peer-identity   PEER=<name>: that peer's identity/pin, and whether it is contract-certified"
+	@echo "  ⭐ inbox         sibling ROUTING-* whose To: names us, and which are on no tracker (AP-17)"
 	@echo "  the lint parts, each runnable alone and each with a --self-test:"
 	@echo "    lint-requirements lint-items lint-sources lint-spec-data lint-suite-independence"
-	@echo "    lint-suite-constants lint-peer-diversity lint-implements lint-control-set lint-ignored"
+	@echo "    lint-suite-slot lint-suite-constants lint-peer-diversity lint-implements lint-control-set lint-ignored lint-inbox"
 	@echo
 	@echo "  substrate-go   build the reference image via $(SUBSTRATE_GO)'s own 'make build'"
 	@echo "  peer-up        run $(GO_IMAGE) entity-peer as $(PEER_NAME) on network $(NET)"
@@ -93,12 +100,18 @@ PYRT_SHA256  ?= 1f37044c8cdbd74d5ee112a753c65ef209fedd169c98f3e4e748a93e27eb27a4
 MUSL_IMAGE   ?= docker.io/library/alpine@sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e
 # The requirement corpus this suite is built from. One place, so a layout move is one edit.
 REQ_DIR      := requirements/entity-core-protocol
-SUITE_REQS      := $(shell awk '!/^#/ && NF {print $$1}' suites/py-prototype/IMPLEMENTS)
-SUITE_BIN           := $(OUT)/bin/py-prototype
-SUITE_SRC       := $(shell find suites/py-prototype/run.py suites/py-prototype/prototype -name '*.py') suites/py-prototype/launcher.sh suites/py-prototype/IMPLEMENTS
+# ⛔ THE BUILD KNOWS ONE SUITE; THE RUN PATH KNOWS NONE. These `S1_*` names are suite 1's and are
+# deliberately NOT the generic ones: this Makefile can build exactly one instrument (a bundled
+# CPython), and pretending otherwise would be a second name standing in for content. A suite in
+# another language is DELIVERED as a binary — it is not built here, and `require-suite` says so
+# rather than failing with "no rule to make target".
+S1           := py-prototype
+S1_BIN       := $(OUT)/bin/$(S1)
+S1_REQS      := $(shell awk '!/^#/ && NF {print $$1}' suites/$(S1)/IMPLEMENTS)
+S1_SRC       := $(shell find suites/$(S1)/run.py suites/$(S1)/prototype -name '*.py') suites/$(S1)/launcher.sh suites/$(S1)/IMPLEMENTS
 CACHE        := $(OUT)/cache
 # The pinned interpreter, run on the repo read-only: `make test` executes the same bits the slots will.
-PYRT = podman run --rm --network=none $(PODMAN_CAPS) -v $(CURDIR):/repo:ro,Z -v $(abspath $(SUITE_BIN)).d:/b:ro,Z -w /repo/suites/py-prototype \
+PYRT = podman run --rm --network=none $(PODMAN_CAPS) -v $(CURDIR):/repo:ro,Z -v $(abspath $(S1_BIN)).d:/b:ro,Z -w /repo/suites/$(S1) \
 	-e PYTHONHOME=/b/pyrt/python -e PYTHONDONTWRITEBYTECODE=1 $(MUSL_IMAGE) /b/pyrt/ld-musl-x86_64.so.1 --library-path /b/pyrt/python/lib /b/pyrt/python/bin/python3.12 -s -B
 
 $(CACHE)/pyrt.tgz:
@@ -108,18 +121,18 @@ $(CACHE)/pyrt.tgz:
 	@echo "$(PYRT_SHA256)  $(CACHE)/pyrt.tgz.part" | sha256sum -c --quiet || { echo "build: interpreter tarball does NOT match PYRT_SHA256 — refusing" >&2; rm -f $(CACHE)/pyrt.tgz.part; exit 2; }
 	mv $(CACHE)/pyrt.tgz.part $@
 
-build: $(SUITE_BIN) $(OUT)/requirement-corpus.cbor
+build: $(S1_BIN) $(OUT)/requirement-corpus.cbor
 
-$(SUITE_BIN): $(SUITE_SRC) $(CACHE)/pyrt.tgz $(addprefix $(REQ_DIR)/,$(addsuffix .diag,$(SUITE_REQS)))
-	@rm -rf $(SUITE_BIN).d && mkdir -p $(SUITE_BIN).d/pyrt $(SUITE_BIN).d/suite
-	tar -xzf $(CACHE)/pyrt.tgz -C $(SUITE_BIN).d/pyrt
-	install -m 0755 $(CACHE)/ld-musl-x86_64.so.1 $(SUITE_BIN).d/pyrt/ld-musl-x86_64.so.1
-	cp -r suites/py-prototype/run.py suites/py-prototype/prototype $(SUITE_BIN).d/suite/
+$(S1_BIN): $(S1_SRC) $(CACHE)/pyrt.tgz $(addprefix $(REQ_DIR)/,$(addsuffix .diag,$(S1_REQS)))
+	@rm -rf $(S1_BIN).d && mkdir -p $(S1_BIN).d/pyrt $(S1_BIN).d/suite
+	tar -xzf $(CACHE)/pyrt.tgz -C $(S1_BIN).d/pyrt
+	install -m 0755 $(CACHE)/ld-musl-x86_64.so.1 $(S1_BIN).d/pyrt/ld-musl-x86_64.so.1
+	cp -r suites/$(S1)/run.py suites/$(S1)/prototype $(S1_BIN).d/suite/
 	@python3 -B tools/build-info.py --req-dir $(REQ_DIR) --loader $(CACHE)/ld-musl-x86_64.so.1 \
 		--pyrt-sha256 $(PYRT_SHA256) --musl-image $(MUSL_IMAGE) \
-		--out $(SUITE_BIN).d/suite/BUILD.json \
-		--requirements-out $(SUITE_BIN).d/suite/requirements.cbor $(SUITE_REQS)
-	install -m 0755 suites/py-prototype/launcher.sh $@
+		--out $(S1_BIN).d/suite/BUILD.json \
+		--requirements-out $(S1_BIN).d/suite/requirements.cbor $(S1_REQS)
+	install -m 0755 suites/$(S1)/launcher.sh $@
 	@$@ -list-requirements >/dev/null && echo "build: $@ runs"
 
 # The canonical build of the whole requirement corpus, and its ONE content digest. This is what
@@ -134,8 +147,27 @@ $(OUT)/requirement-corpus.cbor: $(wildcard $(REQ_DIR)/*.diag)
 	@python3 -B tools/requirement-corpus.py --out $@
 
 # The codec against the snapshot's ECF corpus and Ed25519 against RFC 8032, before it touches any peer.
-test: $(SUITE_BIN)
+# Suite 1's own unit tests, in suite 1's bundled interpreter. A delivered suite brings its own.
+test: $(S1_BIN)
 	$(PYRT) -m unittest discover -s tests -v
+
+# >>> RUN PATH — suite-generic below this line (lint-suite-slot enforces it) ────────────────────
+#
+# ⭐ SUITE= IS THE SLOT A SECOND INSTRUMENT LANDS IN, and until 2026-09-16 there was not one: every
+# target below named `py-prototype` literally, at 25 sites. `tools/collect-run.py` and
+# `tools/peer-binding.py` both already took `--instrument` / `--suite`, so the TOOLS were ready and
+# the make layer was the thing that fixed the value. That is the same defect this seat keeps finding
+# one level down — an input that decides the outcome, chosen once, by one party, never written down
+# — pointed at our own runner. It would have been discovered the day suite 2 delivered a binary and
+# there was nowhere to put it.
+#
+# A suite that is not suite 1 is NOT BUILT HERE. Its author delivers an executable; drop it at
+# $(OUT)/bin/<name> (plus an optional <name>.d bundle directory, which suite 1 needs for its
+# interpreter and a static binary does not) and declare suites/<name>/PEERS.diag + IMPLEMENTS.
+# `make require-suite SUITE=<name>` tells you exactly what is missing.
+SUITE        ?= $(S1)
+SUITE_BIN    := $(OUT)/bin/$(SUITE)
+SUITE_DIR    := suites/$(SUITE)
 
 # ── run it ────────────────────────────────────────────────────────────────────────────────────
 # Keystone first: its census driver launches each peer in that peer's own container, exactly as for
@@ -149,7 +181,7 @@ KEYSTONE       ?= ../entity-core-keystone
 # was an argument someone happened to type, and no artifact recorded which one. That is AGENTS.md's
 # fairness rule (*the peer pair is a parameter*) on the suite/peer axis.
 #
-# The set now expands from suites/py-prototype/PEERS.diag against keystone's LIVE roster every run:
+# The set now expands from $(SUITE_DIR)/PEERS.diag against keystone's LIVE roster every run:
 # membership is a rule (roster minus declared exclusions), never a frozen list that goes stale as
 # the cohort grows — which is the defect keystone built tools/peer-tiers.tsv to fix one level down.
 # An override is still possible for a scoped diagnostic run; it is visible on the command line and
@@ -157,24 +189,53 @@ KEYSTONE       ?= ../entity-core-keystone
 # Host python3 (in the contract, operator 2026-09-12) — it must read KEYSTONE's tree, which is
 # outside every container mount here. Same precedent as collect-run.py. `?=` is recursive, so this
 # expands on use, not on every `make help`.
-KEYSTONE_PEERS ?= $(shell python3 -B tools/peer-binding.py --resolve --suite py-prototype --source keystone --keystone $(KEYSTONE))
-PROBE_NAME     := cnf-py-prototype
+KEYSTONE_PEERS ?= $(shell python3 -B tools/peer-binding.py --resolve --suite $(SUITE) --source keystone --keystone $(KEYSTONE))
+PROBE_NAME     := cnf-$(SUITE)
 
 # The declared peer set, expanded and inspectable — plus one peer's full identity record.
 # ⛔ `peer: "zig"` is not a measurement; `peer: zig @ <commit>, host sha256 <…>, contract absent` is.
 peers:
-	@echo "declared set (suites/py-prototype/PEERS.diag x keystone's live roster):"
+	@echo "declared set ($(SUITE_DIR)/PEERS.diag x keystone's live roster):"
 	@echo "  keystone ($(words $(KEYSTONE_PEERS))): $(KEYSTONE_PEERS)"
 	@echo "  generator: $(GENERATOR_TARGETS) @ $(GENERATOR_COMP)   core-go: $(CORE_GO_LABEL)"
-	@python3 -B tools/peer-binding.py --resolve --suite py-prototype --keystone $(KEYSTONE) >/dev/null
+	@python3 -B tools/peer-binding.py --resolve --suite $(SUITE) --keystone $(KEYSTONE) >/dev/null
 
 peer-identity:
 	@test -n "$(PEER)" || { echo "usage: make peer-identity PEER=<name>" >&2; exit 2; }
 	@python3 -B tools/peer-binding.py --identity $(PEER) --keystone $(KEYSTONE)
 
-install-probe: $(SUITE_BIN)
-	@rm -rf $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME).d
-	cp -a $(SUITE_BIN).d $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME).d
+# ⭐ AP-17'S ENFORCEMENT POINT — THE INSTRUMENT THAT PULLS. Delivery in this polyrepo is a
+# counterpart committing a document to their own tree; there is no notification and no queue, and
+# until 2026-09-16 nothing on this side enumerated. Host python3, like --resolve/--identity: it must
+# read SIBLING trees, which are outside every container mount here. Read-only, always.
+#
+# ⛔ DELIBERATELY NOT IN `make check`, and the reason is the rule it serves. check must be runnable
+# with no sibling repo present; an inbox gate that cannot see the siblings would report an empty
+# inbox, and an empty inbox and an unread one print the same thing. So the live pull is this target,
+# run by a person, and `lint-inbox` gates only the PARSER — which is the half a container can see.
+inbox:
+	@python3 -B tools/inbox.py --self-test
+	@python3 -B tools/inbox.py --siblings $(dir $(abspath $(KEYSTONE)))
+
+# ⛔ THE FLOOR ON THE SUITE SIDE, the twin of require-peers. A missing instrument must say WHICH
+# artifact is absent and how it gets there, because the failure it replaces — make's "no rule to
+# make target output/bin/<name>" — reads as a broken Makefile rather than as an undelivered suite.
+require-suite:
+	@test -x "$(SUITE_BIN)" || { \
+	  echo "REFUSING — no instrument at $(SUITE_BIN) for SUITE=$(SUITE)." >&2; \
+	  echo "  suite 1 ($(S1)) is built by 'make build'. Any other suite is DELIVERED, not built here:" >&2; \
+	  echo "  install its executable at $(SUITE_BIN) (+ $(SUITE_BIN).d if it needs a bundle dir)." >&2; exit 2; }
+	@test -f "$(SUITE_DIR)/PEERS.diag" || { \
+	  echo "REFUSING — $(SUITE_DIR)/PEERS.diag is missing; the peer set is DECLARED DATA (ADR-0003 §7)." >&2; \
+	  echo "  A run whose peer set nobody declared is the input-nobody-wrote-down defect, again." >&2; exit 2; }
+	@test -f "$(SUITE_DIR)/IMPLEMENTS" || { \
+	  echo "REFUSING — $(SUITE_DIR)/IMPLEMENTS is missing; a verdict must name the requirement ids it claims." >&2; exit 2; }
+	@echo "require-suite: SUITE=$(SUITE) — instrument, declared peer set and IMPLEMENTS all present"
+
+install-probe: require-suite
+	@rm -rf $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME) $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME).d
+	@if [ -d "$(SUITE_BIN).d" ]; then cp -a $(SUITE_BIN).d $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME).d; \
+	 else echo "install-probe: $(SUITE) ships no bundle directory (a self-contained binary) — installing the executable alone"; fi
 	install -m 0755 $(SUITE_BIN) $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME)
 
 # ⛔ THE FLOOR, because $(shell) SWALLOWS EXIT CODES. If keystone's tree is missing or its roster
@@ -184,14 +245,20 @@ install-probe: $(SUITE_BIN)
 # matching (item-gate's MIN_ITEMS) and as F57's all-unreachable report. Refuse instead.
 require-peers:
 	@test -n "$(strip $(KEYSTONE_PEERS))" || { \
-	  echo "REFUSING — the declared keystone peer set expanded to EMPTY. suites/py-prototype/PEERS.diag" >&2; \
+	  echo "REFUSING — the declared keystone peer set expanded to EMPTY. $(SUITE_DIR)/PEERS.diag" >&2; \
 	  echo "  resolves against $(KEYSTONE)'s roster; run 'make peers' to see why it could not look." >&2; \
 	  echo "  A run over zero peers is not a smaller run, it is not a run." >&2; exit 2; }
 
-keystone-s1: require-peers install-probe
+keystone-suite: require-peers install-probe
 	cd $(KEYSTONE) && tools/run-cohort-census.sh --probe $(PROBE_NAME) $(KEYSTONE_PEERS)
-	python3 -B tools/collect-run.py keystone --instrument py-prototype --src $(KEYSTONE)/output/scratch/$(PROBE_NAME) \
+	python3 -B tools/collect-run.py keystone --instrument $(SUITE) --src $(KEYSTONE)/output/scratch/$(PROBE_NAME) \
 		--keystone $(KEYSTONE) --out $(OUT)/runs $(KEYSTONE_PEERS)
+
+# Suite 1's spelling of the three targets above, kept because AGENTS.md and the workflow document
+# name them. They pin SUITE and build first; `-s1` would otherwise become a name that runs whatever
+# SUITE happened to be set to, which is the defect this whole section exists to remove.
+keystone-s1: $(S1_BIN)
+	@$(MAKE) --no-print-directory keystone-suite SUITE=$(S1)
 
 # The reference oracle on the SAME peers, via the same driver, for the differential.
 # ⚠ A NON-probe census ends by STAMPING keystone's TRACKED tools/peer-tiers.tsv with the oracle pin.
@@ -218,16 +285,19 @@ GEN_RUN = podman run --rm --network=none --security-opt label=disable --timeout 
 	-v $(abspath $(OUT))/runs/generator:/out
 gen_image = $$(python3 -c "import tomllib;print(tomllib.load(open('$(GENERATOR)/languages/'+'$$t'+'/profile.toml','rb'))['toolchain']['image'])")
 
-generator-s1: install-probe
-	@mkdir -p $(OUT)/runs/generator/py-prototype
+generator-suite: install-probe
+	@mkdir -p $(OUT)/runs/generator/$(SUITE)
 	@for t in $(GENERATOR_TARGETS); do \
-		echo "== generator $$t/$(GENERATOR_COMP): py-prototype (CLIENT slot)"; \
+		echo "== generator $$t/$(GENERATOR_COMP): $(SUITE) (CLIENT slot)"; \
 		$(GEN_RUN) -e CLIENT=/church/$(notdir $(abspath $(KEYSTONE)))/output/s4-oracles/$(PROBE_NAME) $(gen_image) \
-			./tools/host-launch $$t $(GENERATOR_COMP) -peer $$t-$(GENERATOR_COMP) -profile core -json-out /out/py-prototype/$$t-$(GENERATOR_COMP).json \
-			| grep -E "^(PASS|FAIL|SKIP|INCON|ERROR|py-prototype|    )" ; \
+			./tools/host-launch $$t $(GENERATOR_COMP) -peer $$t-$(GENERATOR_COMP) -profile core -json-out /out/$(SUITE)/$$t-$(GENERATOR_COMP).json \
+			| grep -E "^(PASS|FAIL|SKIP|INCON|ERROR|$(SUITE)|    )" ; \
 	done
-	python3 -B tools/collect-run.py generator --instrument py-prototype --src $(OUT)/runs/generator/py-prototype --generator $(GENERATOR) \
+	python3 -B tools/collect-run.py generator --instrument $(SUITE) --src $(OUT)/runs/generator/$(SUITE) --generator $(GENERATOR) \
 		--comp $(GENERATOR_COMP) --out $(OUT)/runs $(addsuffix -$(GENERATOR_COMP),$(GENERATOR_TARGETS))
+
+generator-s1: $(S1_BIN)
+	@$(MAKE) --no-print-directory generator-suite SUITE=$(S1)
 
 generator-oracle:
 	@mkdir -p $(OUT)/runs/generator/validate-peer
@@ -240,13 +310,18 @@ generator-oracle:
 		--comp $(GENERATOR_COMP) --out $(OUT)/runs $(addsuffix -$(GENERATOR_COMP),$(GENERATOR_TARGETS))
 
 # core-go's reference peer on the bootstrap posture (peer-up), our suite in its own container on the network.
-core-go-s1: $(SUITE_BIN)
-	@test -f $(PEER_POSTURE) || { echo "core-go-s1: COULD NOT LOOK — no $(PEER_POSTURE); run make peer-up (it records the posture)" >&2; exit 2; }
-	@mkdir -p $(OUT)/runs/core-go/py-prototype
+# The container is the musl base for suite 1's loader; a static binary runs in it unchanged, which is
+# why the brief suggests one — the invocation below is the standard slot, identical for either.
+core-go-suite: require-suite
+	@test -f $(PEER_POSTURE) || { echo "core-go-suite: COULD NOT LOOK — no $(PEER_POSTURE); run make peer-up (it records the posture)" >&2; exit 2; }
+	@mkdir -p $(OUT)/runs/core-go/$(SUITE)
 	-podman run --rm --network $(NET) $(PODMAN_CAPS) -v $(abspath $(OUT)):/out:Z $(MUSL_IMAGE) \
-		/out/bin/py-prototype -addr $(PEER_NAME):$(PEER_PORT) -peer core-go -posture-grants "$$(sed -n 's/^grants=//p' $(PEER_POSTURE))" \
-		-json-out /out/runs/core-go/py-prototype/$(CORE_GO_LABEL).json
-	python3 -B tools/collect-run.py core-go --instrument py-prototype --src $(OUT)/runs/core-go/py-prototype --posture-file $(PEER_POSTURE) --out $(OUT)/runs $(CORE_GO_LABEL)
+		/out/bin/$(SUITE) -addr $(PEER_NAME):$(PEER_PORT) -peer core-go -posture-grants "$$(sed -n 's/^grants=//p' $(PEER_POSTURE))" \
+		-json-out /out/runs/core-go/$(SUITE)/$(CORE_GO_LABEL).json
+	python3 -B tools/collect-run.py core-go --instrument $(SUITE) --src $(OUT)/runs/core-go/$(SUITE) --posture-file $(PEER_POSTURE) --out $(OUT)/runs $(CORE_GO_LABEL)
+
+core-go-s1: $(S1_BIN)
+	@$(MAKE) --no-print-directory core-go-suite SUITE=$(S1)
 
 core-go-oracle:
 	@test -f $(PEER_POSTURE) || { echo "core-go-oracle: COULD NOT LOOK — no $(PEER_POSTURE); run make peer-up (it records the posture)" >&2; exit 2; }
@@ -259,7 +334,42 @@ differential:
 	python3 -B tools/differential.py --runs $(OUT)/runs --requirements $(REQ_DIR) --out $(OUT)/DIFFERENTIAL.md
 	@cat $(OUT)/DIFFERENTIAL.md
 
-lint: lint-ignored lint-suite-independence lint-suite-constants lint-sources lint-spec-data lint-requirements lint-items lint-peer-diversity lint-implements lint-control-set
+# <<< RUN PATH — end of the suite-generic region ────────────────────────────────────────────────
+
+lint: lint-ignored lint-suite-independence lint-suite-slot lint-suite-constants lint-sources lint-spec-data lint-requirements lint-items lint-peer-diversity lint-implements lint-control-set lint-inbox
+
+# ⭐ THE ENFORCEMENT POINT FOR SUITE=, without which it is a convention and decays back into a
+# constant on the first hurried edit. Between the RUN PATH markers, no recipe may name a suite
+# literally — comments may, because naming the incident is the opposite of depending on it (the
+# same carve-out docs/SOURCES-CITATION-DEBT had to make on its first day).
+#
+# ⚠ WHAT THIS DOES NOT DO, stated rather than left to inference: it checks the run path only, it
+# only knows the suites that exist in suites/, and it cannot tell a generic recipe from one that is
+# generic and wrong. It fires on the regression it was built for, and on nothing else.
+#
+# ⭐ It caught one on its first run: require-peers' REFUSING message still named
+# `suites/py-prototype/PEERS.diag` literally, so a suite-2 run over an empty peer set would have
+# told the operator to go read suite 1's declaration. A wrong-but-plausible diagnostic is the worst
+# kind — it parses, it is actionable, and it sends you to the wrong file.
+# ⚠ Graded BUILT, not SOLID: what it caught was this session's own incomplete edit, not an
+# independent regression by someone who had not just written the gate. That is a weaker claim than
+# the scale's "has caught a real incident" and it is the honest one.
+# The half of the inbox a container can see: the addressee parser. The live pull is `make inbox`
+# and needs the sibling trees. ⚠ This gate passing says the parser is right, NOT that the inbox is
+# empty -- and those two are easy to confuse in a green run, which is why it prints the difference.
+lint-inbox:
+	@$(PY) tools/inbox.py --self-test
+	@echo "lint-inbox: the PARSER is gated; the inbox itself is not. Run 'make inbox' — it needs the sibling trees."
+
+lint-suite-slot:
+	@test -n "$$(sed -n '/^# >>> RUN PATH/,/^# <<< RUN PATH/p' Makefile)" || { \
+	  echo "lint-suite-slot: COULD NOT LOOK — the RUN PATH markers are gone from the Makefile" >&2; exit 2; }
+	@bad=$$(sed -n '/^# >>> RUN PATH/,/^# <<< RUN PATH/p' Makefile | grep -vE '^[[:space:]]*#' \
+	        | grep -nE "$$(ls -d suites/*/ | xargs -n1 basename | paste -sd'|')"); \
+	 if [ -n "$$bad" ]; then \
+	   echo "lint-suite-slot: the run path names a suite literally; it must use \$$(SUITE):" >&2; \
+	   echo "$$bad" >&2; exit 1; fi
+	@echo "lint-suite-slot: the run path names no suite literally (SUITE=$(SUITE), $$(ls -d suites/*/ | wc -l) suite(s) declared)"
 
 # Stage 7 of docs/WORKFLOW-SUITE-BRINGUP.md — the expected-outcome set, pinned to the obligation it
 # was measured against. Operator direction 2026-09-16: a bring-up chunk must not be built against

@@ -190,8 +190,8 @@
       "requirement": "ECP-R3",
       "requirement_digest": "08155caf12e17855",
       "obligation": "a received EXECUTE whose root entity's content_hash does not match its {type, data} is refused with a coded EXECUTE_RESPONSE; the code is NOT asserted",
-      "fit_for_bringup": true,
-      "why_fit": "both outcome classes observed on real peers in one run: 3 conformant, 1 non-conformant",
+      "fit_for_bringup": false,
+      "why_unfit": "⛔ WITHDRAWN 2026-09-16 (c), and NOT because a peer moved. The obligation this row scores against was falsified by ENTITY-CORE-PROTOCOL 0.8.2.28, which added to §4.11's cause table the exact row ECP-R3's reading argues does not exist: `root entity self-consistency -> 400 hash_mismatch`, and split arm (4) into (4a) resolution integrity and (4b) root self-consistency so a check can drive each alone. The OBSERVATIONS below stand — they are what came back on the wire. The EXPECTATIONS do not: `rust-content` answered `non_canonical_ecf` and is recorded PASS here on the argument that no code is pinned. Under .28 a code is pinned and that peer is answering the wrong one. ⇒ 1 of 4 expectations inverts, and it is not safe to hand a new suite a comparison set we know is wrong for a quarter of its rows. Re-measure against a re-authored ECP-R3, then restore.",
       "expectations": [
         {
           "peer": "core-go",
@@ -223,11 +223,26 @@
         }
       ],
       "note": [
-        "⭐ THE TWO PASSING CODES DIFFER (`hash_mismatch` vs `non_canonical_ecf`) AND BOTH ARE SCORED PASS,",
-        "WHICH IS CORRECT AND IS THE MOST INSTRUCTIVE ROW HERE. This requirement asserts the FRAME and",
-        "leaves the code unasserted, because no section of the specification assigns one for this cause and",
-        "inventing one is prohibition 2. A second suite that scores these two peers differently from each",
-        "other has almost certainly pinned a code — and that disagreement is worth more than agreement."
+        "⛔ THE PARAGRAPH BELOW IS WRONG AND IS KEPT RATHER THAN DELETED, because what it got wrong is",
+        "the most useful thing in this file. It read, in full:",
+        "",
+        "  '⭐ THE TWO PASSING CODES DIFFER (`hash_mismatch` vs `non_canonical_ecf`) AND BOTH ARE SCORED",
+        "   PASS, WHICH IS CORRECT AND IS THE MOST INSTRUCTIVE ROW HERE. This requirement asserts the",
+        "   FRAME and leaves the code unasserted, because no section of the specification assigns one for",
+        "   this cause and inventing one is prohibition 2. A second suite that scores these two peers",
+        "   differently from each other has almost certainly pinned a code — and that disagreement is",
+        "   worth more than agreement.'",
+        "",
+        "⭐ READ THE LAST SENTENCE AGAINST 0.8.2.28. A second suite that scores these two peers",
+        "differently is RIGHT, and this note pre-labels it as almost certainly wrong. That is this file's",
+        "own header failing in the one place it warns about: the data stayed a comparison set and the NOTE",
+        "became an answer key. A prose gloss telling the reader what a disagreement will mean is an answer",
+        "key however carefully the numbers beside it are hedged.",
+        "",
+        "⚠ AND THE FACTUAL ERROR WAS NOT A GUESS — arch's 0.8.2.28 commit message quotes us doing it:",
+        "our CQ-45 reading was 'a correct reading of §4.11's table and false about the corpus, since §6.5",
+        "assigns it and we had told them so in CQ-37's ruling.' The table was read; the corpus was not.",
+        "That is D15's shape — a negative claimed over a region that could not have held the positive."
       ]
     },
     {

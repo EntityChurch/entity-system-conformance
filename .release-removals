@@ -6,9 +6,18 @@
 #
 # One path or path-prefix per line. Blank lines and `#` comments are ignored.
 
-# ⭐ NOTHING IS LISTED, AND THAT IS A MEASUREMENT RATHER THAN AN OVERSIGHT.
-# No version of this repository has been published yet, so there is no earlier public tree for
-# anything to have disappeared from. The first release adds files and withdraws none.
+# ── The repository placeholder ────────────────────────────────────────────────
+# `temp.txt` was the single empty-repository placeholder that existed only so this
+# repository had a branch before its first release was prepared. It never carried
+# content, nothing referenced it, and this release replaces it with the actual tree.
+# It is listed here because it WAS on the published branch, and from outside a
+# vanished path cannot be told apart from a mistake — which is what this file is for.
+temp.txt
+
+# ⭐ NOTHING ELSE IS LISTED, AND THAT IS A MEASUREMENT RATHER THAN AN OVERSIGHT.
+# No released version of this repository has been published yet, so apart from the
+# placeholder above there is no earlier public tree for anything to have disappeared
+# from. The first release adds files and withdraws nothing a reader ever used.
 #
 # Two things worth knowing if you are the next person here: a path that stops being published is
 # just as invisible to a reader as a path that is deleted, so both belong above; and if you

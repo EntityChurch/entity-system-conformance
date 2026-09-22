@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.3] — 2026-09-22
+
 **The first public release of this repository.** Nothing below has been published before, so all
 of it is new to anyone outside it.
 

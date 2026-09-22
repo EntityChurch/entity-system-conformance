@@ -1,0 +1,116 @@
+## ECP-R66-pending-c — keeps serving. The half a naive implementation fails, measured in the one
+## way §4.10(a) leaves available.
+##
+## THIRD OBLIGATION UNDER §9.1's LAST ROW. See ECP-R66-pending-b's header for why the id is arch's.
+
+[requirement]
+id_status   = "pending-split"
+under       = "ECP-R66"
+split_index = "c"
+routed      = "docs/status/FINDINGS-FROM-AUTHORING.md F3"
+title       = "After refusing over-limit input, the peer continues to serve"
+spec        = "ENTITY-CORE-PROTOCOL §4.10 (\"Rejection is clean, not collapse\")"
+spec_also   = ["§4.9 (the resilience floor this composes with)", "§4.10(a)", "§4.10(b)"]
+snapshot    = "core-0.8.2.21"
+level       = "MUST"
+profile     = ["core"]
+surface     = "wire"
+status      = "draft"
+
+reading = """
+§4.10: "hitting a bound returns the coded error (or refuses the connection) and the peer keeps
+serving -- it MUST NOT crash or degrade service to in-flight requests (composes with §4.9)."
+
+⭐ THE WHOLE DIFFICULTY IS WHAT "KEEPS SERVING" RANGES OVER, and getting it wrong produces a check
+that fails conformant peers. Two readings:
+
+  (i)  the CONNECTION survives the refusal and remains usable;
+  (ii) the PEER remains available and continues to answer.
+
+(i) IS EXCLUDED BY §4.10(a) ITSELF. Its emission shape permits the peer to "close the connection
+after a best-effort coded frame" when the over-size condition is detected before `request_id` is
+parsed. A requirement demanding same-connection survival would therefore score a peer non-conformant
+for taking a path the same clause explicitly allows -- and §4.10's own parenthetical says the same
+thing in three words: "(or refuses the connection)".
+
+So this requirement is (ii), and it is measured ON A FRESH CONNECTION. That is not a weakening: (ii)
+is the property §4.9 cares about and the one an operator cares about. A peer that dies, wedges, or
+stops accepting connections after an over-limit frame fails this, and no reading of §4.10 saves it.
+
+WHERE THE SAME CONNECTION *IS* MEASURABLE: when the peer answered with a correlated 413 and did NOT
+close, the connection is live by construction, and a suite MAY additionally assert continued service
+on it. That is an observation, not the requirement -- a peer is not more conformant for keeping the
+connection.
+
+"MUST NOT ... degrade service to in-flight requests" is the second half and it needs a concurrent
+in-flight request to observe. It is a REAL obligation and this file does not measure it; it is
+carried as a declared exclusion below rather than dropped, because §4.9's `concurrency` surface is
+where it belongs and authoring it here would produce a load test wearing a conformance check's
+clothes.
+"""
+
+[requirement.preconditions]
+grants          = []
+identities      = ["caller"]
+handlers        = []
+declared_limits = ["max_payload"]
+posture_axes    = ["seed_policy", "declared_limits"]
+
+[requirement.declared_exclusions]
+in_flight_degradation = "§4.10's 'MUST NOT degrade service to in-flight requests' is not measured here — it needs a concurrent in-flight request and belongs with the §4.9 / concurrency surface. Declared rather than dropped: an unstated omission is indistinguishable from nobody having looked."
+
+[[requirement.arm]]
+name  = "still-serving"
+kind  = "conformant"
+given = "an over-limit refusal has just occurred (by either permitted emission shape)"
+why   = "§4.10's MUST. The fresh connection is what makes this measurable against BOTH conformant shapes."
+  [[requirement.arm.step]]
+  op = "connect"
+  [[requirement.arm.step]]
+  op      = "send_execute"
+  capture = "over"
+  size    = "max_payload + 1"
+  note    = "the refusal itself is ECP-R66's subject, not this one's. Any of its conformant outcomes may occur here."
+  [[requirement.arm.step]]
+  op   = "connect"
+  as   = "fresh"
+  note = "A NEW CONNECTION, deliberately. §4.10(a) permits the peer to have closed the first one, so reusing it would make this requirement unpassable for a conformant peer."
+  [[requirement.arm.step]]
+  op         = "send_execute"
+  capture    = "after"
+  connection = "fresh"
+  note       = "the smallest well-formed request the posture can make succeed — its subject is that the peer ANSWERS, not what it answers."
+  [[requirement.arm.assert]]
+  kind    = "answered"
+  capture = "after"
+  why     = "'keeps serving' is answered-at-all. Asserting 200 here would silently require a grant covering the follow-up request, making this requirement fail on posture rather than on resilience — which is exactly the class of defect this repo was founded on."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the same fresh-connection request issued with NO preceding over-limit frame"
+why   = """MANDATORY, and here it is load-bearing rather than ceremonial: it establishes that the \
+follow-up request is answerable AT ALL under this posture. Without it, a peer that never answers \
+this request — for grant, routing, or handler reasons having nothing to do with resource bounds — \
+is indistinguishable from one the over-limit frame killed."""
+  [[requirement.arm.step]]
+  op = "connect"
+  [[requirement.arm.step]]
+  op      = "send_execute"
+  capture = "baseline"
+  [[requirement.arm.assert]]
+  kind    = "answered"
+  capture = "baseline"
+  why     = "if this fails, the run reports SKIP for the whole requirement — the instrument could not establish its own antecedent (GUIDE-CONFORMANCE §2.4b)."
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer that exits, wedges, or stops accepting connections on an over-limit frame"
+expect = "the fresh connection is refused or the request goes unanswered, while the control arm succeeded"
+why    = "the self-DoS §4.10 exists to prevent: a bound that turns an oversize frame into a kill switch has moved the vulnerability rather than closed it."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = "resource_bounds/r1_payload_over_limit"
+oracle_note       = "the reference oracle appears to fold keeps-serving INTO r1 rather than scoring it separately; provenance only, and see ECP-R66's predicted disagreement."

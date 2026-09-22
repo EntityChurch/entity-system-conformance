@@ -1,0 +1,18 @@
+# Nothing secret belongs here; refuse it if it ever lands.
+*.pem
+*.secret
+*.key
+*-pat*
+
+# Local agent context — injectable, never committed (ADR-0020).
+AGENTS.local.md
+.agents/
+
+# Run artifacts. A conformance run's output is evidence, not source: it is cited by
+# digest and reproduced, never committed.
+output/
+scratch/
+*.report.json
+
+# Consumed peers are vendored deliberately and per-peer; nothing here is auto-pulled.
+substrate/**/build/

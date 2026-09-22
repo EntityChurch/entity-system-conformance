@@ -1,0 +1,102 @@
+## ECP-R47 — a hello whose non-empty `protocols` set does not intersect the responder's is refused
+## with 400 incompatible_protocol.
+##
+## §9.1's negotiation row bundles TWO obligations with two different codes. This is the first;
+## ECP-R47-pending-b is the second. Routed, not split here.
+
+[requirement]
+id        = "ECP-R47"
+id_status = "allocated"
+title     = "A hello with a non-empty, non-intersecting `protocols` set is refused with 400 incompatible_protocol"
+spec      = "ENTITY-CORE-PROTOCOL §4.5"
+spec_also = ["§8.4 (the identifiers intersected)", "§4.7 (connect error-code contract)", "§9.1 (the floor row this id binds)"]
+snapshot  = "core-0.8.2.21"
+level     = "MUST"
+profile   = ["core"]
+surface   = "wire"
+status    = "draft"
+
+reading = """
+§4.5: "`400 incompatible_protocol` (§4.7) is reserved for a NON-EMPTY set that does not intersect
+the responder's: that code tells the caller 'we compared and share nothing'." And §4.5's field table:
+`protocols` is "Required with no default ... Intersection of the §8.4 protocol version identifiers
+(`entity-core/1.0`), must be non-empty."
+
+THE NON-EMPTY QUALIFIER IS THE REQUIREMENT, not a detail. §4.5 pins the two codes to two different
+inputs and says why: "The remedies differ -- send the field versus change the version -- and §4.7
+exists so the code selects the remedy." So a peer answering `incompatible_protocol` to an ABSENT
+`protocols` field has emitted a code whose remedy ("change your version") cannot be acted on, and a
+peer answering `invalid_request` to a well-formed non-intersecting set has told a caller its request
+was malformed when it was not. The two arms are each other's discriminator and neither is complete
+alone -- which is why the sibling obligation is a separate requirement rather than a second
+assertion here.
+
+WHAT VALUE TO SEND. The identifiers are §8.4's, today the single value `entity-core/1.0`, so the
+non-intersecting probe must be a well-formed identifier that is not that. §4.5 flags the hazard
+directly and it is worth quoting because it shapes the probe: "a peer advertising an identifier that
+resembles this document's SECTION numbering rather than §8.4's protocol version is well-formed,
+silently non-interoperable, and undetectable until the intersection is first enforced." So the probe
+value is chosen to be obviously-not-a-version (`"x-conformance-probe/0"`) rather than a plausible
+neighbour like `"entity-core/2.0"` -- a plausible neighbour would be indistinguishable from a peer
+that supports a version we did not know about, and would make a FUTURE-conformant peer fail.
+
+SCOPE. This is the responder-side gate only. §4.5's "responder computes the relationship ... and
+includes its own hello data in the EXECUTE_RESPONSE" describes the mechanism; the obligation asserted
+here is the refusal and its code.
+"""
+
+[requirement.preconditions]
+grants       = []                 # pre-authorization: §4.2 places hello before any grant exists
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["seed_policy"]
+note         = "no grant is required and none should be present in the check's assumptions — a hello refusal that depends on posture would be a different rule."
+
+[[requirement.arm]]
+name  = "refused"
+kind  = "conformant"
+given = "a well-formed hello whose `protocols` is `[\"x-conformance-probe/0\"]` — non-empty, and sharing nothing with §8.4's set"
+why   = "§4.5's MUST, at the code §4.5 reserves for exactly this input."
+  [[requirement.arm.step]]
+  op       = "send_hello"
+  capture  = "disjoint"
+  protocols = ["x-conformance-probe/0"]
+  note     = "every other hello field is well-formed and present, so the refusal cannot be attributed to anything but the intersection."
+  [[requirement.arm.assert]]
+  kind    = "status"
+  capture = "disjoint"
+  equals  = 400
+  [[requirement.arm.assert]]
+  kind    = "error_code"
+  capture = "disjoint"
+  equals  = "incompatible_protocol"
+  why     = "the decoded `result.data.code` (§5.2b.1). NOT `invalid_request` — that is the absent-or-empty arm's code and §4.5 rules the two apart by remedy."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the same hello with `protocols` = [\"entity-core/1.0\"]"
+why   = """MANDATORY. It proves the refusal discriminates on the INTERSECTION and not on the hello \
+being otherwise malformed, the transport being wrong, or the peer refusing every hello it does not \
+recognise. Without it, a peer that rejects all hellos passes the refusal arm."""
+  [[requirement.arm.step]]
+  op        = "send_hello"
+  capture   = "intersecting"
+  protocols = ["entity-core/1.0"]
+  [[requirement.arm.assert]]
+  kind       = "error_code"
+  capture    = "intersecting"
+  not_equals = "incompatible_protocol"
+  why        = "asserting success outright would fold in every other hello-validity rule; the control's subject is this code and nothing else."
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer that does not enforce the intersection"
+expect = "the handshake proceeds to `authenticate` and the connection is established with no shared protocol version"
+why    = "§4.5's own warning — 'silently non-interoperable, and undetectable until the intersection is first enforced'. This requirement IS that first enforcement."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = ""
+oracle_note       = "⚠ NO reference check in the `negotiation` category measures the `protocols` dimension — all four measure `hash_formats` and `key_types`, which have no §9 row at all. See FINDINGS-FROM-AUTHORING F4: the inventory row and the reference category are disjoint."

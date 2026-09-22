@@ -1,0 +1,110 @@
+## UNALLOCATED — an empty `hash_formats` intersection MUST be rejected with 400
+## incompatible_hash_format.
+##
+## A BINDING MUST IN §4.5 WITH NO §9 ROW. §9.1's only negotiation row (ECP-R47) covers `protocols`
+## and nothing else; §9.2–§9.4 do not mention hash-format negotiation. Two of the reference oracle's
+## four core-profile `negotiation` checks measure this obligation. See FINDINGS F4.
+
+[requirement]
+id_status = "unallocated"
+under     = ""
+title     = "A hello whose `hash_formats` do not intersect the responder's is refused with 400 incompatible_hash_format"
+spec      = "ENTITY-CORE-PROTOCOL §4.5"
+spec_also = ["§4.5a (what the negotiated active value binds)", "§1.2 (format codes)", "§4.7"]
+snapshot  = "core-0.8.2.21"
+level     = "MUST"
+profile   = ["core"]
+surface   = "wire"
+status    = "draft"
+routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F4"
+
+reading = """
+§4.5, on the single-active-value shape: "An empty `hash_formats` intersection MUST be rejected with
+`400 incompatible_hash_format` (§4.7)." The field table restates it, and §4.5a's closing paragraph
+restates it a third time: "Two peers whose `hash_formats` sets are disjoint cannot establish a
+connection (empty intersection -> reject, §4.7)."
+
+WHY THE MUST IS LOAD-BEARING RATHER THAN TIDY. §4.5a makes the negotiated value the connection's
+active `content_hash_format`, under which both peers MUST author every entity on the wire/identity
+surface, because that is where identity-equality (`grantee == author`, `signer == author`, §5.2) is
+evaluated as byte equality (§5.3). A connection with no agreed format has no basis for those
+comparisons -- so the refusal is not politeness about capabilities, it is the precondition for
+authorization working at all. A peer that proceeds on an empty intersection has built a connection on
+which §5.2's equality checks compare hashes from two address spaces.
+
+THE PROBE VALUE. `hash_formats` values are the format names §1.2's code table defines (`ecfv1-sha256`
+is the floor, `0x00`; `ecfv1-sha384` is `0x01`). The disjoint probe must be a well-formed name that
+is not one the responder can support. A NEIGHBOURING REAL FORMAT IS THE WRONG PROBE -- advertising
+only `ecfv1-sha384` against a peer that supports it is an INTERSECTING hello, and against one that
+does not it is a correct refusal indistinguishable from this row's; either way the run does not
+learn what it set out to. Use a reserved/unallocated name, and DECLARE IT, because if the ecosystem
+ever allocates that name the probe silently becomes an intersecting hello and this check starts
+passing for the wrong reason.
+
+ABSENCE IS NOT DISJOINTNESS, and this is where the reference set and we may part company. §4.5:
+"If `hash_formats` is absent, defaults to `[\"ecfv1-sha256\"]`", and §3.8 declares the field
+`optional: true`. So a hello omitting `hash_formats` is WELL-FORMED and negotiates the floor. It is
+not an empty intersection and it is not this row.
+"""
+
+[requirement.preconditions]
+grants       = []
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["seed_policy", "content_hash_format"]
+note         = "`content_hash_format` is a posture axis in its own right — GUIDE-CONFORMANCE §5.2b's canonical instance is that every conformance number this cohort has published was measured under exactly one value. A run asserting this row records which format the responder was started under."
+
+[[requirement.arm]]
+name  = "refused"
+kind  = "conformant"
+given = "a well-formed hello advertising only a hash format the responder does not support"
+why   = "§4.5's MUST."
+  [[requirement.arm.step]]
+  op           = "send_hello"
+  capture      = "disjoint"
+  hash_formats = ["ecfv1-conformance-probe"]
+  note         = "a deliberately unallocated name. DECLARED: if this name is ever allocated in §1.2's table, this probe becomes an intersecting hello and the check passes vacuously — re-check the name at each snapshot re-take."
+  [[requirement.arm.assert]]
+  kind    = "status"
+  capture = "disjoint"
+  equals  = 400
+  [[requirement.arm.assert]]
+  kind    = "error_code"
+  capture = "disjoint"
+  equals  = "incompatible_hash_format"
+  why     = "the decoded code. Distinct from `unsupported_key_type` (the accept-set dimension) and from `incompatible_protocol` (the version dimension) — three negotiation failures, three codes, and §4.7 exists so the code selects the remedy."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the same hello advertising `[\"ecfv1-sha256\"]`, the floor every peer supports"
+why   = "MANDATORY — proves the refusal discriminates on the INTERSECTION, not on the hello being malformed or the peer refusing unfamiliar fields."
+  [[requirement.arm.step]]
+  op           = "send_hello"
+  capture      = "intersecting"
+  hash_formats = ["ecfv1-sha256"]
+  [[requirement.arm.assert]]
+  kind       = "error_code"
+  capture    = "intersecting"
+  not_equals = "incompatible_hash_format"
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer that ignores `hash_formats` and proceeds on its own default"
+expect = "the handshake completes; entities are then authored under a format the caller never advertised"
+why    = "§4.5a's failure mode — identity-equality comparisons across two content-address spaces, which present as authorization failures far from here."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = "negotiation/format_disjoint_reject"
+oracle_note       = "provenance."
+
+# ⭐ PREDICTION, filed before any suite exists.
+[requirement.predicted_disagreement]
+against    = "negotiation/format_advertised"
+prediction = "the reference check requires the responder's hello to CARRY a non-empty `hash_formats` list including `ecfv1-sha256`, and a conformant peer that omits the optional field fails it"
+basis      = "§3.8 declares `hash_formats` `optional: true`; §4.5 gives it a default for exactly the absent case ('If `hash_formats` is absent, defaults to [\"ecfv1-sha256\"]'). The register describes the check as \"responder's hello carries a non-empty hash_formats list including ecfv1-sha256\". §4.5 asks a peer to advertise broadly with a SHOULD, never a MUST."
+if_true    = "the check asserts a MUST the specification does not state — CHECK BUG, or a genuine floor obligation that is missing from the spec. Either way it is a finding, and which one it is decides whose tree it goes to."
+if_false   = "there is a MUST-advertise obligation we did not find, and this file is incomplete."
+unsettled  = "read from the register's description, not the check's source ([prohibition 3]). Only a run settles it — and against a peer that OMITS the field, which no reference peer may do."

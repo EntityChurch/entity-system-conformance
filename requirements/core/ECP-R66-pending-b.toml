@@ -1,0 +1,116 @@
+## ECP-R66-pending-b — the capability-chain depth bound.
+##
+## THE SECOND OBLIGATION UNDER §9.1's LAST ROW. Arch fixed the rule: a bundled row keeps its id for
+## the first obligation and the rest APPEND from ECP-R99 -- so this one's number is arch's to
+## allocate when the §9 conversion lands, and inventing one here would put a name in their namespace
+## that nothing in their document backs. Routed as a finding, not split here (CQ-2, confirmed).
+
+[requirement]
+id_status   = "pending-split"
+under       = "ECP-R66"
+split_index = "b"
+routed      = "docs/status/FINDINGS-FROM-AUTHORING.md F3 — to entity-system-architecture, unrouted as of this writing"
+title       = "A presented capability chain deeper than the peer's configured maximum is refused with 400 chain_depth_exceeded"
+spec        = "ENTITY-CORE-PROTOCOL §4.10(b)"
+spec_also   = ["§5.5 (chain verification, the cost this bounds)", "§3.3"]
+snapshot    = "core-0.8.2.21"
+level       = "MUST"
+profile     = ["core"]
+surface     = "wire"
+status      = "draft"
+
+reading = """
+§4.10(b): "the peer MUST reject a presented chain exceeding its configured maximum depth with
+`400 chain_depth_exceeded` rather than walking an attacker-controlled chain unboundedly."
+
+THE STATUS IS THE REQUIREMENT, NOT DECORATION, and §4.10(b) is unusually explicit about why: "The
+status is 400, not 403 -- a too-deep chain is a client-correctable structural excess, not an
+authorization denial; using 403 would conflate 'too deep' with 'you lack the capability' and the
+caller could not distinguish them." So a peer answering `403 capability_denied` on an over-deep
+chain is NON-CONFORMANT even though it refused the request, and a check asserting only "the request
+was denied" scores that peer green. The discriminating assertion is the (status, code) PAIR.
+
+THE REASON STRING IS EXCLUSIVE. §4.10(b)'s 0.8.1 §4a Ruling 3 disambiguation: this
+`chain_depth_exceeded` (400) is the CAPABILITY-chain depth limit, distinct from the CONTINUATION
+causal-depth brake, which suspends with `bounds_exceeded` (429). "Two mechanisms, two reason codes --
+they MUST NOT share a reason string." A peer emitting 429/`bounds_exceeded` here has answered the
+wrong mechanism's code.
+
+MEASURABILITY. Unlike (a), the input is constructible only by a caller that can MINT a chain of
+arbitrary depth -- which needs a delegation path and therefore a posture that grants one. That is a
+precondition, declared below, and a run that cannot mint to depth+1 reports SKIP with the reached
+depth named. It is NOT a pass: "could not build the input" and "built it and the peer refused" are
+different results and collapsing them is the defect this repo exists to stop.
+"""
+
+[requirement.preconditions]
+grants          = ["a grant permitting delegation, sufficient to mint a chain of max_chain_depth + 1"]
+identities      = ["caller", "delegatee-chain"]
+handlers        = []
+declared_limits = ["max_chain_depth"]
+posture_axes    = ["seed_policy", "declared_limits"]
+
+[requirement.preconditions.notes]
+max_chain_depth = "the peer's CONFIGURED maximum. 64 is §4.10's non-normative recommendation and MUST NOT be assumed — against a peer configured at 8, a depth-65 probe still exceeds the bound and the check passes for the wrong reason; against one configured at 256 it does not exceed it at all and the check passes having measured nothing."
+
+[[requirement.arm]]
+name  = "refused"
+kind  = "conformant"
+given = "an authenticated EXECUTE presenting a valid capability chain of depth max_chain_depth + 1"
+why   = "§4.10(b)'s MUST. The chain is otherwise VALID — every signature verifies, every link attenuates correctly — so the only property under test is its depth."
+  [[requirement.arm.step]]
+  op = "connect"
+  [[requirement.arm.step]]
+  op      = "mint_chain"
+  capture = "chain"
+  depth   = "max_chain_depth + 1"
+  note    = "if the peer refuses the MINT rather than the presentation, that is a different (and possibly also conformant) behaviour — record it and SKIP rather than scoring this row."
+  [[requirement.arm.step]]
+  op         = "send_execute"
+  capture    = "presented"
+  capability = "$chain"
+  [[requirement.arm.assert]]
+  kind    = "status"
+  capture = "presented"
+  equals  = 400
+  why     = "400, NOT 403 — §4.10(b) rules on this explicitly and a 403 conflates structural excess with authorization denial."
+  [[requirement.arm.assert]]
+  kind    = "error_code"
+  capture = "presented"
+  equals  = "chain_depth_exceeded"
+  why     = "the decoded `result.data.code` (§5.2b.1), and not `bounds_exceeded` — that is the continuation brake's code and the two MUST NOT share a reason string."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the same request presenting a valid chain of depth max_chain_depth exactly"
+why   = """MANDATORY. It proves the refusal discriminates on DEPTH and not on the chain being \
+malformed, over-attenuated, or unauthorized for the resource. Without it, a peer that rejects every \
+delegated chain passes the refusal arm."""
+  [[requirement.arm.step]]
+  op = "connect"
+  [[requirement.arm.step]]
+  op      = "mint_chain"
+  capture = "chain_at_limit"
+  depth   = "max_chain_depth"
+  [[requirement.arm.step]]
+  op         = "send_execute"
+  capture    = "at_limit"
+  capability = "$chain_at_limit"
+  [[requirement.arm.assert]]
+  kind       = "error_code"
+  capture    = "at_limit"
+  not_equals = "chain_depth_exceeded"
+  why        = "at the limit is not OVER it. Asserting 200 would add a resource-authorization precondition this requirement does not need; asserting 'not this code' is the whole of what the control must show."
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer that walks the presented chain without a depth bound"
+expect = "O(depth) signature verifications proceed — the request is answered on its merits after unbounded work, or the peer stalls"
+why    = "the shape §4.10(b) exists to prevent; it is a CPU-exhaustion surface, not a hygiene preference."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = "resource_bounds/r2_chain_depth_over_limit"
+oracle_note       = "provenance only."

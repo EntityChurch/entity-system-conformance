@@ -1,0 +1,15 @@
+# CANONICAL-DOCS.toml — what this repo publishes.
+#
+# NOTHING, deliberately, and this file exists to say so.
+#
+# This repo is internal-first by operator direction. An empty keep-list is a valid,
+# auditable state; a repo with no CANONICAL-DOCS.toml is not — the absence reads as
+# "nobody has decided yet" rather than as a decision.
+#
+# When this repo does publish, the audience is someone outside this ecosystem who wants
+# to check an implementation against the protocol. `requirements/` is the thing they
+# would want; the suites are how we prove the requirements are unambiguous.
+
+[meta]
+repo = "entity-system-conformance"
+publishes = false

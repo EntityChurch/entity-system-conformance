@@ -16,8 +16,32 @@ A construct outside that subset raises rather than being silently dropped, becau
 quietly ignores what it does not understand turns an authoring mistake into missing data that still
 digests cleanly.
 
-Canonical form follows `ENTITY-CBOR-ENCODING` §4/§5 and RFC 8949 §4.2.1: definite lengths
-throughout, shortest-form arguments, and map keys sorted by their ENCODED BYTES.
+Canonical form follows `ENTITY-CORE-PROTOCOL` §1.3 / `ENTITY-CBOR-ENCODING` §4/§5 and
+**RFC 8949 §4.2.3 (Length-First Map Key Ordering)**: definite lengths throughout, shortest-form
+arguments, and map keys sorted by **ENCODED LENGTH FIRST, THEN BYTEWISE**.
+
+⛔⭐ THIS HEADER SAID "RFC 8949 §4.2.1" AND THE CODE IMPLEMENTED IT, until 2026-09-17. §4.2.1 is
+bytewise-only and is NOT this corpus's rule -- arch ruled `F22`/`CQ-15` on 2026-09-16
+(`ROUTING-2026-09-16-g-entity-system-conformance-the-encoding-batch-is-ruled-…` §3): seven
+normative homes say length-first, and *"the rule was never ambiguous -- the citation was."*
+
+⚠ **IT IS THE SAME DEFECT ARCH FIXED THAT DAY, IN OUR TREE.** Theirs was Appendix E's `map_keys`
+cell citing §4.2.1 *"in the one cell a vector author reads"*. Ours was this docstring, in the one
+place a maintainer of this file reads. **Neither was a coding slip: both name the rule, and name
+the wrong one.**
+
+⚠ LATENT, NEVER LIVE -- measured, not assumed. `requirement_corpus_digest` is
+`sha256:2a3ccc75154157f90a767e4969e77b51b58c12cb79d930976053ccedf5d09492` under BOTH orderings,
+because every map key in the corpus is a text string and the two orderings PROVABLY COINCIDE on
+that domain (a tstr of length n < 24 has head byte 0x60+n, monotonic in the length, so bytewise
+already sorts by length). **No digest moves and nothing needs republishing.** That is why it
+survived, and it is the same reason arch's `0x03`/`0x04` transposition survived.
+
+⛔ AND THE OTHER CODEC IN THIS REPO WAS ALWAYS RIGHT. `suites/py-prototype/prototype/cbor.py` is
+length-first and parameterizes both orderings explicitly. **Two codecs, disagreeing on the
+corpus's own canonicalization rule, and nothing compared them** -- in the repo whose entire
+argument is that two independent implementations catch each other. `make lint-codec-agreement`
+now does. **Found by reading a routing packet; no gate here was looking.**
 """
 
 from __future__ import annotations
@@ -41,7 +65,8 @@ def _head(major: int, n: int) -> bytes:
 
 
 def encode(value) -> bytes:
-    """Canonical CBOR. Shortest argument, definite length, map keys sorted by encoded bytes."""
+    """Canonical CBOR. Shortest argument, definite length, map keys sorted by ENCODED LENGTH then
+    bytewise -- RFC 8949 §4.2.3, `ENTITY-CORE-PROTOCOL` §1.3. NOT §4.2.1; see the module header."""
     if value is None:
         return b"\xf6"
     if value is True:
@@ -58,7 +83,7 @@ def encode(value) -> bytes:
     if isinstance(value, (list, tuple)):
         return _head(4, len(value)) + b"".join(encode(v) for v in value)
     if isinstance(value, dict):
-        items = sorted(((encode(k), encode(v)) for k, v in value.items()), key=lambda kv: kv[0])
+        items = sorted(((encode(k), encode(v)) for k, v in value.items()), key=lambda kv: (len(kv[0]), kv[0]))
         return _head(5, len(items)) + b"".join(k + v for k, v in items)
     raise DiagError(f"not encodable in the declared subset: {type(value).__name__}")
 
@@ -323,6 +348,36 @@ def self_test() -> int:
         print(f"SELF-TEST FAILED: map key ordering — got {encode({'aa': 1, 'b': 2}).hex()}, "
               f"expected keys sorted by encoded bytes ('b' before 'aa')", file=sys.stderr)
         return 1
+    # ⛔⭐ THE DISCRIMINATING CASE, and until 2026-09-17 this self-test DID NOT HAVE ONE. The line
+    # above is pure TEXT keys, and arch proved (ROUTING-2026-09-16-g §3.2, full stem below) that no
+    # pure-text vector can EVER discriminate ENTITY-CORE-PROTOCOL §1.3 / RFC 8949 §4.2.3
+    # (length-first) from RFC 8949 §4.2.1 (bytewise): a tstr of length n < 24 encodes with head byte
+    # 0x60+n, so the head byte is MONOTONIC IN THE LENGTH and bytewise already sorts by length
+    # before reaching a content byte. Length-first is a REFINEMENT of bytewise on that domain, not
+    # a different order.
+    #
+    # ⇒ This gate printed "canonical map ordering" and would have passed a §4.2.1 implementation
+    # unchanged. The encoder was correct; the CHECK could not fail on the property it named.
+    # Stage 6's rule, inside our own lint: a check that cannot be made to fail has not been shown to
+    # measure anything. Found by reading a packet, not by any gate here.
+    #
+    # ⚠ And the normative corpus has the same hole: `map_keys.5` is the vector arch says "fell into
+    # the trap" -- mixed major types is NOT sufficient, the byte-string key must be LONGER. So
+    # neither our self-test nor the fixture covered this axis.
+    #
+    # The witness (arch's minimal one): bstr h'0000000000' encodes to 6 bytes with head 0x45;
+    # tstr "a" encodes to 2 bytes with head 0x61. Length order and head-byte order DISAGREE.
+    #   §4.2.3 (ours): 2 < 6           -> "a" first
+    #   §4.2.1       : 0x45 < 0x61     -> the byte string first
+    disc = encode({b"\x00\x00\x00\x00\x00": 1, "a": 2}).hex()
+    if disc != "a261610245000000000001":
+        bytewise = "a245000000000001616102"
+        why = ("it implements RFC 8949 §4.2.1 (bytewise), which is NOT this corpus's rule"
+               if disc == bytewise else "it implements neither ordering")
+        print(f"SELF-TEST FAILED: map key ordering on the DISCRIMINATING input — got {disc}, "
+              f"expected a261610245000000000001 (length-first, §4.2.3); {why}. "
+              f"arch ROUTING-2026-09-16-g §3.2.", file=sys.stderr)
+        return 1
     # ...and authoring order must not change the bytes. This is the property that makes the
     # corpus digest a CONTENT digest rather than a record of what order someone typed in.
     if encode({"aa": 1, "b": 2}) != encode({"b": 2, "aa": 1}):
@@ -370,9 +425,10 @@ def self_test() -> int:
               file=sys.stderr)
         return 1
 
-    print("cbordiag self-test: OK — RFC 8949 head encodings, canonical map ordering "
-          "(authoring order does not move the bytes), parse/emit/encode/decode round trips, "
-          "6 malformed inputs refused")
+    print("cbordiag self-test: OK — RFC 8949 head encodings, canonical map ordering LENGTH-FIRST "
+          "(§4.2.3) on a DISCRIMINATING key pair and not only on text keys, which provably cannot "
+          "tell §4.2.3 from §4.2.1 (authoring order does not move the bytes), "
+          "parse/emit/encode/decode round trips, 6 malformed inputs refused")
     return 0
 
 

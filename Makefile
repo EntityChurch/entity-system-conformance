@@ -12,7 +12,7 @@
 # library runs in a container. `lint` stays containerised so the interpreter version is pinned.
 
 .PHONY: help build corpus test lint lint-native lint-ignored lint-sources lint-spec-data lint-requirements lint-items check clean \
-        install-probe require-suite require-peers peers peer-identity inbox lint-inbox lint-suite-slot \
+        install-probe require-suite require-peers peers peer-identity inbox lint-inbox lint-suite-slot lint-codec-agreement \
         keystone-suite generator-suite core-go-suite \
         keystone-s1 keystone-oracle generator-s1 generator-oracle core-go-s1 core-go-oracle differential \
         substrate-go peer-up peer-down oracle-run register
@@ -70,7 +70,8 @@ help:
 	@echo "  ⭐ inbox         sibling ROUTING-* whose To: names us, and which are on no tracker (AP-17)"
 	@echo "  the lint parts, each runnable alone and each with a --self-test:"
 	@echo "    lint-requirements lint-items lint-sources lint-spec-data lint-suite-independence"
-	@echo "    lint-suite-slot lint-suite-constants lint-peer-diversity lint-implements lint-control-set lint-ignored lint-inbox"
+	@echo "    lint-suite-slot lint-suite-constants lint-peer-diversity lint-implements lint-control-set"
+	@echo "    lint-ignored lint-inbox lint-codec-agreement"
 	@echo
 	@echo "  substrate-go   build the reference image via $(SUBSTRATE_GO)'s own 'make build'"
 	@echo "  peer-up        run $(GO_IMAGE) entity-peer as $(PEER_NAME) on network $(NET)"
@@ -336,7 +337,7 @@ differential:
 
 # <<< RUN PATH — end of the suite-generic region ────────────────────────────────────────────────
 
-lint: lint-ignored lint-suite-independence lint-suite-slot lint-suite-constants lint-sources lint-spec-data lint-requirements lint-items lint-peer-diversity lint-implements lint-control-set lint-inbox
+lint: lint-ignored lint-suite-independence lint-suite-slot lint-codec-agreement lint-suite-constants lint-sources lint-spec-data lint-requirements lint-items lint-peer-diversity lint-implements lint-control-set lint-inbox
 
 # ⭐ THE ENFORCEMENT POINT FOR SUITE=, without which it is a convention and decays back into a
 # constant on the first hurried edit. Between the RUN PATH markers, no recipe may name a suite
@@ -354,6 +355,21 @@ lint: lint-ignored lint-suite-independence lint-suite-slot lint-suite-constants 
 # ⚠ Graded BUILT, not SOLID: what it caught was this session's own incomplete edit, not an
 # independent regression by someone who had not just written the gate. That is a weaker claim than
 # the scale's "has caught a real incident" and it is the honest one.
+# ⭐ THE TWO CODECS IN THIS REPO MUST AGREE. tools/cbordiag.py (the requirement corpus) and
+# suites/py-prototype/prototype/cbor.py (the instrument, on the wire) are two independent canonical
+# CBOR encoders -- and NOTHING COMPARED THEM until 2026-09-17, when they turned out to disagree on
+# the corpus's own map-key ordering rule (cbordiag was RFC 8949 §4.2.1 bytewise; the rule is §4.2.3
+# length-first, arch's F22/CQ-15 ruling). Latent -- every corpus key is text and the orderings
+# provably coincide there -- so requirement_corpus_digest did not move and nothing republished.
+#
+# ⛔ THE FINDING IS NOT THE BUG, IT IS THAT WE ALREADY HAD THE SECOND IMPLEMENTATION. This seat's
+# entire argument is that two independent implementations catch each other; we ran two for the
+# repo's whole life with no instrument between them, and the disagreement was found by reading a
+# counterpart's packet. ⭐ SOLID: restore the bytewise sort and this gate fires on the real defect.
+lint-codec-agreement:
+	@$(PY) tools/codec-agreement.py --self-test
+	@$(PY) tools/codec-agreement.py
+
 # The half of the inbox a container can see: the addressee parser. The live pull is `make inbox`
 # and needs the sibling trees. ⚠ This gate passing says the parser is right, NOT that the inbox is
 # empty -- and those two are easy to confuse in a green run, which is why it prints the difference.

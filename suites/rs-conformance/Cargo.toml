@@ -1,0 +1,20 @@
+[package]
+name = "rs-conformance"
+version = "0.1.0"
+edition = "2021"
+description = "Suite 2 of the entity-core conformance instrument. Rust, std only, zero dependencies."
+
+# ⛔ DEPENDENCIES ARE PROHIBITED IN THIS SUITE, NOT MERELY ABSENT.
+#
+# AGENTS.md: "No suite in the reference oracle's language (Go), and no suite on a library the
+# cohort shares. A shared language is shared idioms, a shared library is a shared bug."
+#
+# SHA-256 is implemented from FIPS 180-4 and canonical CBOR from RFC 8949 §4.2 + ECF §4.1,
+# in-tree, for that reason. If a future check needs Ed25519 it comes from RFC 8032, written
+# here, and NOT from a crate. Adding a [dependencies] section to this file is a finding.
+[dependencies]
+
+[profile.release]
+opt-level = 2
+panic = "abort"
+strip = true

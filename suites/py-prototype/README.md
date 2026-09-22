@@ -64,4 +64,4 @@ CBOR has three (`cbor._Reader.map` refuses the input rather than merge it); `-0.
 test compares with sign and NaN kept).
 
 Adding a requirement: implement `check_rN` in `prototype/checks.py`, add it to `CHECKS` and `IMPLEMENTS`, lower
-`requirements/UNEXECUTED-CEILING`, then run the loop (`AGENTS.md`).
+`requirements/UNEXECUTED-CEILING`, then run the loop (`docs/PROCESS.md` §2).

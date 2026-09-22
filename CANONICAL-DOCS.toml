@@ -1,15 +1,140 @@
 # CANONICAL-DOCS.toml — what this repo publishes.
 #
-# NOTHING, deliberately, and this file exists to say so.
+# The keep-list IS the interface: what reaches a public reader is decided here and
+# nowhere else. A file that is not declared and sits under a doc root is dropped
+# silently, so anything a published document links to belongs in this list.
 #
-# This repo is internal-first by operator direction. An empty keep-list is a valid,
-# auditable state; a repo with no CANONICAL-DOCS.toml is not — the absence reads as
-# "nobody has decided yet" rather than as a decision.
+# The audience is someone OUTSIDE this ecosystem who wants to check an implementation
+# against the protocol. `requirements/` is the thing they want; the suites are how we
+# show the requirements are unambiguous enough to be implemented twice.
 #
-# When this repo does publish, the audience is someone outside this ecosystem who wants
-# to check an implementation against the protocol. `requirements/` is the thing they
-# would want; the suites are how we prove the requirements are unambiguous.
+# Non-prose files (`.diag`, `.cbor`, source, configs) are never dropped by the filter,
+# so the requirement corpus, the suites and the pinned snapshots publish as code. What
+# is declared below is the PROSE that explains them.
 
-[meta]
-repo = "entity-system-conformance"
-publishes = false
+[project]
+name   = "Entity System Conformance"
+slug   = "entity-system-conformance"
+repo   = "entity-system-conformance"
+github = "https://github.com/EntityChurch/entity-system-conformance"
+intro  = """
+The independent conformance instrument for the Entity Core Protocol: a neutral statement
+of what the protocol requires, and several independently built test suites over it. A
+single oracle cannot distinguish "the peer is wrong" from "the oracle is wrong" — its own
+errors are invisible by construction — so this repo separates the obligation from the
+probe and implements the obligations more than once, in different languages, by different
+authors, without them reading each other. Where the suites agree, the requirement said so;
+where they disagree, the disagreement is the product, and it is always exactly one of three
+things: a specification gap, an implementation bug, or a bad check. Early and honest about
+it: 50 requirements authored, 15 of the core floor's 98 obligations covered, 28 requirements
+executed against real peers, two suites. The numbers this repo publishes about itself are
+ratcheted and are lowered by doing the work, never by editing the number.
+"""
+
+# ── Overview ──────────────────────────────────────────────────────────────────────
+
+[[doc]]
+path  = "README.md"
+title = "entity-system-conformance"
+blurb = "What the instrument is, the three-way question it makes decidable, and where it stands."
+group = "Overview"
+
+[[doc]]
+path  = "docs/STATUS.md"
+title = "Status"
+blurb = "The rolling log: what is measured, what is open, and what is deliberately not claimed."
+group = "Overview"
+
+[[doc]]
+path  = "CHANGELOG.md"
+title = "Changelog"
+blurb = "What has landed, in Keep a Changelog form."
+group = "Overview"
+
+[[doc]]
+path  = "docs/CLI.md"
+title = "Command-line tools"
+blurb = "Every make target — build, test, lint, run against peers, compare two instruments — and the suite executable's own flags."
+group = "Tools"
+
+# ── How the work is done ──────────────────────────────────────────────────────────
+# The method is most of the deliverable here: an instrument is only as good as the
+# argument for trusting it, so the argument publishes too.
+
+[[doc]]
+path  = "docs/PROCESS.md"
+title = "How this repository works"
+blurb = "The three prohibitions, the loop, how a rule earns the right to exist, the inputs that are declared as data, and an honest account of where the work has got to."
+group = "Process"
+
+[[doc]]
+path  = "docs/DISCIPLINE-CHARTER.md"
+title = "The disciplines"
+blurb = "This repository's own invariants, each earned on a second incident and each with an enforcement point someone can run."
+group = "Process"
+
+# ── The deliverable ───────────────────────────────────────────────────────────────
+
+[[doc]]
+path  = "requirements/README.md"
+title = "The requirement corpus"
+blurb = "What a requirement file carries, the three states of an id, and the rules each file is held to."
+group = "The requirements"
+
+[[doc]]
+path  = "docs/DESIGN-THE-REQUIREMENT-FORMAT.md"
+title = "The requirement format"
+blurb = "How one obligation is written so someone who has never seen a reference oracle can implement a check for it."
+group = "The requirements"
+
+[[doc]]
+path  = "spec-data/README.md"
+title = "Pinned specification snapshots"
+blurb = "Why the spec is pinned rather than tracked, and what a snapshot is a snapshot of."
+group = "The requirements"
+
+[[doc]]
+path  = "spec-data/entity-core-protocol/PROVENANCE.md"
+title = "Vendored specification text — provenance and licence"
+blurb = "The protocol text under spec-data/ is another project's work, copied unchanged and not claimed here: where it comes from, its terms, and how to verify the copy."
+group = "The requirements"
+
+# ── Building and running a suite ──────────────────────────────────────────────────
+
+[[doc]]
+path  = "docs/DESIGN-THE-SUITE-CONTRACT.md"
+title = "The suite contract"
+blurb = "How a suite is invoked and what it emits — the interface a consumer swaps one instrument for another across."
+group = "The suites"
+
+[[doc]]
+path  = "docs/WORKFLOW-SUITE-BRINGUP.md"
+title = "Standing up a suite"
+blurb = "The ten stages end to end, each graded by whether it has ever caught a real defect."
+group = "The suites"
+
+[[doc]]
+path  = "docs/BRIEF-SUITE-2.md"
+title = "The brief a new suite author is handed"
+blurb = "What an independent author may read, what they must not, and why the second suite is worth its cost only if built blind."
+group = "The suites"
+
+[[doc]]
+path  = "suites/py-prototype/README.md"
+title = "Suite 1 — py-prototype"
+blurb = "Python, standard library only: what each module was written from, and the hazards its language forced it to refuse."
+group = "The suites"
+
+[[doc]]
+path  = "suites/rs-conformance/README.md"
+title = "Suite 2 — rs-conformance"
+blurb = "Rust, std only, zero dependencies: what it was built from, what it was not allowed to read, and what it found."
+group = "The suites"
+
+# ── How the whole thing is put together ───────────────────────────────────────────
+
+[[doc]]
+path  = "docs/MODEL-THE-MEASUREMENT-STACK.md"
+title = "The measurement stack"
+blurb = "Who measures whom, why a peer count flatters every cohort, and where the regress of checking the checker actually stops."
+group = "Architecture"

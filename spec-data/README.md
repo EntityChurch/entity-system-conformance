@@ -4,11 +4,27 @@
 `MANIFEST.md` naming the source version and a **sha256 per file**. Documents are copied in and never
 edited.
 
+⛔ **Everything under `spec-data/<spec>/` is VENDORED — another project's work, copied unchanged, and
+not claimed by this repository.** Each specification directory carries the upstream licence files and
+a `PROVENANCE.md` saying where the text comes from, under what terms, and how to verify the copy is
+byte-for-byte. **We are a consumer of the specification like anyone else**; the authoritative version
+is upstream, these copies are deliberately behind it, and for anything but reproducing one of our
+measurements you should read upstream instead. This repository's own `LICENSE` covers the requirement
+corpus, the suites and the tooling — not this directory.
+
 | Snapshot | Covers | State |
 |---|---|---|
-| `entity-core-protocol/v0.8.2.24` | the three core normative documents (`ENTITY-CORE-PROTOCOL` 0.8.2.24 · `ENTITY-CBOR-ENCODING` 1.7 · `ENTITY-NATIVE-TYPE-SYSTEM` 4.2.1) + the ECF corpus | **current** — new authoring goes here |
-| `entity-core-protocol/v0.8.2.21` | the same six files at `0.8.2.21` / `1.6` / `4.2.1` | **retained, and still cited by most of `requirements/`.** Never deleted while a requirement names it (rule 2) |
-| *(extension corpus)* | `entity-system-architecture/specs/extensions/*` — 26 documents | not taken. ⛔ **The old note here said "blocked on the `<PREFIX>-R<n>` sweep." That is STALE — see `F66`.** The sweep (2 of 26 declare a prefix) gates **id allocation**, not authoring: an extension obligation with no prefix is exactly `unallocated`'s shape, ruled shippable 2026-09-12 (`CQ-9`). The extension half is **startable**; it is unstarted because the core floor is at 15 of 98, not because anything blocks it |
+| `entity-core-protocol/v0.8.2.26` | the three core normative documents + the encoding-vector corpus | **current** — new authoring goes here. **3 requirements** are on it |
+| `entity-core-protocol/v0.8.2.25` | the same documents one revision earlier | retained; superseded within a day of being taken, and that is the normal case rather than an incident |
+| `entity-core-protocol/v0.8.2.24` | the same documents | retained |
+| `entity-core-protocol/v0.8.2.21` | the same six files at `0.8.2.21` / `1.6` / `4.2.1` | **retained, and still cited by 47 of the 50 requirement files.** Never deleted while a requirement names it (rule 2) |
+| *(extension corpus)* | the 26 extension specifications | **not taken.** The sweep that would allocate their requirement ids (2 of 26 declare a prefix) gates **id allocation**, not authoring: an extension obligation with no id is exactly the `unallocated` shape, which is ruled shippable. The extension half is **startable**; it is unstarted because the core floor sits at 15 of 98, which is a sequencing choice rather than a block |
+
+⚠ **47 of 50 requirements are authored against `v0.8.2.21` while the current pin is `v0.8.2.26`, and
+that distance is the honest state rather than a backlog nobody noticed.** A requirement whose
+section has moved is **unverified** — not wrong, not right — and re-reading it is tracked work with
+a number on it. The upstream specification moved four revisions in six days; a hand-authored corpus
+cannot chase that, so the rule is **pin, declare the distance, build against the pin.**
 
 ## Naming, and what a snapshot directory is a snapshot OF
 
@@ -63,3 +79,9 @@ field name is theirs on purpose.
    `tools/requirement-gate.py` fails the build if a file's path and its `snapshot` disagree about
    which spec it states.
 4. **The digest is the citation**, not the commit — `[ADR-0012]` Am. 1.
+
+⚠ **Each `MANIFEST.md` also names the upstream commit its documents were copied from. That is a
+convenience and never the citation.** A reader outside this ecosystem cannot resolve it — published
+history is authored fresh at the release boundary, so an internal SHA points at nothing for them.
+**The per-document sha256 in the same manifest is the anchor**, it is reproducible with `sha256sum`,
+and a snapshot whose commit line rots is still fully verifiable through it.

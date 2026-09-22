@@ -32,7 +32,7 @@ def _snapshots() -> list[Path]:
     2026-09-15. The gate that exists to forbid exactly that could not see it: it anchored on a
     value starting with a quote, and this one is composed from path segments.
     """
-    ids = [l.strip() for l in (HERE / "IMPLEMENTS").read_text().splitlines()
+    ids = [l.split()[0] for l in (HERE / "IMPLEMENTS").read_text().splitlines()
            if l.strip() and not l.startswith("#")]
     names, seen = [], set()
     for rid in ids:

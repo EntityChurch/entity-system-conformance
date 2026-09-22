@@ -87,7 +87,7 @@ PYRT_SHA256  ?= 1f37044c8cdbd74d5ee112a753c65ef209fedd169c98f3e4e748a93e27eb27a4
 MUSL_IMAGE   ?= docker.io/library/alpine@sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e
 # The requirement corpus this suite is built from. One place, so a layout move is one edit.
 REQ_DIR      := requirements/entity-core-protocol
-SUITE_REQS      := $(shell grep -v "^#" suites/py-prototype/IMPLEMENTS)
+SUITE_REQS      := $(shell awk '!/^#/ && NF {print $$1}' suites/py-prototype/IMPLEMENTS)
 SUITE_BIN           := $(OUT)/bin/py-prototype
 SUITE_SRC       := $(shell find suites/py-prototype/run.py suites/py-prototype/prototype -name '*.py') suites/py-prototype/launcher.sh suites/py-prototype/IMPLEMENTS
 CACHE        := $(OUT)/cache
@@ -137,15 +137,52 @@ test: $(SUITE_BIN)
 # bundle are installed into keystone's GITIGNORED output/s4-oracles/ — their extension point, no tracked
 # file touched.
 KEYSTONE       ?= ../entity-core-keystone
-KEYSTONE_PEERS ?= python rust go typescript
+# ⛔ THE PEER SET IS DECLARED DATA, NOT A VARIABLE (ADR-0003 §7.3 clause 1, built 2026-09-16).
+# This line read `KEYSTONE_PEERS ?= python rust go typescript` until then, and the 33- and 37-peer
+# runs overrode it on the command line — so the input that decided every number we have published
+# was an argument someone happened to type, and no artifact recorded which one. That is AGENTS.md's
+# fairness rule (*the peer pair is a parameter*) on the suite/peer axis.
+#
+# The set now expands from suites/py-prototype/PEERS.diag against keystone's LIVE roster every run:
+# membership is a rule (roster minus declared exclusions), never a frozen list that goes stale as
+# the cohort grows — which is the defect keystone built tools/peer-tiers.tsv to fix one level down.
+# An override is still possible for a scoped diagnostic run; it is visible on the command line and
+# the verdict records the identities either way.
+# Host python3 (in the contract, operator 2026-09-12) — it must read KEYSTONE's tree, which is
+# outside every container mount here. Same precedent as collect-run.py. `?=` is recursive, so this
+# expands on use, not on every `make help`.
+KEYSTONE_PEERS ?= $(shell python3 -B tools/peer-binding.py --resolve --suite py-prototype --source keystone --keystone $(KEYSTONE))
 PROBE_NAME     := cnf-py-prototype
+
+# The declared peer set, expanded and inspectable — plus one peer's full identity record.
+# ⛔ `peer: "zig"` is not a measurement; `peer: zig @ <commit>, host sha256 <…>, contract absent` is.
+peers:
+	@echo "declared set (suites/py-prototype/PEERS.diag x keystone's live roster):"
+	@echo "  keystone ($(words $(KEYSTONE_PEERS))): $(KEYSTONE_PEERS)"
+	@echo "  generator: $(GENERATOR_TARGETS) @ $(GENERATOR_COMP)   core-go: $(CORE_GO_LABEL)"
+	@python3 -B tools/peer-binding.py --resolve --suite py-prototype --keystone $(KEYSTONE) >/dev/null
+
+peer-identity:
+	@test -n "$(PEER)" || { echo "usage: make peer-identity PEER=<name>" >&2; exit 2; }
+	@python3 -B tools/peer-binding.py --identity $(PEER) --keystone $(KEYSTONE)
 
 install-probe: $(SUITE_BIN)
 	@rm -rf $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME).d
 	cp -a $(SUITE_BIN).d $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME).d
 	install -m 0755 $(SUITE_BIN) $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME)
 
-keystone-s1: install-probe
+# ⛔ THE FLOOR, because $(shell) SWALLOWS EXIT CODES. If keystone's tree is missing or its roster
+# stops parsing, --resolve writes its reason to stderr and nothing to stdout, so KEYSTONE_PEERS
+# expands to the empty string and a census over NO PEERS runs clean. An empty cohort validates
+# perfectly and reports as a successful run — the same fail-open shape as a glob that has stopped
+# matching (item-gate's MIN_ITEMS) and as F57's all-unreachable report. Refuse instead.
+require-peers:
+	@test -n "$(strip $(KEYSTONE_PEERS))" || { \
+	  echo "REFUSING — the declared keystone peer set expanded to EMPTY. suites/py-prototype/PEERS.diag" >&2; \
+	  echo "  resolves against $(KEYSTONE)'s roster; run 'make peers' to see why it could not look." >&2; \
+	  echo "  A run over zero peers is not a smaller run, it is not a run." >&2; exit 2; }
+
+keystone-s1: require-peers install-probe
 	cd $(KEYSTONE) && tools/run-cohort-census.sh --probe $(PROBE_NAME) $(KEYSTONE_PEERS)
 	python3 -B tools/collect-run.py keystone --instrument py-prototype --src $(KEYSTONE)/output/scratch/$(PROBE_NAME) \
 		--keystone $(KEYSTONE) --out $(OUT)/runs $(KEYSTONE_PEERS)
@@ -155,7 +192,7 @@ keystone-s1: install-probe
 # Measured 2026-09-13: a no-op only because the stamped ref already matched. Our diagnostic run must
 # never move their roster, so: refuse to start if that file is already modified (we could not tell our
 # change from theirs), and restore it afterwards if — and only if — this run is what changed it.
-keystone-oracle:
+keystone-oracle: require-peers
 	@git -C $(KEYSTONE) diff --quiet -- tools/peer-tiers.tsv || { echo "keystone-oracle: REFUSING — $(KEYSTONE)/tools/peer-tiers.tsv has uncommitted changes; the census would stamp over them" >&2; exit 2; }
 	-cd $(KEYSTONE) && tools/run-cohort-census.sh $(KEYSTONE_PEERS)
 	@git -C $(KEYSTONE) diff --quiet -- tools/peer-tiers.tsv || { git -C $(KEYSTONE) checkout -- tools/peer-tiers.tsv; echo "keystone-oracle: the census stamped keystone's roster; restored (it was clean before this run)"; }
@@ -216,7 +253,28 @@ differential:
 	python3 -B tools/differential.py --runs $(OUT)/runs --requirements $(REQ_DIR) --out $(OUT)/DIFFERENTIAL.md
 	@cat $(OUT)/DIFFERENTIAL.md
 
-lint: lint-ignored lint-suite-independence lint-suite-constants lint-sources lint-spec-data lint-requirements lint-items
+lint: lint-ignored lint-suite-independence lint-suite-constants lint-sources lint-spec-data lint-requirements lint-items lint-peer-diversity lint-implements
+
+# F76. Every other suite-facing gate measures a DECLARATION that the suite implements an id; none
+# could see WHICH VERSION of the obligation the code implements. ECP-R57's obligation inverted and
+# check_r57 scored the old rule for a day; ECP-R7's code was pinned at .24 and check_r7 accepted any
+# refusal for two. `make check` was green through both. This gate compares the snapshot each check
+# was AUTHORED against to the one its requirement is authored at, and ratchets the `unreviewed`
+# count in suites/IMPLEMENTS-REVIEW-DEBT (26 of 28 at first measurement).
+lint-implements:
+	@$(PY) tools/implements-gate.py --self-test
+	@$(PY) tools/implements-gate.py
+
+# ADR-0003 §7.3 clause 3. ⚠ VACUOUS TODAY AND IT SAYS SO ON EVERY RUN — one suite exists, so
+# "two suites' peer sets" has no instance and clause 1 CANNOT fire. That is the point of building it
+# now: it fails the moment suite 2 declares an overlapping set, instead of being written afterwards
+# by someone who has already chosen. A gate that cannot fail yet is honest only if it reports that.
+#
+# Runs on CONTAINER python against our own tree only (PEERS.diag), so it needs no sibling repo —
+# unlike --resolve/--identity, which consume keystone's roster and run on the host.
+lint-peer-diversity:
+	@$(PY) tools/peer-binding.py --self-test
+	@$(PY) tools/peer-binding.py --lint
 
 # D17 / audit A6 pass C (2026-09-14, landed 2026-09-15). THE GAP THIS CLOSES: every other gate here
 # measures content WE PRODUCED, and all of them were green through four sessions in which this seat

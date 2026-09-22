@@ -1,31 +1,52 @@
-# Requirement files suite py-prototype implements, one id (filename stem) per line.
-# Read by the Makefile (digests written into the bundle), by tests/test_manifest.py (must equal the
-# CHECKS table), and by tools/requirement-gate.py (the executed-by-a-suite ratchet).
-ECP-R1
-ECP-R6
-ECP-R9
-ECP-R44
-ECP-R45
-ECP-R57
-UNALLOCATED-no-unsolicited-leg3-authenticate
-UNALLOCATED-key-type-mutual-verifiability
-UNALLOCATED-error-response-carries-code
-ECP-R47
-ECP-R47-pending-b
-UNALLOCATED-hash-format-intersection
-ECP-R66
-ECP-R66-pending-c
-ECP-R2
-ECP-R12
-ECP-R7-pending-b
-UNALLOCATED-emitted-frames-are-canonical-ecf
-UNALLOCATED-emitted-entities-conform-to-protocol-types
-UNALLOCATED-emitted-optional-fields-absent-not-null
-ECP-R3
-ECP-R7
-UNALLOCATED-cbor-tag-rejected
-UNALLOCATED-duplicate-map-key-rejected
-ECP-R4-pending-b
-ECP-R4
-ECP-R41
-UNALLOCATED-unsupported-content-hash-format-refused
+# Requirement files suite py-prototype implements: `<requirement-id>  <snapshot the CHECK was
+# authored against>`, whitespace-separated, id first.
+#
+# ⛔ THE SECOND COLUMN IS A CLAIM ABOUT THE CODE, NOT ABOUT THE REQUIREMENT, and it exists because
+# F76 cost us a void measurement. ECP-R57's obligation INVERTED at 0.8.2.25; the requirement file and
+# its item were re-authored on 2026-09-15 and `check_r57` went on scoring the .21 rule. ECP-R7's code
+# was pinned at 0.8.2.24; the file said so and `check_r7` went on accepting any refusal. In BOTH
+# cases `make check` was green, IMPLEMENTS still named the id, and the executed-by-a-suite ratchet
+# still counted it -- because every one of those measures a DECLARATION that the suite implements the
+# id, and none of them can see WHICH VERSION of the obligation the code implements.
+#
+# ⚠ THIS IS A DECLARATION TOO, AND IT CAN BE BUMPED WITHOUT TOUCHING THE CODE. Said out loud rather
+# than pretended away: the value is not that it is unforgeable, it is that bumping it is a CONSCIOUS
+# LINE IN THE DIFF where the drift was previously invisible. D16 forbids a suite asserting the
+# snapshot it VALIDATES AGAINST (that must be derived -- F65); this is the different fact of which
+# snapshot the code was WRITTEN against, which cannot be derived from anything and whose going stale
+# is the signal we want.
+#
+# `unreviewed` = nobody has established which snapshot this check implements. It is the honest value
+# and the ratchet in IMPLEMENTS-REVIEW-DEBT counts it down-only.
+#
+# Read by the Makefile (digests written into the bundle), tests/test_manifest.py (must equal the
+# CHECKS table), tools/requirement-gate.py (the executed-by-a-suite ratchet), and
+# tools/implements-gate.py (this column).
+ECP-R1                                                    unreviewed
+ECP-R6                                                    unreviewed
+ECP-R9                                                    unreviewed
+ECP-R44                                                   unreviewed
+ECP-R45                                                   unreviewed
+ECP-R57                                                   entity-core-protocol/v0.8.2.25
+UNALLOCATED-no-unsolicited-leg3-authenticate              unreviewed
+UNALLOCATED-key-type-mutual-verifiability                 unreviewed
+UNALLOCATED-error-response-carries-code                   unreviewed
+ECP-R47                                                   unreviewed
+ECP-R47-pending-b                                         unreviewed
+UNALLOCATED-hash-format-intersection                      unreviewed
+ECP-R66                                                   unreviewed
+ECP-R66-pending-c                                         unreviewed
+ECP-R2                                                    unreviewed
+ECP-R12                                                   unreviewed
+ECP-R7-pending-b                                          unreviewed
+UNALLOCATED-emitted-frames-are-canonical-ecf              unreviewed
+UNALLOCATED-emitted-entities-conform-to-protocol-types    unreviewed
+UNALLOCATED-emitted-optional-fields-absent-not-null       unreviewed
+ECP-R3                                                    unreviewed
+ECP-R7                                                    entity-core-protocol/v0.8.2.25
+UNALLOCATED-cbor-tag-rejected                             unreviewed
+UNALLOCATED-duplicate-map-key-rejected                    unreviewed
+ECP-R4-pending-b                                          unreviewed
+ECP-R4                                                    unreviewed
+ECP-R41                                                   unreviewed
+UNALLOCATED-unsupported-content-hash-format-refused       unreviewed

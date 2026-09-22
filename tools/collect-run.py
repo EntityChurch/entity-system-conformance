@@ -111,6 +111,49 @@ def generator_posture(tree: Path, target: str, comp: str) -> dict:
             "peer_tree": tree_state(tree, [f"languages/{target}", "tools/host-launch"])}
 
 
+def peer_identity(a, peer: str) -> dict:
+    """ADR-0003 §7.3 clause 2 — the peer's IDENTITY, not its name, on every collected report.
+
+    ⛔ `peer: "zig"` is not a measurement; `peer: zig @ <commit>, host sha256 <…>, contract absent`
+    is. Until 2026-09-16 every run of ours recorded only the name, so no verdict we have published
+    says WHICH BYTES ANSWERED — and the cohort has since been regenerated whole, which is exactly
+    the condition that makes a name-keyed row unreadable after the fact.
+
+    ⚠ NOT SILENTLY OPTIONAL. Where the identity cannot be established the record says so, with the
+    reason, and the run stays collectible — a could-not-look is a stated state, never an absent key.
+    Only keystone peers resolve today: the generator's and core-go's are not on keystone's roster,
+    and asking it about them would be a category error rather than a missing fact.
+    """
+    if a.source != "keystone" or not a.keystone:
+        # ⛔ CORRECTED 2026-09-16, WITHIN THE HOUR, BY RUNNING IT. This returned
+        # `established: False, why: "not keystone"` — and that is FALSE for both other sources,
+        # whose posture block already carries a real per-peer pin: the generator's `peer_tree`
+        # (HEAD + a digest of any uncommitted diff under that peer's own paths) and core-go's
+        # `image_id` (a content digest of the image that answered). Reporting "not established"
+        # over evidence we hold would have understated what the run knows — the exact mistake
+        # ADR-0003 §7 exists to prevent, made by §7's own implementation, and visible only because
+        # the run was taken instead of the field being reasoned about.
+        return {"established": True, "certified_by_contract": False,
+                "basis": f"{a.source} posture block (see `posture`): "
+                         + ("generator `peer_tree` — HEAD plus a digest of any uncommitted diff "
+                            "under this peer's own paths (F50)" if a.source == "generator"
+                            else "core-go `image_id` — the content digest of the image that answered"),
+                "why_not_contract": "keystone's peer contract covers keystone's peers only; there is "
+                                    "no equivalent certification for this source, and a pin is not a "
+                                    "certification — it says WHICH BYTES, not that they were checked"}
+    # tools/peer-binding.py is not an importable module name (hyphen), and renaming it to suit a
+    # consumer's convenience is a name coined rather than taken (D18). Load it by path.
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "peer_binding", Path(__file__).resolve().parent / "peer-binding.py")
+        pb = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(pb)
+        return pb.identity(a.keystone, peer, pb.read_roster(a.keystone))
+    except Exception as exc:                                   # noqa: BLE001
+        return {"established": False, "why": f"peer-binding could not resolve {peer!r}: {exc}"}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("source", choices=["keystone", "core-go", "generator"])
@@ -174,7 +217,8 @@ def main() -> int:
                        **rec}
         prov = {"source": a.source, "instrument": a.instrument, "peer": peer,
                 "report_sha256": sha256(out), "report_mtime": int(src.stat().st_mtime),
-                "collected_at": int(time.time()), "posture": posture}
+                "collected_at": int(time.time()), "posture": posture,
+                "peer_identity": peer_identity(a, peer)}
         (dest / f"{peer}.provenance.json").write_text(json.dumps(prov, indent=2) + "\n")
         r = json.loads(out.read_text())
         print(f"collect-run: {a.source}/{a.instrument}/{peer}: {r.get('summary')}  posture grants={posture.get('grants')}")

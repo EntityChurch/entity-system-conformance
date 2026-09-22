@@ -13,7 +13,7 @@ HERE = Path(__file__).resolve().parent.parent
 
 class Manifest(unittest.TestCase):
     def test_implements_equals_checks(self):
-        ids = [l.strip() for l in (HERE / "IMPLEMENTS").read_text().splitlines() if l.strip() and not l.startswith("#")]
+        ids = [l.split()[0] for l in (HERE / "IMPLEMENTS").read_text().splitlines() if l.strip() and not l.startswith("#")]
         self.assertEqual(sorted(ids), sorted(checks.CHECKS))
         reqs = HERE.parent.parent / "requirements" / "entity-core-protocol"
         for rid in ids:

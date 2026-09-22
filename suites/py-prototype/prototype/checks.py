@@ -464,23 +464,23 @@ def check_r45(ctx: Ctx) -> Result:
     return res
 
 
-# ── ECP-R57 — a root that is neither EXECUTE nor EXECUTE_RESPONSE closes the connection ───────────
+# ── ECP-R57 — a root that is neither EXECUTE nor EXECUTE_RESPONSE is answered 400 invalid_request ──
+#
+# ⛔⛔ THE OBLIGATION INVERTED AT 0.8.2.25 AND THIS CODE MEASURED THE OLD ONE UNTIL 2026-09-16 (F75).
+# Under .21 §9.1's row and §3.3's body both said *"close connection"*, and this check scored
+# conformant on `state == "close"` — it watched the socket. Under .25 §3.3 says the peer MUST answer
+# `400 invalid_request` before closing and **the close itself remains the peer's choice**, with
+# §4.11 as the normative home. `close` and `coded frame` SWAPPED PLACES.
+#
+# ⚠ THE PART WORTH READING TWICE: the requirement file and the item were re-authored to .25 on
+# 2026-09-15 (b) and THIS FUNCTION WAS NOT. `make check` stayed green, `IMPLEMENTS` still listed
+# ECP-R57, and the executed-by-a-suite ratchet still counted it — because every one of those
+# measures a DECLARATION. A run taken in that window would have re-produced the void 34-of-37
+# result against a rule that no longer exists. See AP-18.
 
-def _await_close(s: wire.Session, bound: float) -> tuple[str, list[str]]:
-    """Wait up to `bound` for a close. Returns (state, frames seen before it). state: close | open."""
-    seen = []
-    import time as _t
-    deadline = _t.monotonic() + bound
-    while True:
-        left = deadline - _t.monotonic()
-        if left <= 0:
-            return "open", seen
-        o = s.conn.read(left)
-        if o.kind == "close":
-            return "close", seen
-        if o.kind == "timeout":
-            return "open", seen
-        seen.append(o.brief())
+# `_await_close` lived here and is DELETED, not kept "in case": it waited for a socket close and
+# reported the frames seen before it, which is precisely the .21 instrument — the shape whose
+# obligation inverted. Keeping it would leave the old measurement one call away.
 
 
 def check_r57(ctx: Ctx) -> Result:
@@ -493,22 +493,24 @@ def check_r57(ctx: Ctx) -> Result:
     included = dict(s.grant_included)
     included[s.me.peer_hash] = s.me.peer_entity
     s.conn.send(wire.frame(wire.envelope(s.me.peer_entity, included)))
-    state, frames = _await_close(s, ctx.quiet_wait)
-    if frames:
-        res.witnesses["frame_before_close"] = frames
     name = "wrong-root-type"
-    if state == "close":
-        conformant = Arm("conformant", name, True, "closed" + (f" after {frames}" if frames else ""))
-    else:
+    # ⭐ THE READ IS NOW FOR A RESPONSE, NOT FOR A CLOSE. Under .25 the coded frame IS the obligation
+    # and the close is discretionary, so a peer that answers and then closes is conformant, and the
+    # follow-up probe that .21's arms were built around no longer decides this row at all.
+    o = s.read_response(ctx.quiet_wait)
+    res.witnesses["status_and_code"] = o.brief()
+    conformant, klass = _preadmission(name, o, 400, "invalid_request",
+                                      admitted_detail="the wrong-root frame was admitted")
+    res.witnesses["preadmission_class"] = klass
+    if klass == "silent_drop":
+        # ⚠ ONE INPUT CHANGED, to tell a peer that DROPPED the frame and kept serving from one that
+        # wedged. Both are `silent_drop` under §4.11 and both FAIL — this does not rescue the
+        # verdict, it attributes it. F61 measured 21 peers in this class when it was unscoreable.
         s.conn.send(s.signed(wire.request_id("follow-up"), "system/tree", "get"))
         f = s.read_response(ctx.quiet_wait)
-        res.witnesses["follow_up"] = f.brief()
-        if f.kind == "response":
-            conformant = Arm("conformant", name, False, f"the connection kept serving: follow-up answered {f.status} {f.code or ''}".strip())
-        elif f.kind == "close":
-            conformant = Arm("conformant", name, True, f"closed (observed on the follow-up, after {ctx.quiet_wait:g}s)")
-        else:
-            conformant = Arm("conformant", name, None, f"neither closed nor answered the follow-up: {f.brief()} — an outcome the file does not classify")
+        res.witnesses["follow_up_after_silence"] = f.brief()
+        conformant = Arm("conformant", name, False, conformant.outcome +
+                         f"; then a correct request on the same connection: {f.brief()}")
     s.conn.close()
 
     control = None
@@ -525,10 +527,18 @@ def check_r57(ctx: Ctx) -> Result:
         c.conn.send(wire.frame(wire.envelope(ex, inc)))
         t = c.read_response()
         res.witnesses["control"] = t.brief()
-        if t.kind == "response":
+        if t.kind == "response" and (t.status, t.code) == (400, "invalid_request"):
+            # ⛔ THE CONTROL'S OWN REFUSE ARM, and it was missing until 2026-09-16: the item refuses
+            # exactly this outcome. A peer that answers `400 invalid_request` to a VALID root is
+            # refusing the envelope construction, not the root type — so the probe's identical answer
+            # measures nothing, and reporting PASS would be the vacuity the control exists to catch.
+            control = Arm("negative-control", "control", False,
+                          "a VALID root was answered 400 invalid_request — the probe's refusal is not "
+                          "attributable to the root type; unscoreable, not passed")
+        elif t.kind == "response":
             control = Arm("negative-control", "control", True, f"valid root answered {t.status} {t.code or ''}".strip())
         elif t.kind == "close":
-            control = Arm("negative-control", "control", False, "closed on a VALID root: the probe's close is not about the root type")
+            control = Arm("negative-control", "control", False, "closed on a VALID root: the probe's refusal is not about the root type")
         else:
             control = Arm("negative-control", "control", None, f"could not look: {t.brief()}")
         c.conn.close()
@@ -664,6 +674,48 @@ def _coded_refusal(name: str, o: wire.Outcome, status: int, code: str) -> Arm:
     if o.kind == "response":
         return Arm("conformant", name, False, f"{o.status} {o.code or '-'} — assertion ({status} {code}) does not hold")
     return Arm("conformant", name, False, f"no coded answer: {o.brief()} — §4.7 requires the coded response before a close")
+
+
+# ── §4.11 pre-admission refusals (0.8.2.25) ───────────────────────────────────────────────────────
+#
+# ⛔ THE ONE RULE THIS HELPER EXISTS TO KEEP: the two failures are SCORED SEPARATELY.
+# §4.11: *"Two behaviours are non-conformant, and they are distinct failures rather than one"* —
+# dropping the frame (the caller learns nothing until its own §6.11(c) deadline) and closing with no
+# coded frame (indistinguishable from a network fault; on a multiplexed connection it destroys
+# unrelated admitted requests). **Collapsing them lets a peer get credit for the wrong fix**, and
+# arch said so in terms when ruling CQ-34/CQ-35. `_coded_refusal` collapses every non-conformant
+# shape into one string, which is why this is a separate helper rather than a flag on that one.
+#
+# ⚠ THE CODE BELONGS TO THE CAUSE, NOT TO THE CLASS `[MUST]` (§4.11). A wrong code is its own
+# failure class: *"a single code for the class would answer an honest caller under the wrong reason
+# and send them to the wrong layer."*
+PREADMISSION = ("coded_conformant", "coded_response_wrong_code", "bare_close", "silent_drop",
+                "admitted", "could_not_look")
+
+
+def _preadmission(name: str, o: wire.Outcome, status: int, code: str,
+                  admitted_detail: str = "the frame was processed rather than refused") -> tuple[Arm, str]:
+    """Score one pre-admission refusal against §4.11. Returns (Arm, failure class) — the class is
+    recorded as a witness so triage separates a drop from a bare close from a wrong code."""
+    if o.kind == "response" and o.status == status and o.code == code:
+        return Arm("conformant", name, True, f"{status} {code} coded frame"), "coded_conformant"
+    if o.kind == "response" and o.status == 200:
+        return Arm("conformant", name, False, f"{admitted_detail} (200)"), "admitted"
+    if o.kind == "response":
+        return (Arm("conformant", name, False,
+                    f"coded {o.status} {o.code or '-'} — §4.11 pins ({status} {code}) for this cause; "
+                    f"the code selects the caller's remedy, so a code merely in the right family is "
+                    f"still wrong"), "coded_response_wrong_code")
+    if o.kind == "close":
+        return (Arm("conformant", name, False,
+                    f"bare close, no coded frame ({o.detail or 'no detail'}) — §4.11's SECOND named "
+                    f"failure, indistinguishable from a network fault (§4.6)"), "bare_close")
+    if o.kind == "timeout":
+        return (Arm("conformant", name, False,
+                    f"silent drop, no response and no close ({o.detail or 'no detail'}) — §4.11's "
+                    f"FIRST named failure; the caller learns nothing until its own §6.11(c) deadline"),
+                "silent_drop")
+    return Arm("conformant", name, None, f"could not look: {o.brief()}"), "could_not_look"
 
 
 def _not_code_control(o: wire.Outcome, code: str, label: str) -> Arm:
@@ -1018,12 +1070,30 @@ def check_r3(ctx: Ctx) -> Result:
 
 
 def check_r7(ctx: Ctx) -> Result:
-    res = Result("ECP-R7", "encoding/r7_unused_included_hash_mismatch_not_processed", "ENTITY-CORE-PROTOCOL §3.1, §1.8, §6.5")
+    """⛔ RE-AUTHORED TO 0.8.2.25, 2026-09-16. This scored `_refused_any` — *any* non-200 counts —
+    which is the 0.8.2.21 behaviour, and it survived the file's own .24 re-authoring untouched.
+
+    .24 PINNED the code (§5.2a corollary 1: `400 hash_mismatch`) and declared `400 non_canonical_ecf`
+    non-conformant here IN TERMS. `_refused_any` scores both as conformant. ⇒ The file predicted that
+    a block of peers would FAIL under the pin *with no peer having changed a line*, and the
+    instrument could not have produced that result: it passes every peer the prediction is about.
+    **A prediction whose instrument cannot falsify it is not a prediction.**
+
+    .25 adds §4.11: the drop and the bare close are non-conformant and SCORED SEPARATELY (CQ-34,
+    CQ-35 ruled), so this file's three `inconclusive` arms collapse to two distinct failure classes
+    plus a wrong-code class. See AP-18 for how the drift went unnoticed.
+    """
+    res = Result("ECP-R7", "encoding/r7_unused_included_hash_mismatch_not_processed",
+                 "ENTITY-CORE-PROTOCOL §3.1, §1.8, §4.11, §5.2a, §6.5")
     good = ident.entity("primitive/any", {"x": 1})
     bad = dict(good, data={"x": 2})  # key and carried hash still agree with each other: not ECP-R7-pending-b's defect
     o = _raw_hello(ctx, wire.hello_probe(Identity(), included={bad["content_hash"]: bad}))
     res.witnesses["status_and_code"] = o.brief()
-    conformant = _refused_any("unused-included-mismatch", o)
+    # §4.11's cause table, row 3: resolution integrity -> 400 hash_mismatch, stated at §5.2a.
+    conformant, klass = _preadmission("unused-included-mismatch", o, 400, "hash_mismatch",
+                                      admitted_detail="answered as a hello — the envelope was "
+                                                      "processed with an unvalidated included entity")
+    res.witnesses["preadmission_class"] = klass
     t = _raw_hello(ctx, wire.hello_probe(Identity(), included={good["content_hash"]: good}))
     res.witnesses["control"] = t.brief()
     control = _hello_answered_control(t)

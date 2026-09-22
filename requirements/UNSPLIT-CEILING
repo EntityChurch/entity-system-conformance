@@ -1,4 +1,4 @@
-49
+48
 # Requirement files still in the PRE-ADR-0003 shape — obligation and probe fused in one file.
 #
 # A RATCHET, exactly like UNEXECUTED-CEILING and SOURCES-CITATION-DEBT. `make lint` counts the
@@ -11,8 +11,14 @@
 # to fix inside a formatting edit." A 50-file mechanical pass cannot file findings, because nobody
 # stopped to notice one. Per-file is slower and it is the only way the rule is satisfiable.
 #
-# 49 at 2026-09-15 (b). Split so far:
+# 48 at 2026-09-16. Split so far:
 #   ECP-R57  -> suites/py-prototype/items/entity-core-protocol/ECP-R57-P1.diag
 #              (re-authored against v0.8.2.25 in the same pass, because its obligation INVERTED —
 #               F75. Splitting it without re-authoring would have moved a wrong requirement into a
 #               new shape and called it progress.)
+#   ECP-R7   -> suites/py-prototype/items/entity-core-protocol/ECP-R7-P1.diag
+#              (re-authored against v0.8.2.25 in the same pass: CQ-34 and CQ-35 are ruled and folded
+#               as §4.11, so its three `inconclusive` arms became two DISTINCT scored failures plus a
+#               wrong-code class. The obligation text (§3.1) is byte-identical .24 -> .25 — what
+#               moved is the refusal shape. F76: the SUITE had never implemented even the .24
+#               re-authoring, so the file's own prediction was unfalsifiable by its own instrument.)

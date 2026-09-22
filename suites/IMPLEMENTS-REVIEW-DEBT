@@ -1,0 +1,28 @@
+# Checks that have NEVER been read against the obligation they measure: the number of
+# suites/*/IMPLEMENTS rows whose snapshot column is `unreviewed`, and the most it may ever be.
+#
+# A RATCHET, exactly like requirements/UNEXECUTED-CEILING (D14) and docs/SOURCES-CITATION-DEBT.
+# tools/implements-gate.py measures it every run and FAILS if it rises. Lowered by READING a check
+# against its requirement and writing the snapshot it implements; NEVER by typing a version string,
+# which is the edit this ledger exists to make visible.
+#
+# WHY IT EXISTS — F76, and it had already cost a void measurement before anyone counted it.
+# Every gate here that touches a suite measures a DECLARATION that the suite implements an id.
+# None could see WHICH VERSION of the obligation the code implements. Twice that was the difference
+# between a measurement and a wrong answer, and `make check` was green through both windows:
+#
+#   ECP-R57  the obligation INVERTED at 0.8.2.25 (F75). File and item re-authored 2026-09-15;
+#            check_r57 went on scoring the .21 rule — "did the socket close" — until 2026-09-16.
+#   ECP-R7   0.8.2.24 pinned the refusal code; the file said so; check_r7 went on accepting any
+#            refusal via a helper documented as being for rows that PIN NO CODE. So the file's own
+#            recorded prediction could not have fired: the instrument passed every peer the
+#            prediction was about.
+#
+# 26 at 2026-09-16, the first measurement, over 28 implemented requirements. Reviewed so far:
+#   ECP-R7   entity-core-protocol/v0.8.2.25   (re-authored and re-implemented 2026-09-16)
+#   ECP-R57  entity-core-protocol/v0.8.2.25   (re-implemented 2026-09-16; file re-authored 09-15)
+#
+# ⚠ 26 is not a claim that 26 checks are WRONG. It is the claim that nothing here has established
+# which version of the rule they implement, which is the D15-honest statement and is why the
+# number is worth printing every run rather than discovering twice more.
+26

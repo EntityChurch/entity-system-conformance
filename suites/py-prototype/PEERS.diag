@@ -1,0 +1,140 @@
+{
+  "header": [
+    "PEERS — the peer set suite `py-prototype` declares it drives, as DATA. ADR-0003 §7.3 clause 1.",
+    "",
+    "WHY THIS FILE EXISTS. Until 2026-09-16 the peer set was `KEYSTONE_PEERS ?= python rust go",
+    "typescript` in the Makefile, overridden on the command line for the 33-peer and 37-peer runs. So",
+    "the set that decided every number we have published was AN ARGUMENT SOMEONE HAPPENED TO TYPE, and",
+    "no artifact recorded which one. AGENTS.md's fairness rule names that exact failure one level up —",
+    "*an input that decides the outcome, chosen once, by one party, and never written down* — and the",
+    "operator's direction was to apply it to the suite/peer axis too.",
+    "",
+    "⛔ WHAT THIS FILE MAY AND MAY NOT CONTAIN. It declares the SET, because choosing a set is OUR act.",
+    "It declares NOTHING ABOUT ANY PEER — not its language, not its tier, not its spec pin, not whether",
+    "it is certified. Those are keystone's facts and are read out of keystone's tree on every run",
+    "(ADR-0003 §7.2, adopted from entity-system-generator's check-eligible.py: *'a copy of that",
+    "vocabulary here is exactly the kind of fact AGENTS.md says we never keep. A declared name keystone",
+    "does not define FAILS.'*). D16 is the same rule as a discipline, and it has already caught one",
+    "live violation in this tree.",
+    "",
+    "⚠ MEMBERSHIP IS A RULE, NOT A LIST, AND THAT IS DELIBERATE. `include` is `roster` — every peer on",
+    "keystone's tools/peer-tiers.tsv — minus the exclusions below. Freezing 33 names here would have",
+    "re-committed the original defect in a new file: a list goes stale silently as the cohort grows,",
+    "and the cohort grew from 17 to 46 while a prose policy said 17."
+  ],
+  "suite": "py-prototype",
+  "declared": "2026-09-16",
+  "adr": "docs/adr/0003-a-requirement-is-not-a-probe.md §7",
+  "rationale": [
+    "Suite 1 drives the WIDEST set it can reach, and it is the only suite, so 'widest' is not a",
+    "diversity claim — it is the absence of a choice. ⭐ THIS IS THE POINT WORTH BEING PRECISE ABOUT:",
+    "a single suite over 37 peers is ONE INSTRUMENT'S REACH, not joint coverage, and a cohort all",
+    "passing one author's checks is cohort-consistent rather than independently convergent",
+    "(AGENTS-STANDARD, 'Never overclaim'). Breadth here buys peer-defect discovery. It buys NOTHING",
+    "toward the question this repo exists to answer.",
+    "",
+    "⇒ So suite 1 takes the wide set, and ADR-0003 §7.3 clause 3 requires suite 2's declared set to be",
+    "NEITHER IDENTICAL NOR NESTED in this one. Because this set is the roster, any suite-2 set is a",
+    "subset of it, and `lint-peer-diversity` would refuse every possible declaration. ⛔ THAT IS A REAL",
+    "DESIGN PROBLEM AND IT IS NAMED RATHER THAN DEFERRED: see `suite_2_note` below. It is arch's and",
+    "the operator's to settle when suite 2 is scoped, and this file must not pre-empt it by quietly",
+    "shrinking suite 1 to leave room."
+  ],
+  "sources": [
+    {
+      "source": "keystone",
+      "include": "roster",
+      "roster": "entity-core-keystone tools/peer-tiers.tsv, read every run",
+      "why": [
+        "The standardized census `--probe` slot reaches most of the cohort with no per-peer special",
+        "casing, which is why AGENTS.md's bring-up sequence says Keystone and the generator FIRST and",
+        "core-go last. An instrument coded to one peer's quirks is a second copy of the thing we exist",
+        "to check."
+      ]
+    },
+    {
+      "source": "generator",
+      "include": "declared",
+      "peers": [
+        "python",
+        "rust",
+        "typescript"
+      ],
+      "composition": "content",
+      "why": [
+        "Not a roster: the generator's peers are a COMPOSITION of target x extension set, so 'every",
+        "peer' is not a well-formed set on that side. These three at composition `content` are the",
+        "eligible set they measured and published to us on 2026-09-15 — *'9 of 9 eligible; if you want",
+        "the 34-peer ECP-R7 run to include ours, nothing is in your way.'*",
+        "⚠ THE OTHER SIX ARE NOT EXCLUDED — THEY ARE UNSCOPED. We have never established what the other",
+        "compositions would add, and recording them as an exclusion would claim a judgement nobody made.",
+        "D15: an absence we have not looked for is not a negative."
+      ]
+    },
+    {
+      "source": "core-go",
+      "include": "declared",
+      "peers": [
+        "core-go"
+      ],
+      "why": [
+        "One bespoke reference implementation, driven LAST and never first (AGENTS.md). It is also the",
+        "reference oracle's own language and the reference peer, so agreement with it is the single",
+        "least informative agreement available to us."
+      ]
+    }
+  ],
+  "exclusions": [
+    {
+      "peers": [
+        "crystal",
+        "csharp",
+        "lean",
+        "pd",
+        "php",
+        "rust-wasm",
+        "rust-wasm-wasmtime",
+        "swift",
+        "unison",
+        "wasm-wat"
+      ],
+      "reason": "does not build on a fresh machine, instrument-independent",
+      "evidence": "F51, measured 2026-09-13 under BOTH instruments",
+      "kind": "could-not-look",
+      "note": [
+        "⛔ A COULD-NOT-LOOK, NEVER A RESULT. These peers are not absent from our numbers because they",
+        "failed anything — they are absent because nothing ran. A verdict set that silently omits them",
+        "reports a smaller denominator as though it were the cohort, which is the founding measurement",
+        "of this seat in miniature (a check set that changed SIZE between two runs with no field saying",
+        "so).",
+        "",
+        "⚠ STALE BY CONSTRUCTION, AND RE-TESTED RATHER THAN TRUSTED. Measured 2026-09-13, before",
+        "keystone swept all 46 peers to 0.8.2.25 (complete at b0f18921). Any of these may now build.",
+        "The runner RE-ATTEMPTS every excluded peer and reports when one succeeds; the exclusion",
+        "suppresses the noise, never the attempt. An exclusion nobody retries becomes permanent by",
+        "accident, and this list was already three days stale on the day it was written down."
+      ]
+    }
+  ],
+  "suite_2_note": [
+    "⛔ AN UNSETTLED CONSEQUENCE OF THIS DECLARATION, WRITTEN DOWN BEFORE IT BITES.",
+    "",
+    "ADR-0003 §7.3 clause 3 refuses two suites whose peer sets are IDENTICAL OR NESTED. Suite 1 here",
+    "declares the roster. Every possible suite-2 set is therefore nested in it, so the gate as",
+    "specified would refuse suite 2 no matter what it declared.",
+    "",
+    "The ADR's own reasoning is that a nested set is 'one instrument wearing two names'. That",
+    "reasoning is about two PARTIAL sets chosen to overlap. It does not obviously transfer to a",
+    "total set, where nesting is forced by arithmetic rather than chosen. ⇒ EITHER the clause needs",
+    "an exemption for a set declared as the roster, OR suite 1 must give up peers it can reach so",
+    "that suite 2 has somewhere disjoint to stand — and the second costs real coverage to satisfy a",
+    "gate, which is the tail wagging the dog.",
+    "",
+    "⭐ WE DO NOT RESOLVE IT HERE, AND THE GATE IS BUILT TO SURFACE IT RATHER THAN TO PICK. With one",
+    "suite the clause has no instance and cannot fire either way. `lint-peer-diversity` reports the",
+    "condition on every run and names this note. Routed to arch with ADR-0003's other format",
+    "questions. THIS IS EXACTLY THE ADR'S OWN §2.1 SHAPE — a rule that cannot be violated yet,",
+    "deferred by the second instance not existing — and it is being recorded at the moment it is",
+    "cheap rather than discovered by the session that lands suite 2."
+  ]
+}

@@ -400,7 +400,7 @@ CEILING = REQ_DIR / "UNEXECUTED-CEILING"
 def implemented(suites: Path) -> dict[str, set[str]]:
     out = {}
     for manifest in sorted(suites.glob("*/IMPLEMENTS")):
-        ids = {l.strip() for l in manifest.read_text().splitlines() if l.strip() and not l.startswith("#")}
+        ids = {l.split()[0] for l in manifest.read_text().splitlines() if l.strip() and not l.startswith("#")}
         out[manifest.parent.name] = ids
     return out
 

@@ -6,36 +6,57 @@
     "BUNDLES: the structure half carries a producer-side MUST (\"The content_hash MUST match the map key\")",
     "that fails independently of receipt validation. Filed as ECP-R7-pending-b; routed (F27), not split.",
     "",
-    "RE-AUTHORED 2026-09-14 against 0.8.2.24 (was 0.8.2.21). The OBLIGATION did not change and",
-    "its quoted text is byte-identical. What changed is that 0.8.2.24 PINS THE REFUSAL CODE on this exact",
-    "surface, which .21 left open and which this file's own reading flagged as F24's ask. See F64."
+    "SPLIT AND RE-AUTHORED 2026-09-16 against 0.8.2.25 — the SECOND file through ADR-0003, after",
+    "ECP-R57. The arms, preconditions and surface that used to live here are now a suite-authored ITEM",
+    "(suites/py-prototype/items/entity-core-protocol/ECP-R7-P1.diag). This file states the obligation.",
+    "",
+    "⛔ WHY THIS FILE MOVED TWICE AND THE INSTRUMENT MOVED NEITHER TIME — READ THIS BEFORE TRUSTING ANY",
+    "PRIOR ECP-R7 NUMBER. 0.8.2.24 pinned the refusal code and this file was re-authored to say so on",
+    "2026-09-14. `suites/py-prototype/prototype/checks.py::check_r7` went on scoring `_refused_any` —",
+    "a helper whose own docstring says it is \"for rows that require REJECTION and PIN NO CODE\" — until",
+    "2026-09-16. So for two days the file asserted a pinned code, the suite accepted any refusal, and",
+    "`make check` was green, `IMPLEMENTS` still named ECP-R7, and the executed-by-a-suite ratchet still",
+    "counted it. Every one of those measures a DECLARATION. See AP-18.",
+    "",
+    "⭐ AND THE PREDICTION COULD NOT HAVE FIRED. This file predicts that peers PASSing under .21 FAIL",
+    "under the pin with no peer having changed a line. The instrument passed every peer the prediction",
+    "is about, because any refusal satisfied it. A prediction whose instrument cannot falsify it is not",
+    "a prediction — it is a sentence. That is the charter's own negative-control rule, pointed at a",
+    "prediction instead of at an arm, and nothing in this tree was looking there.",
+    "",
+    "Read range for this re-authoring: §3.1 whole, §1.8 whole, §4.11 whole, §5.2a whole, §6.5, §9.1's row."
   ],
   "id": "ECP-R7",
   "id_status": "allocated",
-  "title": "A received envelope carrying an included entity whose content_hash does not match its {type, data} is not processed",
+  "title": "A received envelope carrying an included entity whose content_hash does not match its {type, data} is refused with a coded 400 hash_mismatch response",
   "spec": "ENTITY-CORE-PROTOCOL §3.1 (Wire transport optimization)",
   "spec_also": [
-    "§6.5 dispatch chain ('Validate each included entity hash')",
     "§1.8 item 1 (both halves: self-consistency AND resolution integrity, 0.8.2.23)",
-    "§5.2a corollary 1 (the decode-boundary code, 0.8.2.24)",
+    "§4.11 (Pre-admission refusals — the NORMATIVE HOME of the refusal-emission obligation, 0.8.2.25)",
+    "§4.11's cause/code table, row 3 (resolution integrity -> 400 hash_mismatch, stated at §5.2a)",
+    "§5.2a corollary 1 (the decode-boundary code, 0.8.2.24; re-scoped 0.8.2.25)",
+    "§6.5 dispatch chain ('Validate each included entity hash')",
     "ENTITY-CBOR-ENCODING §5.4 (what `non_canonical_ecf` is FOR)",
     "§4.7 (the connection-error registry — and it has no row for this)",
-    "§9.1 (the floor row this id binds)"
+    "§9.1 ('Envelope structure with per-entity hash validation (§3.1)' — the floor row this id binds)",
+    "§9 CORE-PREADMISSION-REFUSAL-1 arm (d) (the conformance item, 0.8.2.25 — we do NOT author it)"
   ],
-  "snapshot": "entity-core-protocol/v0.8.2.24",
+  "snapshot": "entity-core-protocol/v0.8.2.25",
   "level": "MUST",
   "level_basis": "keyword",
   "profile": [
     "core"
   ],
-  "surface": "wire",
   "status": "draft",
-  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F24, F27, F64",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F24, F27, F64, F76",
+  "ruled": "CQ-34 and CQ-35 RULED and folded as §4.11 (0.8.2.25) — the three `inconclusive` arms this file carried are now scored, and the drop and the bare close are DISTINCT failures",
   "reading": [
-    "§3.1: \"On the wire, implementations **MUST** validate each included entity's content_hash individually",
-    "per entity fidelity (§1.8). Implementations are **NOT REQUIRED** to compute or validate the envelope's",
-    "own content_hash during transport.\" §6.5 orders it: \"Validate root entity hash / Validate each",
-    "included entity hash / Root is EXECUTE? ...\".",
+    "§3.1, BYTE-IDENTICAL AT .24 AND .25 (verified by extracting the section from both snapshots and",
+    "comparing): \"On the wire, implementations **MUST** validate each included entity's content_hash",
+    "individually per entity fidelity (§1.8). Implementations are **NOT REQUIRED** to compute or validate",
+    "the envelope's own content_hash during transport.\" §6.5 orders it: \"Validate root entity hash /",
+    "Validate each included entity hash / Root is EXECUTE? ...\". ⇒ THE OBLIGATION IS UNCHANGED. What",
+    "moved at .25 is the REFUSAL SHAPE, and only that.",
     "",
     "\"EACH\" IS THE WORD THE PROBE IS BUILT ON. The row does not say \"each included entity the handler",
     "uses\". A peer that validates only the entities it reads (the signature, the capability) satisfies a",
@@ -48,14 +69,25 @@
     "ROOT VALID, PARAMS VALID — so the refusal is attributable to the included entity alone and not to",
     "ECP-R3's surface.",
     "",
-    "⭐ THE CODE IS NOW PINNED, AND THIS FILE'S OWN F24 CAVEAT IS DISCHARGED (0.8.2.24). The .21 text of",
-    "this reading said: \"no code is pinned for this refusal (F24), so any refusal satisfies the row and",
-    "status/code are witnessed.\" §5.2a corollary 1 now says:",
+    "⭐ AP-16 CHECK, PERFORMED AND RECORDED RATHER THAN ASSUMED. §9.1's row for this id reads \"Envelope",
+    "structure with per-entity hash validation (§3.1)\" — a POINTER that summarizes and cites the body it",
+    "summarizes, not an independent restatement. Body and row AGREE, and the row asserts nothing the body",
+    "does not. ⛔ This check is not optional bookkeeping: ECP-R57 was authored from a §9.1 row that",
+    "CONTRADICTED §4.6 and §5.2a, the transcription was faithful, and our instrument scored 34 of 37",
+    "peers against it (F75). Verified further: §9.1 is byte-identical .24 -> .25 except for ONE row, and",
+    "that row is ECP-R57's, not this one's.",
     "",
-    "  \"A peer that refuses at the decode boundary — before the envelope becomes a request — MUST answer",
-    "  `400 hash_mismatch` [MUST] (mood corrected 0.8.2.24) (§3.3; the same code and condition",
-    "  EXTENSION-CONTENT §6.3 and EXTENSION-TREE Appendix A already define for a mis-keyed `included`",
-    "  entry) and reaches none of these rows.\"",
+    "⭐ THE CODE IS PINNED, AND .25 NARROWS THE PIN RATHER THAN MOVING IT. §5.2a corollary 1 pinned",
+    "`400 hash_mismatch` at .24. At .25 the corollary gains a scoping warning in its own words:",
+    "",
+    "  \"⚠ The code above is THIS arm's, not the class's [MUST] (0.8.2.25). `400 hash_mismatch` answers a",
+    "  **resolution-integrity** refusal — an `included` key that does not bind to its entity. It is the",
+    "  wrong answer for bytes that were never hashed: a frame that does not decode into an Envelope at",
+    "  all is `400 invalid_request` (§4.7, §4.11).\"",
+    "",
+    "⇒ The pin still reaches THIS probe and is now narrower around it. §4.11's cause table states the",
+    "same binding as a row: \"Resolution integrity — an `included` entry whose key is not",
+    "`content_hash({type, data})` of the entity under it -> 400 hash_mismatch, stated at §5.2a.\"",
     "",
     "THE PROBE'S ENTRY IS \"MIS-KEYED\" BY THE SPECIFICATION'S OWN DEFINITION, so the pin reaches it.",
     "§1.8 item 1 mechanism (a) defines the condition: \"reject any entry whose key is not",
@@ -63,146 +95,131 @@
     "content_hash and both equal the hash of the entity's ORIGINAL data; the data was then changed. So",
     "`content_hash({type, data})` of what arrives is equal to neither. That is the named condition.",
     "",
-    "AND ONE CODE IS NOW EXPLICITLY NON-CONFORMANT, which is the scoreable half:",
+    "⭐⭐ AND THE §1.8 MECHANISM-(b) CARVE-OUT DOES NOT REACH THIS FILE — CHECKED, BECAUSE A COUNTERPART",
+    "GAVE US THE WARNING FOR FREE. §1.8 item 1 admits two mechanisms and a peer MUST implement at least",
+    "one: (a) bind the key, or (b) \"discard the key — drop wire-supplied keys at the decode boundary and",
+    "address entities exclusively by a `content_hash` validated under this item\". §5.2a: a mechanism-(b)",
+    "peer never DETECTS a mis-key — the lookup misses, and a miss inherits the row of the step that",
+    "missed — so \"a uniform verdict across all three rows MUST NOT be required\". ⇒ That carve-out is",
+    "about the KEY. THIS PROBE'S DEFECT IS SELF-CONSISTENCY: the entity's own carried `content_hash` does",
+    "not match its own {type, data}, which is §1.8 item 1's FIRST half and which mechanism (b)",
+    "\"depends on ... running at EVERY ingress\" — in the spec's own words, without it \"a peer that skips",
+    "the validation pass has re-created the defect one level down\". So a mechanism-(b) peer detects this",
+    "probe by the validation it is REQUIRED to run. ⛔ The carve-out lands on ECP-R7-pending-b, whose",
+    "surface IS the key, and that file's arms have NOT yet been re-read against it (K-MECH, owed).",
     "",
-    "  \"`400 non_canonical_ecf` is NOT conformant here [MUST] (0.8.2.24): ENTITY-CBOR-ENCODING §5.4",
-    "  defines that code for CBOR tag-policy violations — any CBOR major-type-6 item in a data-field",
-    "  position — and a mis-keyed `included` entry carries no tag. Its encoding is canonical; what is",
-    "  false is the claim the key makes, and the remedy the code selects (re-encode) sends an honest",
-    "  caller to the wrong layer.\"",
+    "AND ONE CODE IS EXPLICITLY NON-CONFORMANT, which is the scoreable half (0.8.2.24, restated at",
+    "§4.11 for the adjacent framing arm at .25):",
+    "",
+    "  \"`400 non_canonical_ecf` is NOT conformant here [MUST]: ENTITY-CBOR-ENCODING §5.4 defines that",
+    "  code for CBOR tag-policy violations — any CBOR major-type-6 item in a data-field position — and a",
+    "  mis-keyed `included` entry carries no tag. Its encoding is canonical; what is false is the claim",
+    "  the key makes, and the remedy the code selects (re-encode) sends an honest caller to the wrong",
+    "  layer.\"",
     "",
     "Checked against the encoding document rather than taken on the cross-reference: ECF 1.7 §5.4",
-    "decoding paragraph scopes the code to tags and nothing else — \"any CBOR major-type-6 item",
-    "encountered in a data-field position is a rejection condition\". The probe's frame carries no tag.",
+    "decoding paragraph scopes the code to tags and nothing else. The probe's frame carries no tag.",
+    "⭐ §4.11 generalizes the principle in one sentence worth keeping: \"the code selects the caller's",
+    "remedy, so a code that is merely in the right family is still wrong.\"",
     "",
     "§4.7 DOES NOT GOVERN THIS, AND THAT WAS CHECKED RATHER THAN ASSUMED. §4.7 is the authoritative",
     "(status, code) registry for CONNECTION-HANDSHAKE failures and says so, adding that §5.2a \"MUST NOT be",
     "read as independent registries\". Its ten rows are negotiation, the three §4.6 proof-of-possession",
     "steps, ingest dispatch, already-established, out-of-order and unknown-operation. **None of them is a",
-    "mis-keyed included entity**, and the corollary places this refusal \"before the envelope becomes a",
-    "request\" — earlier than any §4.6 step. So §4.7's precedence clause is not triggered: there is no row",
-    "here to be in tension with. The probe is a hello only because a hello needs no author, no capability",
+    "mis-keyed included entity**, and the refusal is placed \"before the envelope becomes a request\" —",
+    "earlier than any §4.6 step. The probe is a hello only because a hello needs no author, no capability",
     "and no grant, which keeps the refusal attributable to the corrupted entity and to no posture.",
     "",
-    "WHAT IS STILL NOT PINNED, AND IS THEREFORE WITNESSED RATHER THAN SCORED. The corollary pins what a",
-    "peer that refuses AT THE DECODE BOUNDARY must answer. It does not say a bare close is non-conformant,",
-    "and two live questions already cover that ground — CQ-34 (a silent drop is neither a refusal nor",
-    "processing, F61: 21 peers) and CQ-35 (a close with no coded frame, F62: 21 of 34 peers). This file",
-    "MUST NOT quietly pre-empt either ruling: a close and any other coded refusal are recorded as",
-    "`inconclusive_pending_ruling`, never scored, and named in the run's triage. **A requirement that",
-    "scores an arm its own open question owns is the check bug in the three-way table.**"
+    "⛔⭐ WHAT .25 CHANGED, AND IT IS THE WHOLE REASON THIS FILE WAS RE-AUTHORED. The .24 text of this",
+    "reading said a close and a silence are \"recorded as `inconclusive_pending_ruling`, never scored\",",
+    "because CQ-34 and CQ-35 owned them. BOTH ARE RULED, folded as §4.11:",
+    "",
+    "  \"A peer that refuses a frame pre-admission MUST put a coded EXECUTE_RESPONSE on the wire [MUST] —",
+    "  correlated by `request_id` where the id is available, and otherwise as a best-effort coded frame",
+    "  carrying no correlation. Whether the peer closes the connection afterwards is its own choice.\"",
+    "",
+    "  \"Two behaviours are non-conformant, and they are distinct failures rather than one\" — dropping the",
+    "  frame (\"the caller learns nothing until its own §6.11(c) deadline expires, and the refusal is",
+    "  unobservable to every instrument\") and closing with no coded frame (\"indistinguishable from a",
+    "  network fault (§4.6) ... and the two remedies are opposite\").",
+    "",
+    "⇒ THEY ARE SCORED, AND SCORED SEPARATELY. A suite that collapses them lets a peer get credit for the",
+    "wrong fix. ⇒ And the close is NO LONGER EVIDENCE OF ANYTHING on its own: a peer that closes after",
+    "emitting the coded frame is conformant; one that closes without it is not.",
+    "",
+    "STATE. The subject is a HELLO — a pre-handshake frame — which is deliberate and unchanged: it needs",
+    "no author, no capability and no grant, so the refusal is attributable to the corrupted entity and to",
+    "no posture. §4.11 reaches it because a pre-admission refusal is defined by the frame not yet being",
+    "an admitted request, which is true of a hello by construction."
   ],
-  "preconditions": {
-    "grants": [],
-    "identities": [
-      "caller"
-    ],
-    "handlers": [],
-    "posture_axes": [
-      "seed_policy",
-      "close_wait_bound"
-    ]
-  },
-  "arm": [
+  "conformant": [
     {
-      "name": "unused-included-mismatch",
-      "kind": "conformant",
-      "given": "a fresh connection; a correct hello whose envelope `included` map holds one `primitive/any` entity {data: {\"x\": 1}}, keyed by its CORRECT hash, whose carried `content_hash` equals that key but whose data was changed to {\"x\": 2} after hashing",
-      "why": "§3.1's 'each', on an entity the hello never reads. Key and carried hash agree with each other, so the refusal cannot be ECP-R7-pending-b's key mismatch.",
-      "step": [
-        {
-          "op": "send_hello",
-          "capture": "included_bad",
-          "included": "one primitive/any entity whose data no longer matches its (key == content_hash)"
-        }
-      ],
-      "accept": [
-        {
-          "outcome": "coded_response",
-          "status": 400,
-          "code": "hash_mismatch",
-          "why": "⭐ PINNED 0.8.2.24 (§5.2a corollary 1). The decode-boundary refusal of a mis-keyed `included` entry, which is what this probe constructs."
-        }
-      ],
-      "refuse": [
-        {
-          "outcome": "hello_answered",
-          "why": "THE FAILURE: the envelope was processed with an unvalidated included entity."
-        },
-        {
-          "outcome": "coded_response",
-          "status": 400,
-          "code": "non_canonical_ecf",
-          "why": "⭐ NEWLY NON-CONFORMANT 0.8.2.24, in terms: ECF §5.4 defines that code for tag-policy violations and this frame carries no tag. The remedy it selects (re-encode) sends an honest caller to the wrong layer. Under 0.8.2.21 this file ACCEPTED this outcome as 'any non-200'."
-        }
-      ],
-      "witness": [
-        {
-          "field": "status_and_code",
-          "why": "every refusal shape, scored or not — the .21 run witnessed `400 non_canonical_ecf` on 25 peers for the ADJACENT root surface (ECP-R3), so the distribution here is the measurement."
-        }
-      ],
-      "inconclusive": [
-        {
-          "outcome": "close",
-          "why": "CQ-35 is open and owns it (F62). Not scored either way by this file."
-        },
-        {
-          "outcome": "silence",
-          "why": "CQ-34 is open and owns it (F61: 21 peers silently drop and keep serving)."
-        },
-        {
-          "outcome": "coded_response_other",
-          "why": "a coded refusal with some third code is a refusal the peer clearly made; whether the pin forbids it is F64's remaining half, routed in round 6. Witnessed, not scored."
-        }
-      ]
+      "outcome": "coded_response",
+      "status": 400,
+      "code": "hash_mismatch",
+      "why": "§4.11's cause table row 3, stated at §5.2a corollary 1 and pinned since 0.8.2.24. Whether the peer closes afterwards is its own choice (§4.11) and neither shape is preferred."
+    }
+  ],
+  "non_conformant": [
+    {
+      "outcome": "silent_drop",
+      "why": "§4.11's FIRST named failure. No response and no close: the caller learns nothing until its own §6.11(c) deadline, and the refusal is unobservable to every instrument. SCORED SEPARATELY from the bare close. Previously parked as `inconclusive` pending CQ-34 (F61: 21 peers)."
     },
     {
-      "name": "control",
-      "kind": "negative-control",
-      "given": "the same hello with the same included entity, uncorrupted",
-      "why": "MANDATORY ANTI-VACUITY. Proves a hello carrying an unused included entity is answered at all — without it, a peer that refuses any hello with a non-empty `included` passes the probe.",
-      "step": [
-        {
-          "op": "send_hello",
-          "capture": "included_good",
-          "included": "one primitive/any entity, correctly hashed and keyed"
-        }
-      ],
-      "accept": [
-        {
-          "outcome": "hello_answered",
-          "why": "the control's subject is the corrupted byte."
-        }
-      ],
-      "refuse": [
-        {
-          "outcome": "close",
-          "why": "a refusal here voids the probe."
-        }
-      ],
-      "witness": [
-        {
-          "field": "outcome_if_coded_refusal",
-          "why": "a coded refusal of an unused included entity is not obviously non-conformant (§3.1's protocol-scope paragraph) — recorded, and if seen the probe is reported unscoreable rather than passed."
-        }
-      ]
+      "outcome": "bare_close",
+      "why": "§4.11's SECOND named failure. Indistinguishable from a network fault (§4.6); on a multiplexed connection it destroys unrelated ADMITTED requests, which §4.9(c) forbids for each of them. SCORED SEPARATELY from the silent drop. Previously parked as `inconclusive` pending CQ-35 (F62: 21 of 34 peers)."
     },
     {
-      "name": "non-conformant-witness",
-      "kind": "non-conformant",
-      "given": "a peer that validates included entities lazily, when a handler dereferences them",
-      "expect": "the probe hello is answered; a corrupted entity it never read is accepted into the envelope and, if the peer later stores or forwards received included entities, served under a hash its bytes do not produce",
-      "why": "the shape 'each' rules out."
+      "outcome": "coded_response_wrong_code",
+      "why": "§4.11: the CODE belongs to the cause [MUST]; the code selects the caller's remedy, so a code merely in the right family is still wrong. ⛔ `400 non_canonical_ecf` is named non-conformant in terms (ECF §5.4 scopes it to tag-policy violations and this frame carries no tag). `400 invalid_request` is also wrong here: §5.2a's 0.8.2.25 scoping makes that the FRAMING arm's code, for bytes that never become an Envelope — and this frame decodes."
+    },
+    {
+      "outcome": "hello_answered",
+      "why": "THE FAILURE the row exists for: the envelope was processed with an unvalidated included entity. §3.1's MUST is on validation, not on refusal shape."
     }
   ],
   "predicted_disagreement": {
     "against": "THE COHORT, not a reference check — no core-profile check cites §3.1, so the oracle has no verdict here to disagree with. Recorded in this block anyway because the gate's rule is what makes it a prediction rather than a retrofit, and the thing predicted about is the peers.",
-    "prediction": "the peers that refuse this probe will answer `400 non_canonical_ecf`, not the newly-pinned `400 hash_mismatch` — so a block of peers that PASSed this file under 0.8.2.21 FAILs it under 0.8.2.24 with no peer having changed a line",
+    "prediction": "the peers that refuse this probe answer `400 non_canonical_ecf`, not the pinned `400 hash_mismatch` — so a block of peers that PASSed this file under 0.8.2.21's any-refusal reading FAILs it under the pin",
     "basis": "The .21 run of the ADJACENT root-hash surface (ECP-R3) witnessed `400 non_canonical_ecf` on 25 of 34 peers and a close on 2 (RUN-2026-09-13-d §4, recorded as an unscored witness precisely because no code was pinned then). `non_canonical_ecf` is the cohort's habitual code for 'the hashes in this frame are wrong', which is the exact misuse 0.8.2.24 legislates against. This file's surface is the included map rather than the root, so the habit is inferred, not measured — that is what makes it a prediction. ⚠ The inference is cross-surface and D15 applies to it: the root distribution could not have shown the included distribution, and no run has yet asked this question.",
-    "if_true": "The cohort converged on a code the spec now forbids, and converged BEFORE the spec said anything — which is this seat's founding concern in miniature: a habit becomes the observed behaviour of every peer, and then it is indistinguishable from the protocol. It is NOT a defect in this file and NOT one finding per peer: it is one SPECIFICATION-TO-COHORT gap, routed once to arch with the census attached, and only then to peer owners. It also makes 0.8.2.24's pin load-bearing rather than editorial, which is worth telling arch since they wrote it as a mood correction.",
-    "if_false": "The cohort already answers `400 hash_mismatch` on the included surface and only misuses `non_canonical_ecf` on the root surface. Then the two surfaces are handled by different code paths in most peers, the pin is already satisfied where it was written, and F64's remaining half — does the pin reach ECP-R3's ROOT surface — becomes the ONLY live question, sharper than it is today. Nothing in this file changes either way; a false prediction here narrows round 6's ask rather than repairing anything of ours.",
-    "settles": "the first run of this file against 0.8.2.24, on the 34-peer cohort run (d) already measured"
+    "restated": [
+      "⛔ RESTATED 2026-09-16, AND THE OLD FORM MUST NOT BE RUN AS IF IT STILL HELD. The .24 wording was",
+      "\"with no peer having changed a line\". `entity-core-keystone` has since regenerated the ENTIRE",
+      "cohort to 0.8.2.25 — 46 of 46, complete at their `b0f18921`. At their HEAD, every peer has changed",
+      "its lines, so a HEAD run cannot test that sentence.",
+      "",
+      "⭐ THE CONTROL IS NOT LOST, AND THIS CORRECTS A CLAIM THIS SEAT MADE FOR THREE SESSIONS. Keystone",
+      "filed it (ROUTING-2026-09-15-d): \"a control group held in git is not consumed by a sweep.\" The",
+      "thirteen then-unswept peers are at their `7c9f0dfc`, on `dev`, buildable at any time.",
+      "",
+      "⇒ THERE ARE NOW TWO DISTINCT EXPERIMENTS AND THEY MUST NOT BE CONFLATED:",
+      "  (i)  at keystone `7c9f0dfc` — the ORIGINAL prediction, no peer having changed a line, testing",
+      "       whether the cohort's habitual code predates the pin;",
+      "  (ii) at keystone HEAD — whether the 0.8.2.25 sweep FIXED the code on this surface. A pass here",
+      "       is evidence about the sweep, NOT about the prediction, and reporting it as the latter would",
+      "       be the mixed-pin conflation ADR-0003 §7 exists to prevent.",
+      "⚠ Each run records the peer's identity per peer (ADR-0003 §7.3 clause 2), so which experiment a",
+      "row belongs to is readable from the row rather than from whoever ran it."
+    ],
+    "if_true": "The cohort converged on a code the spec now forbids, and converged BEFORE the spec said anything — which is this seat's founding concern in miniature: a habit becomes the observed behaviour of every peer, and then it is indistinguishable from the protocol. It is NOT a defect in this file and NOT one finding per peer: it is one SPECIFICATION-TO-COHORT gap, routed once to arch with the census attached, and only then to peer owners.",
+    "if_false": "The cohort already answers `400 hash_mismatch` on the included surface and only misuses `non_canonical_ecf` on the root surface. Then the two surfaces are handled by different code paths in most peers, the pin is already satisfied where it was written, and F64's remaining half — does the pin reach ECP-R3's ROOT surface — becomes the ONLY live question, sharper than it is today. Nothing in this file changes either way.",
+    "settles": "the first run of this file with an instrument that can FALSIFY it — which did not exist until 2026-09-16, and that is F76 rather than a delay",
+    "outcome": [
+      "⭐ CONFIRMED on first measurement, 2026-09-16, on FOUR peers — RUN-2026-09-16-…. 4 of 4 FAIL.",
+      "The three generator peers (composition `content`) answer `400 non_canonical_ecf`, the exact code",
+      "predicted and the one ECF §5.4 scopes to tag-policy violations. core-go bare-closes with no coded",
+      "frame — a DIFFERENT non-conformance (§4.11's second named failure), so it does not evidence the",
+      "code habit and is not counted toward it.",
+      "",
+      "⛔ SCOPE, BECAUSE THE PREDICTION IS ABOUT A COHORT AND THIS IS FOUR PEERS. The generator's three",
+      "share one generation lineage — cohort-consistent, NOT independent convergence (AGENTS-STANDARD,",
+      "'Never overclaim'). ⇒ What is established: the habit is real and is not one implementation's.",
+      "What is NOT established: any distribution. The 36 declared keystone peers are unrun (their census",
+      "guard refused, twice, while their own session held the repo — declared in the run record §5).",
+      "",
+      "⇒ ROUTE ONCE TO ARCH AS A SPECIFICATION-TO-COHORT GAP, per this block's own `if_true`, and NOT as",
+      "four peer findings. Held pending the wider run rather than filed on four peers."
+    ]
   },
   "notes": {
     "peer_attributable": true,

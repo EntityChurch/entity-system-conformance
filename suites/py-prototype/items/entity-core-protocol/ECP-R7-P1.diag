@@ -1,0 +1,155 @@
+{
+  "header": [
+    "ECP-R7-P1 — an UNUSED included entity whose data no longer matches its hash, driven over the wire.",
+    "",
+    "SECOND ITEM IN THIS TREE (ADR-0003), after ECP-R57-P1. The arms below lived inside",
+    "requirements/entity-core-protocol/ECP-R7.diag until 2026-09-16. They are a PROBE DESIGN — which",
+    "bytes to send, which answers are conformant — and AGENTS.md forbids two suites sharing that. The",
+    "requirement is shared; this is not.",
+    "",
+    "⚠ THE ID FORM DEVIATES FROM SPECIFICATION-FORMAT §8.5a AND IT IS ROUTED, NOT SILENT. §8.5a's item",
+    "form is `SUBJECT-CONDITION-N`. Ours is `<requirement-id>-P<k>`, DERIVED, because D18 says a name",
+    "that appears in an id is TAKEN, NEVER COINED. Same deviation as ECP-R57-P1, same routing.",
+    "",
+    "⛔ WHY THE PROBE CORRUPTS THE DATA AND NOT THE KEY, RESTATED BECAUSE A COUNTERPART'S FINDING MAKES",
+    "IT LOAD-BEARING. The key equals the entity's carried `content_hash` and both equal the hash of the",
+    "ORIGINAL data; the data is changed afterwards. So the entity is SELF-INCONSISTENT — §1.8 item 1's",
+    "first half — rather than MIS-ADDRESSED. §5.2a exempts a §1.8 mechanism-(b) peer from detecting a",
+    "mis-KEY (it discards wire keys, so the lookup simply misses), and keystone declined to route a",
+    "finding against `io` and `sql` on exactly that ground. That exemption does NOT reach this probe:",
+    "mechanism (b) is admissible only because the validation pass runs at EVERY ingress, so a",
+    "mechanism-(b) peer is obliged to catch this one by the check its own mechanism depends on.",
+    "⇒ The exemption lands on ECP-R7-pending-b, whose surface IS the key."
+  ],
+  "id": "ECP-R7-P1",
+  "author": "py-prototype",
+  "class": "validate-peer check",
+  "class_basis": [
+    "GUIDE-CONFORMANCE §7.0 via SPECIFICATION-FORMAT §8.5: 'behavioral, driven over the wire against a",
+    "running peer'. ⛔ §7.0's row bundles an AUTHOR into the class definition and names entity-core-go;",
+    "arch ruled 2026-09-15 that the author column is a fact about the estate on a date and NOT a property",
+    "of the class (CQ-40), and is moving it to a dated §7.0a. This item is that class by its NATURE —",
+    "wire-driven, against a live peer — and is authored by a neutral seat, which is the configuration the",
+    "current table cannot express."
+  ],
+  "drives": [
+    "entity-core-protocol/ECP-R7"
+  ],
+  "spec_item": "CORE-PREADMISSION-REFUSAL-1 arm (d) — 'a mis-keyed `included` entry -> 400 hash_mismatch' (ENTITY-CORE-PROTOCOL §9, 0.8.2.25). ⚠ WE DO NOT AUTHOR THAT ITEM. This probe implements arm (d) only; arms (a), (b), (c), (e) are other requirements' surfaces and (f) — the multiplexed arm the spec says cannot be inferred from the others — is unreached by anything in this tree.",
+  "snapshot": "entity-core-protocol/v0.8.2.25",
+  "surface": "wire",
+  "status": "draft",
+  "preconditions": {
+    "grants": [],
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "posture_axes": [
+      "seed_policy",
+      "response_wait_bound"
+    ],
+    "note": "⛔ NO GRANT AND NO HANDSHAKE IS REQUIRED, AND THAT IS THE POINT OF USING A HELLO. The probe needs no author, no capability and no seeded identity, so the refusal is attributable to the corrupted entity and to NO POSTURE. This is the one surface in the corpus where the founding posture defect cannot reach the result — and it is why this row is worth running first on a cohort whose postures we do not control."
+  },
+  "arm": [
+    {
+      "name": "unused-included-mismatch",
+      "kind": "conformant",
+      "given": "a fresh connection; a correct hello whose envelope `included` map holds one `primitive/any` entity {data: {\"x\": 1}}, keyed by its CORRECT hash, whose carried `content_hash` equals that key but whose data was changed to {\"x\": 2} after hashing",
+      "why": "§3.1's 'each', on an entity the hello never reads. Key and carried hash agree with each other, so the refusal cannot be ECP-R7-pending-b's key mismatch, and the §5.2a mechanism-(b) exemption does not reach it.",
+      "step": [
+        { "op": "connect" },
+        {
+          "op": "send_hello",
+          "capture": "included_bad",
+          "included": "one primitive/any entity whose data no longer matches its (key == content_hash)"
+        },
+        { "op": "await_response_or_bound", "capture": "refusal" }
+      ],
+      "accept": [
+        {
+          "outcome": "coded_response",
+          "status": 400,
+          "code": "hash_mismatch",
+          "why": "⭐ THE OBLIGATION. §4.11's cause table row 3, stated at §5.2a corollary 1, pinned since 0.8.2.24. Whether the peer closes afterwards does not change the verdict — §4.11 makes the close its own choice."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "silence",
+          "why": "§4.11's FIRST named failure — dropped, no response and no close. Scored as `silent_drop`, NOT merged with the bare close. ⛔ UNDER .21 AND .24 THIS OUTCOME WAS PARKED AS `inconclusive` pending CQ-34, which is now ruled."
+        },
+        {
+          "outcome": "close",
+          "why": "§4.11's SECOND named failure — closed with no coded frame. Scored as `bare_close`, NOT merged with the drop. ⛔ UNDER .21 AND .24 THIS WAS `inconclusive` pending CQ-35, which is now ruled."
+        },
+        {
+          "outcome": "coded_response_other",
+          "why": "§4.11 pins the code to the CAUSE. ⛔ `400 non_canonical_ecf` is non-conformant in terms (ECF §5.4 scopes it to tag-policy violations; this frame is canonical and carries no tag) and is the code this file PREDICTS the cohort answers. `400 invalid_request` is also wrong: §5.2a's .25 scoping assigns that to the FRAMING arm, for bytes that never become an Envelope, and this frame decodes."
+        },
+        {
+          "outcome": "hello_answered",
+          "why": "THE FAILURE: the envelope was processed with an unvalidated included entity."
+        }
+      ],
+      "witness": [
+        {
+          "field": "status_and_code",
+          "why": "every refusal shape, scored or not — the distribution IS the measurement this file predicts about."
+        },
+        {
+          "field": "preadmission_class",
+          "why": "which of §4.11's classes the outcome fell in (`coded_conformant` / `coded_response_wrong_code` / `bare_close` / `silent_drop` / `admitted`). ⛔ RECORDED PER PEER BECAUSE §4.11 REQUIRES THE TWO FAILURES TO BE SCORED SEPARATELY, and a verdict that says only FAIL cannot tell a drop from a bare close — which are different defects with opposite remedies."
+        },
+        {
+          "field": "closed_after",
+          "why": "whether the peer closed after the coded frame. NOT SCORED — §4.11 leaves it to the peer."
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "a fresh connection; the same hello with the same included entity, UNCORRUPTED",
+      "why": "MANDATORY ANTI-VACUITY. Proves a hello carrying an unused included entity is answered at all — without it, a peer that refuses any hello with a non-empty `included` passes the probe. The hello-building path is shared with the probe and only the corrupted byte differs.",
+      "step": [
+        { "op": "connect" },
+        {
+          "op": "send_hello",
+          "capture": "included_good",
+          "included": "one primitive/any entity, correctly hashed and keyed"
+        },
+        { "op": "await_response_or_bound", "capture": "control_answer" }
+      ],
+      "accept": [
+        {
+          "outcome": "hello_answered",
+          "why": "200: the control's subject is the corrupted byte, so an uncorrupted hello must be admitted."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "close",
+          "why": "a refusal here voids the probe: the peer refuses this envelope shape regardless of the corruption."
+        },
+        {
+          "outcome": "silence",
+          "why": "as the close — the probe's refusal would not be attributable to the corrupted entity."
+        }
+      ],
+      "witness": [
+        {
+          "field": "outcome_if_coded_refusal",
+          "why": "a coded refusal of an UNUSED included entity is not obviously non-conformant (§3.1's protocol-scope paragraph) — recorded, and if seen the probe is reported unscoreable rather than passed."
+        }
+      ]
+    },
+    {
+      "name": "lazy-validation",
+      "kind": "non-conformant",
+      "given": "a peer that validates included entities lazily, when a handler dereferences them",
+      "expect": "the probe hello is answered 200; a corrupted entity it never read is accepted into the envelope and, if the peer later stores or forwards received included entities, served under a hash its bytes do not produce",
+      "why": "the shape §3.1's 'each' rules out, and the reason the probe corrupts an entity the hello has no use for. A peer validating only what it reads passes a weaker rule and would be invisible to any probe that corrupts the signature or the capability."
+    }
+  ]
+}

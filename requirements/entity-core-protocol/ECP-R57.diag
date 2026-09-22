@@ -1,166 +1,135 @@
 {
   "header": [
-    "ECP-R57 — a well-formed message that is neither EXECUTE nor EXECUTE_RESPONSE closes the connection.",
+    "ECP-R57 — a frame whose root is neither EXECUTE nor EXECUTE_RESPONSE is answered `400 invalid_request`.",
     "",
-    "Batch 2 (`connectivity`). Read range: §3.3 whole (its last sentence is this row), §6.5.",
+    "⛔ RE-AUTHORED 2026-09-15 (b) against 0.8.2.25, and THE OBLIGATION INVERTED — see F75. This is the",
+    "first file through ADR-0003's requirement/item split: the arms, preconditions and surface that used",
+    "to live here are now a suite-authored ITEM, and this file states the obligation and stops.",
+    "",
+    "WHAT INVERTED. Under .21 this row read `the connection MUST be closed`, and this file's own reading",
+    "argued — correctly, against that text — that `A CODED FRAME BEFORE THE CLOSE IS NOT FORBIDDEN, AND A",
+    "SUITE MUST NOT FAIL IT. The row states one obligation — close.` Under .25 the close is THE PEER'S",
+    "CHOICE and the coded frame is the obligation. `close` and `coded frame` swapped places.",
+    "",
+    "⛔ THE .21 RESULT IS VOID, NOT STALE. 34 of 37 peers were scored FAIL for keeping the connection",
+    "open. That is a verdict on a rule that no longer exists. It MUST NOT be diffed against any .25 run",
+    "and MUST NOT be cited as evidence about those peers. Those 34 findings were HELD, UNROUTED, pending",
+    "CQ-32 — which is the only reason the damage is zero.",
+    "",
+    "Batch 2 (`connectivity`). Read range: §3.3 whole, §4.11 whole, §6.5, §9.1's row.",
     "NO reference check cites this row — it was reached by reading §3.3 to its end (AP-2)."
   ],
   "id": "ECP-R57",
   "id_status": "allocated",
-  "title": "A frame whose envelope root is neither EXECUTE nor EXECUTE_RESPONSE causes the peer to close the connection",
+  "title": "A frame whose envelope root is neither EXECUTE nor EXECUTE_RESPONSE is refused with a coded 400 invalid_request response",
   "spec": "ENTITY-CORE-PROTOCOL §3.3 (final paragraph)",
   "spec_also": [
-    "§6.5 (dispatch chain: 'Other type? -> Invalid. Close connection.')",
+    "§4.11 (Pre-admission refusals — the NORMATIVE HOME of the frame obligation, 0.8.2.25)",
+    "§4.11's cause/code table (root entity is neither EXECUTE nor EXECUTE_RESPONSE -> 400 invalid_request)",
+    "§6.5 (dispatch chain)",
     "§3.1 (the envelope; `root` determines behaviour)",
-    "§9.1 (the floor row this id binds)"
+    "§4.9(c) (deliver-or-signal — scoped to ADMITTED requests, so it does NOT reach this class)",
+    "§9.1 ('Pre-admission refusal emission' — the floor row this id binds, REPLACED at 0.8.2.25)"
   ],
-  "snapshot": "entity-core-protocol/v0.8.2.21",
+  "snapshot": "entity-core-protocol/v0.8.2.25",
   "level": "MUST",
+  "level_basis": "keyword",
   "profile": [
     "core"
   ],
-  "surface": "wire",
   "status": "draft",
-  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F49",
+  "routed": "docs/status/FINDINGS-FROM-AUTHORING.md F49, F75",
+  "ruled": "CQ-32 substantially answered by 0.8.2.25 and by NEITHER horn — see the reading",
   "reading": [
-    "§3.3, closing sentence: \"These are the only two wire message types. Any message that is neither",
-    "EXECUTE nor EXECUTE_RESPONSE is invalid; the connection MUST be closed.\" §6.5's dispatch chain draws",
-    "the same branch: \"Root is EXECUTE? ... Root is EXECUTE_RESPONSE? -> Correlate ... Other type? ->",
-    "Invalid. Close connection.\" §3.1 says which field decides: \"`root`: The primary entity. Determines",
-    "behavior.\"",
+    "§3.3, closing sentence at 0.8.2.25: \"These are the only two wire message types. **A frame whose root",
+    "entity is neither EXECUTE nor EXECUTE_RESPONSE is invalid, and the peer MUST answer `400",
+    "invalid_request` before closing [MUST] (0.8.2.25).** This is a **pre-admission refusal** and **§4.11",
+    "is its normative home**; the close itself remains the peer's choice.\"",
     "",
-    "WHAT \"A MESSAGE\" IS, SO THE PROBE IS UNAMBIGUOUS. The row is about a MESSAGE of the wrong type, not",
-    "about bytes that fail to decode. A frame that is not CBOR, or CBOR that is not an envelope, raises a",
-    "different question (§1.8 fidelity, §6.5's decode step) and the specification does not say that the",
-    "answer to it is a close. So the probe is a WELL-FORMED envelope, correctly framed (§1.6), whose `root`",
-    "is a well-formed entity of a type that is neither `system/protocol/execute` nor",
-    "`system/protocol/execute/response`. Anything less well-formed and a close proves nothing about this",
-    "row.",
+    "§4.11 states the class obligation once: \"A peer that refuses a frame pre-admission MUST put a coded",
+    "EXECUTE_RESPONSE on the wire [MUST] — correlated by `request_id` where the id is available, and",
+    "otherwise as a best-effort coded frame carrying no correlation. **Whether the peer closes the",
+    "connection afterwards is its own choice.**\"",
     "",
-    "A CODED FRAME BEFORE THE CLOSE IS NOT FORBIDDEN, AND A SUITE MUST NOT FAIL IT. The row states one",
-    "obligation — close. It neither requires nor forbids a best-effort error frame first, so both shapes",
-    "are accepted. Contrast §4.7, which REQUIRES the coded response before the close for handshake",
-    "failures: that requirement is specific to §4.7's table and is not imported here.",
+    "AND IT NAMES TWO DISTINCT FAILURES, WHICH IS THE PART A SUITE MUST NOT COLLAPSE. §4.11: \"Two",
+    "behaviours are non-conformant, and they are distinct failures rather than one\" — dropping the frame",
+    "(\"the caller learns nothing until its own §6.11(c) deadline expires, and the refusal is unobservable",
+    "to every instrument\") and closing with no coded frame (\"indistinguishable from a network fault",
+    "(§4.6), so the caller cannot tell a defect in its own request from a defect in the path — and the two",
+    "remedies are opposite\"). ⇒ THEY ARE SCORED SEPARATELY. Collapsing them lets a peer get credit for",
+    "the wrong fix, and arch said so in terms when ruling CQ-34/CQ-35.",
     "",
-    "WHEN. The row does not say \"immediately\". A peer that closes after finishing in-flight work on the",
-    "connection is conformant; a peer that keeps SERVING new requests on the connection is not. So the",
-    "refusal is observed as \"a subsequent valid request on the same connection is answered\", not as a",
-    "timer — a timer would score a slow close as a failure the text does not state. The run still needs a",
-    "bound on how long it waits for the close, and that bound is a posture value, recorded.",
+    "THE CODE IS PINNED BY CAUSE, NOT BY CLASS. §4.11: \"The frame obligation belongs to the class; the",
+    "CODE belongs to the cause [MUST]. A single code for the class would answer an honest caller under the",
+    "wrong reason and send them to the wrong layer.\" This row's cause is the fifth table entry — \"Root",
+    "entity is neither EXECUTE nor EXECUTE_RESPONSE\" -> \"400 invalid_request\", stated at \"§3.3, this",
+    "section\". ⛔ So `400 hash_mismatch` is non-conformant here: nothing was hashed. So is",
+    "`400 non_canonical_ecf`: §4.11 declares it non-conformant on the ADJACENT framing arm because ECF",
+    "§5.4 scopes it to tag-policy violations, and this frame is well-formed canonical CBOR carrying no",
+    "tag — the code would be wrong for a stronger reason here than there.",
     "",
-    "EXECUTED 2026-09-13 (s1-py — the instrument now at suites/py-prototype, renamed 2026-09-15 per ADR-0001; 8 peers) — AND A TENSION THIS READING HAD NOT CONSIDERED. Six peers (core-go,",
-    "Keystone python/rust/go, generator python/rust) keep serving after the probe; both typescript peers close. The",
-    "reference oracle has no check for this row. Before any of the six is scored as an implementation defect, one",
-    "authority outside the snapshot has to be ruled on: ecosystem ADR-0002 adopts \"MUST-ignore-unknowns so extensions",
-    "never break old readers\" for field AND OPCODE identifiers, and lists writing that rule into the spec as an open",
-    "follow-up. The snapshot never wrote it, and §3.3 / §6.5 say close. A cohort ignoring an unknown message type may be",
-    "following the ADR's intent. The arms are unchanged — the text is unambiguous — and the question is arch's (F49).",
+    "WHAT \"A MESSAGE\" IS, SO THE PROBE IS UNAMBIGUOUS — UNCHANGED FROM .21 AND STILL CORRECT. The row is",
+    "about a MESSAGE of the wrong type, not about bytes that fail to decode. A frame that is not CBOR, or",
+    "CBOR that is not an envelope, is §4.11's FRAMING arm — a different table row with the same code and a",
+    "different cause, and a probe that conflates them cannot attribute its result. So the subject is a",
+    "WELL-FORMED envelope, correctly framed (§1.6), whose `root` is a well-formed entity of a type that is",
+    "neither `system/protocol/execute` nor `system/protocol/execute/response`.",
     "",
-    "STATE. The row carries no state qualifier. The probe is sent on an ESTABLISHED connection, because on",
-    "a pre-handshake connection §4's handshake errors could plausibly be read as governing first, and that",
-    "reading is not this row's to settle."
+    "⭐ THE CLOSE IS NO LONGER OBSERVABLE EVIDENCE OF ANYTHING, AND THIS IS THE INVERSION IN ONE",
+    "SENTENCE. Under .21 the close WAS the obligation and the frame was optional; a suite watched the",
+    "socket. Under .25 the frame IS the obligation and the close is optional; a suite reads the response.",
+    "A peer that closes after emitting the coded frame is conformant; a peer that closes without one is",
+    "not; a peer that keeps the connection open after emitting the coded frame is ALSO conformant. ⇒ The",
+    "follow-up-request probe that .21's arms were built around no longer decides this row at all.",
+    "",
+    "⛔ CQ-32 IS SUBSTANTIALLY ANSWERED AND BY NEITHER HORN — RE-VERIFY BEFORE CLOSING IT. We asked arch",
+    "whether §3.3's close-on-unknown governs or ecosystem ADR-0002's MUST-ignore-unknowns does. 0.8.2.25",
+    "answers NEITHER: the frame is refused, with a code, and the close is discretionary. So a peer that",
+    "IGNORES is non-conformant (no coded frame) and a peer that CLOSES BARE is non-conformant (no coded",
+    "frame) — both of the shapes the cohort actually exhibits. ⚠ NOT CLOSED HERE: CQ-32's wording is about",
+    "unknown MESSAGE TYPES and ADR-0002's rule is about unknown FIELDS and OPCODES. Those surfaces are",
+    "adjacent and not identical, and this file does not get to close a question it routed on a reading of",
+    "a different section. The ask stands until arch says so.",
+    "",
+    "⚠ WHAT NOBODY HAS MEASURED. Under .21, 34 of 37 peers kept serving and 3 closed. Under .25 the",
+    "question is whether a CODED FRAME went out, and the .21 probe never captured `status` and `code` on",
+    "this surface because the old rule made them irrelevant. ⇒ It is entirely possible that all 37 fail",
+    "this row, and entirely possible some already pass it. D15: that is an open measurement, not a",
+    "prediction, and this file records no prediction because none is grounded.",
+    "",
+    "STATE. The row carries no state qualifier. The subject is sent on an ESTABLISHED connection, because",
+    "on a pre-handshake connection §4.6's handshake errors could plausibly be read as governing first, and",
+    "that reading is not this row's to settle."
   ],
-  "preconditions": {
-    "grants": [],
-    "identities": [
-      "caller"
-    ],
-    "handlers": [],
-    "posture_axes": [
-      "seed_policy",
-      "close_wait_bound"
-    ],
-    "note": "`close_wait_bound` — how long the run waits for the close before sending the follow-up request. A posture value, recorded; not specified by §3.3."
-  },
-  "arm": [
+  "conformant": [
     {
-      "name": "wrong-root-type",
-      "kind": "conformant",
-      "given": "an established connection; a correctly framed, well-formed envelope whose root is a well-formed `system/peer` entity",
-      "why": "§3.3's MUST, via §6.5's third branch.",
-      "step": [
-        {
-          "op": "connect"
-        },
-        {
-          "op": "send_envelope",
-          "capture": "wrong_root",
-          "root_type": "system/peer",
-          "note": "the caller's own `system/peer` entity: a real core type with a valid content_hash, so the envelope cannot be refused as malformed."
-        },
-        {
-          "op": "await_close_or_bound",
-          "capture": "closed"
-        },
-        {
-          "op": "send_execute_if_open",
-          "capture": "follow_up",
-          "uri": "system/tree",
-          "operation": "get"
-        }
-      ],
-      "accept": [
-        {
-          "outcome": "close",
-          "why": "the MUST."
-        },
-        {
-          "outcome": "coded_frame_then_close",
-          "why": "not forbidden by the row; the close is what is required."
-        }
-      ],
-      "refuse": [
-        {
-          "outcome": "follow_up_answered",
-          "why": "THE FAILURE THIS ROW EXISTS TO CATCH: the connection kept serving after an invalid message. Any answer to the follow-up — including an error — proves the connection was not closed."
-        }
-      ],
-      "witness": [
-        {
-          "field": "frame_before_close",
-          "why": "whether a coded frame preceded the close, and its code. Recorded, never scored — cohort data on an unpinned shape."
-        }
-      ]
+      "outcome": "coded_response",
+      "status": 400,
+      "code": "invalid_request",
+      "why": "§4.11's cause/code table, fifth row, stated at §3.3. Whether the peer closes afterwards is its own choice and neither shape is preferred."
+    }
+  ],
+  "non_conformant": [
+    {
+      "outcome": "silent_drop",
+      "why": "§4.11's first named failure. No response and no close: the caller learns nothing until its own §6.11(c) deadline. SCORED SEPARATELY from the bare close — §4.11 calls them distinct failures."
     },
     {
-      "name": "control",
-      "kind": "negative-control",
-      "given": "a fresh established connection; the SAME framing and envelope construction with root = a valid EXECUTE to `system/tree` `get`",
-      "why": "MANDATORY ANTI-VACUITY. Proves the close in the conformant arm is caused by the ROOT TYPE, not by the suite's envelope construction, its framing, or a peer that closes on any envelope built this way. The envelope-building path is shared with the probe and only `root` differs.",
-      "step": [
-        {
-          "op": "connect"
-        },
-        {
-          "op": "send_envelope",
-          "capture": "valid_root",
-          "root_type": "system/protocol/execute"
-        }
-      ],
-      "accept": [
-        {
-          "outcome": "answered",
-          "why": "any EXECUTE_RESPONSE, whatever its status: the control's subject is the connection surviving a valid root."
-        }
-      ],
-      "refuse": [
-        {
-          "outcome": "close",
-          "why": "a close on a valid root means the probe's close was not about the root type."
-        }
-      ]
+      "outcome": "bare_close",
+      "why": "§4.11's second named failure. Indistinguishable from a network fault (§4.6); on a multiplexed connection it destroys unrelated ADMITTED requests, which §4.9(c) forbids for each of them. SCORED SEPARATELY from the silent drop."
     },
     {
-      "name": "non-conformant-witness",
-      "kind": "non-conformant",
-      "given": "a peer whose dispatcher ignores envelopes whose root it does not recognise",
-      "expect": "the invalid message is silently dropped and the follow-up request is answered",
-      "why": "the permissive-ignore shape. It is attractive because MUST-ignore is the rule for unknown FIELDS elsewhere in the corpus; this row is explicit that it is not the rule for unknown MESSAGE TYPES."
+      "outcome": "request_admitted",
+      "why": "the frame was processed rather than refused. §3.3: it is invalid."
+    },
+    {
+      "outcome": "coded_response_wrong_code",
+      "why": "§4.11: the code belongs to the CAUSE. A refusal carrying `hash_mismatch` (nothing was hashed) or `non_canonical_ecf` (ECF §5.4 scopes it to tag-policy violations; this frame is canonical and carries no tag) sends an honest caller to the wrong layer."
     }
   ],
   "notes": {
     "peer_attributable": true,
     "oracle_check": "",
-    "oracle_note": "no reference check in the `connectivity` category cites this row. Whether one elsewhere measures it is unsearched — bounded: the five connectivity checks and their citations only."
+    "oracle_note": "no reference check in the `connectivity` category cites this row. Whether one elsewhere measures it is unsearched — bounded (D15): the five connectivity checks and their citations only."
   }
 }

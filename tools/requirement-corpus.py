@@ -6,16 +6,32 @@
     tools/requirement-corpus.py --self-test
 
 WHAT THIS REPLACES, and why it is the point of the format move. `DESIGN-THE-SUITE-CONTRACT` §2 asks
-for `requirement_set_digest` as **the comparability anchor** — the value that says two verdicts
-measured the same requirements. Until 2026-09-15 we did not have one: `make build` sha256'd each
-TOML file separately and the "set digest" was a dict of per-file digests, which is a manifest, not
-an identity. **Two runs could not be compared by looking at one value.**
+for a **comparability anchor** — a value that says two verdicts measured the same requirements.
+Until 2026-09-15 we did not have one: `make build` sha256'd each TOML file separately and the "set
+digest" was a dict of per-file digests, which is a manifest, not an identity. **Two runs could not
+be compared by looking at one value.** A canonical CBOR build is that value. Because canonical CBOR
+sorts map keys by encoded bytes, the digest is a function of CONTENT ALONE — reordering fields in a
+`.diag` file, or reordering the files themselves, does not move it. That property is asserted in the
+self-test, because it is the only thing that makes the number mean what it claims.
 
-A canonical CBOR build of the whole corpus IS that value, under `GUIDE-CONFORMANCE` §5.1's existing
-*Corpus identity* `[MUST]` and its §5.1a–d change sequence. Because canonical CBOR sorts map keys by
-encoded bytes, the digest is a function of CONTENT ALONE — reordering fields in a `.diag` file, or
-reordering the files themselves, does not move it. That property is asserted in the self-test,
-because it is the only thing that makes the number mean what it claims.
+⛔ WHAT THIS VALUE IS NOT, and the name was wrong until 2026-09-15 (b). This is the digest of the
+WHOLE CORPUS. It is `requirement_corpus_digest`. It was printed as `requirement_set_digest`, which
+is the name of a different quantity: the per-RUN anchor over **the exact requirements a run
+asserted**, computed by the instrument (`suites/py-prototype/run.py:anchor_field`) under
+`GUIDE-CONFORMANCE` §3.1 item 7 — *"a verdict is the check-set actually asserted, never a proxy for
+it."* Three values, three names, and they are not interchangeable:
+
+    requirement_corpus_digest   all 50 .diag files        this file          "what corpus exists"
+    implemented_set_digest      what a bundle implements  tools/build-info   "what this build can run"
+    requirement_set_digest      what a RUN asserted       the instrument     "what this number means"
+
+⚠ **ADR-0002 cites §5.1 as the authority and that citation is wrong** — §5.1 is a naming-and-citation
+rule for a committed FIXTURE corpus, and adopting it imports §5.1b–d, two of which our `output/`
+policy makes unbuildable (`entity-system-generator`, 2026-09-15, `GC-1`). The clause this corpus is
+actually accountable to is §3.1 item 7. ADR-0002's citation is not corrected here because an ADR is
+a record of a decision; the correction is carried in `TRACKER-entity-system-generator.md` and is owed
+a superseding note. **The naming defect above is exactly the mechanism that clause bans — a value
+under another value's name — and we shipped it for one day.**
 
 The corpus is a build artifact under `output/`, not source: it is derived from the `.diag` files by
 a deterministic function, exactly as `conformance-vectors.cbor` is derived from its `.diag`.
@@ -135,10 +151,10 @@ def main(argv: list[str]) -> int:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(raw)
         print(f"requirement-corpus: {n} requirement(s) -> {out} "
-              f"({len(raw)} bytes)\n  requirement_set_digest sha256:{digest}")
+              f"({len(raw)} bytes)\n  requirement_corpus_digest sha256:{digest}")
         return 0
     print(f"requirement-corpus: {n} requirement(s), {len(raw)} bytes\n"
-          f"  requirement_set_digest sha256:{digest}")
+          f"  requirement_corpus_digest sha256:{digest}")
     return 0
 
 

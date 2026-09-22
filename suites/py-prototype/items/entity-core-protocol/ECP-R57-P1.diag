@@ -1,0 +1,149 @@
+{
+  "header": [
+    "ECP-R57-P1 — the wrong-root-type pre-admission refusal, driven over the wire.",
+    "",
+    "⭐ FIRST ITEM IN THIS TREE (ADR-0003). The arms below lived inside requirements/ECP-R57.diag until",
+    "2026-09-15 (b). They are a PROBE DESIGN — which bytes to send, which answers are conformant — and",
+    "AGENTS.md forbids two suites sharing that. The requirement is shared; this is not.",
+    "",
+    "⚠ THE ID FORM DEVIATES FROM SPECIFICATION-FORMAT §8.5a AND IT IS ROUTED, NOT SILENT. §8.5a's item",
+    "form is `SUBJECT-CONDITION-N`. Ours is `<requirement-id>-P<k>`, DERIVED, because D18 says a name that",
+    "appears in an id is TAKEN, NEVER COINED — and converting 50 files at once under §8.5a's form would",
+    "coin 50 subject-condition names in a single pass with no review. A derivation coins nothing. Routed",
+    "to arch as a format question; see the tracker. Where the specification itself already names an item",
+    "for this surface, `spec_item` cites it rather than restating it."
+  ],
+  "id": "ECP-R57-P1",
+  "author": "py-prototype",
+  "class": "validate-peer check",
+  "class_basis": [
+    "GUIDE-CONFORMANCE §7.0 via SPECIFICATION-FORMAT §8.5: 'behavioral, driven over the wire against a",
+    "running peer'. ⛔ §7.0's row bundles an AUTHOR into the class definition and names entity-core-go;",
+    "arch ruled 2026-09-15 that the author column is a fact about the estate on a date and NOT a property",
+    "of the class (CQ-40), and is moving it to a dated §7.0a. This item is that class by its NATURE —",
+    "wire-driven, against a live peer — and is authored by a neutral seat, which is the configuration the",
+    "current table cannot express."
+  ],
+  "drives": [
+    "entity-core-protocol/ECP-R57"
+  ],
+  "spec_item": "CORE-PREADMISSION-REFUSAL-1 arm (b) — 'a frame whose root entity is a third type -> 400 invalid_request' (ENTITY-CORE-PROTOCOL §9, 0.8.2.25). ⚠ WE DO NOT AUTHOR THAT ITEM. This probe implements arm (b) only; arms (a), (c), (d), (e) and (f) are other requirements' surfaces and (f) is unreached by anything in this tree.",
+  "snapshot": "entity-core-protocol/v0.8.2.25",
+  "surface": "wire",
+  "status": "draft",
+  "preconditions": {
+    "grants": [],
+    "identities": [
+      "caller"
+    ],
+    "handlers": [],
+    "posture_axes": [
+      "seed_policy",
+      "response_wait_bound"
+    ],
+    "note": "⛔ `close_wait_bound` is GONE and its replacement is not a rename. Under .21 the probe waited for a CLOSE and the bound decided how long. Under .25 it waits for a coded RESPONSE, and a close is no longer the observation. A run that kept the old axis would be waiting for the wrong event."
+  },
+  "arm": [
+    {
+      "name": "wrong-root-type",
+      "kind": "conformant",
+      "given": "an established connection; a correctly framed, well-formed envelope whose root is a well-formed `system/peer` entity",
+      "why": "§3.3's MUST at 0.8.2.25, whose normative home is §4.11 and whose code is §4.11's fifth cause row.",
+      "step": [
+        { "op": "connect" },
+        {
+          "op": "send_envelope",
+          "capture": "wrong_root",
+          "root_type": "system/peer",
+          "note": "the caller's own `system/peer` entity: a real core type with a valid content_hash, so the envelope cannot be refused as malformed and the refusal is attributable to the ROOT TYPE rather than to §4.11's framing arm."
+        },
+        { "op": "await_response_or_bound", "capture": "refusal" },
+        { "op": "observe_socket", "capture": "closed_after" },
+        { "op": "send_execute_if_open", "capture": "follow_up", "uri": "system/tree", "operation": "get" }
+      ],
+      "accept": [
+        {
+          "outcome": "coded_response",
+          "status": 400,
+          "code": "invalid_request",
+          "why": "⭐ THE OBLIGATION. Whether `closed_after` is true or false does not change the verdict — §4.11 makes the close the peer's own choice."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "silence",
+          "why": "§4.11's FIRST named failure — dropped, no response and no close. Scored as `silent_drop`, NOT merged with the bare close."
+        },
+        {
+          "outcome": "close",
+          "why": "§4.11's SECOND named failure — closed with no coded frame. Scored as `bare_close`, NOT merged with the drop. ⛔ UNDER .21 THIS OUTCOME WAS THE PASS."
+        },
+        {
+          "outcome": "follow_up_answered_without_refusal",
+          "why": "the frame was admitted rather than refused."
+        },
+        {
+          "outcome": "coded_response_other",
+          "why": "§4.11 pins the code to the cause. `hash_mismatch` (nothing was hashed) and `non_canonical_ecf` (ECF §5.4 is tag-policy; this frame is canonical and carries no tag) are both non-conformant here."
+        }
+      ],
+      "witness": [
+        {
+          "field": "closed_after",
+          "why": "whether the peer closed after the coded frame. NOT SCORED — §4.11 leaves it to the peer. Recorded because it is the axis the .21 probe scored, and a reader comparing the two runs needs to see that it was measured and deliberately not counted."
+        },
+        {
+          "field": "status_and_code",
+          "why": "every refusal shape, scored or not. ⭐ The .21 probe did NOT capture this on this surface, because the old rule made it irrelevant — which is why no existing run can be re-scored against .25 and a fresh run is required."
+        },
+        {
+          "field": "correlation",
+          "why": "§4.11 asks for `request_id` correlation WHERE AVAILABLE, and this envelope's root is not an EXECUTE so there may be no id to correlate by. Witnessed, not scored: the spec says best-effort and this file must not invent a stricter rule (prohibition 2)."
+        }
+      ]
+    },
+    {
+      "name": "control",
+      "kind": "negative-control",
+      "given": "a fresh established connection; the SAME framing and envelope construction with root = a valid EXECUTE to `system/tree` `get`",
+      "why": "MANDATORY ANTI-VACUITY. Proves the refusal is caused by the ROOT TYPE, not by the suite's envelope construction, its framing, or a peer that refuses any envelope built this way. The envelope-building path is shared with the probe and only `root` differs.",
+      "step": [
+        { "op": "connect" },
+        { "op": "send_envelope", "capture": "valid_root", "root_type": "system/protocol/execute" }
+      ],
+      "accept": [
+        {
+          "outcome": "answered",
+          "why": "any EXECUTE_RESPONSE, whatever its status: the control's subject is a valid root being admitted at all."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "coded_response",
+          "status": 400,
+          "code": "invalid_request",
+          "why": "⭐ THE CONTROL THE .25 INVERSION MAKES NECESSARY, and .21's control could not have caught it. A peer that answers `400 invalid_request` to EVERYTHING passes the conformant arm for a reason that has nothing to do with the root type. Under .21 the probe watched for a close and this shape was invisible."
+        },
+        {
+          "outcome": "close",
+          "why": "a close on a valid root means the probe's refusal was not about the root type."
+        },
+        {
+          "outcome": "silence",
+          "why": "a peer that answers nothing at all voids the probe rather than failing it."
+        }
+      ]
+    },
+    {
+      "name": "non-conformant-witness",
+      "kind": "non-conformant",
+      "given": "a peer whose dispatcher ignores envelopes whose root it does not recognise",
+      "expect": "the invalid message is silently dropped and the follow-up request is answered",
+      "why": "the permissive-ignore shape, and the one 34 of 37 peers exhibited under .21. It is attractive because MUST-ignore is the rule for unknown FIELDS elsewhere in the corpus; §4.11 is explicit that a pre-admission refusal owes a coded frame regardless."
+    }
+  ],
+  "notes": {
+    "peer_attributable": true,
+    "supersedes_run": "The .21 arms of this probe produced RUN-2026-09-13-{c,d}'s 34-of-37 result. ⛔ THAT RESULT IS VOID (F75) and no row of it may be diffed against a run of this item."
+  }
+}

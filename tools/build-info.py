@@ -2,7 +2,8 @@
 """Write the suite bundle's BUILD.json: what requirement text this instrument was built from.
 
     tools/build-info.py --req-dir requirements/entity-core-protocol --loader <path> \\
-        --pyrt-sha256 <hex> --musl-image <ref> --out <bundle>/BUILD.json  ECP-R1 ECP-R2 …
+        --pyrt-sha256 <hex> --musl-image <ref> --out <bundle>/BUILD.json \\
+        --requirements-out <bundle>/requirements.cbor  ECP-R1 ECP-R2 …
     tools/build-info.py --self-test
 
 Every verdict must be able to say EXACTLY which requirement text it measured, or two reports cannot
@@ -14,18 +15,38 @@ FIELDS, and which question each answers:
   requirement_snapshots     per file — the spec pin each requirement was authored against. A SET,
                             never a scalar: a run legitimately spans snapshots mid-re-base, and
                             always will once extensions land (F65 / AP-13 / D16).
-  requirement_set_digest    ⭐ the COMPARABILITY ANCHOR `DESIGN-THE-SUITE-CONTRACT` §2 asks for, and
-                            until 2026-09-15 we did not have one. The canonical-CBOR digest of the
-                            requirements this suite implements. Because canonical CBOR sorts map
-                            keys by encoded bytes, it is a function of content alone.
+  implemented_set_digest    the canonical-CBOR digest of the requirements this suite IMPLEMENTS.
+                            Because canonical CBOR sorts map keys by encoded bytes, it is a function
+                            of content alone. ⚠ This is a BUILD fact, not a run fact — see below.
   requirement_corpus_digest the same over the WHOLE corpus, so a verdict also says what fraction of
                             what corpus it covered.
 
-⚠ SCOPE, DECLARED. `requirement_set_digest` covers the set the suite IMPLEMENTS. A run that selects
-a strict subset (`-category`, a single id) reports its selection separately; the anchor still names
-the implemented set. Computing a per-selection digest inside the instrument needs a canonical
-encoder in the suite — it has one, and wiring it is the honest next step, not something to claim
-here.
+⛔ WHY THIS FILE NO LONGER EMITS `requirement_set_digest`, AND WHY THE BUNDLE CARRIES THE CORPUS.
+
+`GUIDE-CONFORMANCE` §3.1 *Run discipline* item 7 is the clause a published conformance number is
+accountable to, and it is not the one ADR-0002 originally cited (§5.1, which is a naming rule for a
+committed FIXTURE corpus — `entity-system-generator`, 2026-09-15, `GC-1`/`GC-2`):
+
+    "A verdict is the check-set actually asserted — never a proxy for it. … A published number MUST
+    be dual-anchored: the oracle commit AND a `check_set_digest` over the exact assertions in the
+    run (count + content), both required; a match on only one is not a match."
+
+A digest over the IMPLEMENTED set, stamped on a run that selected a strict subset (`-category`, a
+single id), anchors the number on a set LARGER than the one asserted. That is the "tracks which
+checks ran rather than what they assert" family the clause bans, arriving from the other direction.
+It was declared as a known scope limit here on 2026-09-15 and called "the honest next step"; §3.7
+makes it an unmet [MUST] rather than a TODO with a good reason.
+
+So: `--requirements-out` writes the canonical CBOR of the implemented set into the bundle, and the
+INSTRUMENT computes the per-selection digest at run time with the SUITE'S OWN codec. Two consequences
+worth stating rather than discovering:
+
+  1. The artifact is self-certifying — sha256 of the bytes IS `implemented_set_digest`.
+  2. ⭐ The two-codec cross-check now runs on EVERY RUN instead of only in `make test`. tools/ wrote
+     these bytes; the suite decodes and re-encodes them and must reproduce them exactly. A
+     disagreement between the two canonical-CBOR implementations `lint-suite-independence` forbids
+     sharing a line is the whole reason the second one is paid for — and until now nothing on the
+     run path could surface one.
 """
 
 from __future__ import annotations
@@ -53,7 +74,11 @@ def suite_version() -> str:
     return v or "dev"
 
 
-def build_info(req_dir: Path, ids: list[str], runtime: dict) -> dict:
+def build_info(req_dir: Path, ids: list[str], runtime: dict) -> tuple[dict, bytes]:
+    """Returns (BUILD.json content, the canonical CBOR of the implemented set).
+
+    The bytes are the artifact the instrument re-derives its per-run anchor from; their sha256 is
+    `implemented_set_digest`, so the pair cannot drift apart without the digest moving."""
     digests, snaps, selected = {}, {}, {}
     missing = []
     for rid in ids:
@@ -71,7 +96,8 @@ def build_info(req_dir: Path, ids: list[str], runtime: dict) -> dict:
                          f"not exist: {', '.join(missing)}. A bundle built over a missing "
                          f"requirement reports a verdict on text nobody can produce.")
 
-    set_digest = hashlib.sha256(cbordiag.encode(selected)).hexdigest()
+    set_bytes = cbordiag.encode(selected)
+    set_digest = hashlib.sha256(set_bytes).hexdigest()
     corpus = {}
     for path in sorted((ROOT / "requirements").rglob("*.diag")):
         rel = path.relative_to(ROOT / "requirements").with_suffix("").as_posix()
@@ -82,12 +108,16 @@ def build_info(req_dir: Path, ids: list[str], runtime: dict) -> dict:
         "suite_version": suite_version(),
         "requirement_digests": digests,
         "requirement_snapshots": snaps,
-        "requirement_set_digest": f"sha256:{set_digest}",
-        "requirement_set_size": len(selected),
+        # ⛔ NOT `requirement_set_digest`. That name belongs to the per-RUN anchor the instrument
+        # computes over the requirements it actually asserted (§3.1 item 7). Giving a build-time
+        # value the run-time name is exactly the substitution that clause bans, and it is the same
+        # mistake `entity-system-generator` is fixing on their own `corpus digest:` print line.
+        "implemented_set_digest": f"sha256:{set_digest}",
+        "implemented_set_size": len(selected),
         "requirement_corpus_digest": f"sha256:{corpus_digest}",
         "requirement_corpus_size": len(corpus),
         "runtime": runtime,
-    }
+    }, set_bytes
 
 
 def self_test() -> int:
@@ -97,22 +127,37 @@ def self_test() -> int:
         req.mkdir(parents=True)
         (req / "ECP-R1.diag").write_text('{ "id": "ECP-R1", "snapshot": "s/v1", "reading": ["x"] }')
         (req / "ECP-R2.diag").write_text('{ "id": "ECP-R2", "snapshot": "s/v2", "reading": ["y"] }')
-        info = build_info(req, ["ECP-R1", "ECP-R2"], {})
+        info, set_bytes = build_info(req, ["ECP-R1", "ECP-R2"], {})
         if sorted(info["requirement_snapshots"].values()) != ["s/v1", "s/v2"]:
             print(f"SELF-TEST FAILED: snapshots not derived per requirement: {info}", file=sys.stderr)
             return 1
         # A set digest that does not change when the SELECTION changes is not a set digest.
-        one = build_info(req, ["ECP-R1"], {})["requirement_set_digest"]
-        if one == info["requirement_set_digest"]:
+        one, _ = build_info(req, ["ECP-R1"], {})
+        if one["implemented_set_digest"] == info["implemented_set_digest"]:
             print("SELF-TEST FAILED: selecting a different requirement set produced the same "
                   "set digest. The comparability anchor would then say two different runs are "
                   "comparable.", file=sys.stderr)
             return 1
         # ...and one that changes when only the ORDER changes is not a content digest.
-        if (build_info(req, ["ECP-R2", "ECP-R1"], {})["requirement_set_digest"]
-                != info["requirement_set_digest"]):
+        if (build_info(req, ["ECP-R2", "ECP-R1"], {})[0]["implemented_set_digest"]
+                != info["implemented_set_digest"]):
             print("SELF-TEST FAILED: IMPLEMENTS ordering moved the set digest. It measures "
                   "content, not the order someone listed ids in.", file=sys.stderr)
+            return 1
+        # ⭐ The shipped artifact is SELF-CERTIFYING: its sha256 is the digest BUILD.json reports.
+        # If these two can disagree, the instrument's per-run anchor is derived from bytes the
+        # build did not vouch for, and the whole chain is decorative.
+        if f"sha256:{hashlib.sha256(set_bytes).hexdigest()}" != info["implemented_set_digest"]:
+            print("SELF-TEST FAILED: the requirements artifact's sha256 is not the digest "
+                  "BUILD.json reports for the same set.", file=sys.stderr)
+            return 1
+        # The artifact must decode back to the requirements, not to something merely well-formed:
+        # the instrument re-encodes a SUBSET of it, so a lossy artifact silently changes the anchor.
+        back = cbordiag.decode(set_bytes)
+        if sorted(back) != ["entity-core-protocol/ECP-R1", "entity-core-protocol/ECP-R2"] or \
+                back["entity-core-protocol/ECP-R1"]["snapshot"] != "s/v1":
+            print(f"SELF-TEST FAILED: the requirements artifact does not decode back to the "
+                  f"selected requirements: {sorted(back)}", file=sys.stderr)
             return 1
         # A missing requirement is a hard stop, never a quietly smaller set.
         try:
@@ -124,7 +169,8 @@ def self_test() -> int:
                   "exist.", file=sys.stderr)
             return 1
     print("build-info self-test: OK — snapshots derived per requirement, the set digest moves with "
-          "the selection and not with its order, a missing requirement refuses the build")
+          "the selection and not with its order, the shipped artifact is self-certifying and "
+          "decodes back to the requirements, a missing requirement refuses the build")
     return 0
 
 
@@ -137,16 +183,23 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--pyrt-sha256", required=True)
     ap.add_argument("--musl-image", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--requirements-out", required=True,
+                    help="canonical CBOR of the implemented set, shipped in the bundle so the "
+                         "instrument can compute a PER-RUN anchor over what it actually asserted")
     ap.add_argument("ids", nargs="+")
     a = ap.parse_args(argv)
 
     runtime = {"pyrt_sha256": a.pyrt_sha256,
                "musl_loader_sha256": hashlib.sha256(Path(a.loader).read_bytes()).hexdigest(),
                "musl_image": a.musl_image}
-    info = build_info(Path(a.req_dir), a.ids, runtime)
+    info, set_bytes = build_info(Path(a.req_dir), a.ids, runtime)
+    Path(a.requirements_out).write_bytes(set_bytes)
+    info["requirements_artifact"] = Path(a.requirements_out).name
     Path(a.out).write_text(json.dumps(info, indent=2) + "\n")
-    print(f"build-info: {info['requirement_set_size']} of {info['requirement_corpus_size']} "
-          f"requirement(s)\n  requirement_set_digest {info['requirement_set_digest']}")
+    print(f"build-info: {info['implemented_set_size']} of {info['requirement_corpus_size']} "
+          f"requirement(s)\n  implemented_set_digest {info['implemented_set_digest']}"
+          f"\n  {Path(a.requirements_out).name}: {len(set_bytes)} bytes — the instrument re-derives "
+          f"its per-run anchor from these with its OWN codec")
     return 0
 
 

@@ -19,9 +19,14 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from prototype import checks, ed25519, ident  # noqa: E402
+from prototype import cbor, checks, ed25519, ident  # noqa: E402
 
 SUITE = "py-prototype"
+
+# The canonical CBOR of the requirements this bundle implements, written by `make build`
+# (tools/build-info.py --requirements-out). Its sha256 is BUILD.json's `implemented_set_digest`.
+# ⛔ NOT a spec-data path and not a snapshot: it is a build output of THIS repo's requirement corpus.
+REQUIREMENT_ARTIFACT = "requirements.cbor"
 
 # ⛔ There is deliberately NO snapshot constant here naming a spec-data/ directory, and there must never be one again.
 # `snapshot` is a field on every requirement file (spec-data/README.md rule 3). A constant here restates an
@@ -64,8 +69,81 @@ def build_info() -> dict:
         digests[rid] = hashlib.sha256(f.read_bytes()).hexdigest() if f.is_file() else "unavailable"
         snaps[rid] = _snapshot_of(f) if f.is_file() else "unavailable"
     return {"suite_version": "source-tree", "requirement_digests": digests, "requirement_snapshots": snaps,
-            "requirement_set_digest": "unavailable (source tree, unbuilt)",
+            "implemented_set_digest": "unavailable (source tree, unbuilt)",
             "from": "source tree (unbuilt)"}
+
+
+def requirement_set(info: dict) -> tuple[dict | None, str]:
+    """The implemented requirement set, decoded from the bundle with THIS SUITE'S OWN codec.
+
+    ⭐ This is where the two independent canonical-CBOR implementations meet on the RUN path.
+    `tools/cbordiag.py` wrote these bytes; `prototype/cbor.py` decodes and re-encodes them and must
+    reproduce them exactly. `make lint-suite-independence` forbids the two sharing a line, and the
+    entire argument for paying for the second is that a disagreement between them is INFORMATION —
+    so something has to be able to surface one. Until 2026-09-15 only `make test` could, and only
+    when `make corpus` had been run first.
+
+    Returns `(by_id, note)`. `by_id` is None — and the run reports itself untrusted — whenever the
+    anchor could not be established. ⛔ A missing anchor is never silently treated as a passing one:
+    that is the substitution `GUIDE-CONFORMANCE` §3.1 item 7 exists to ban."""
+    p = HERE / REQUIREMENT_ARTIFACT
+    if not p.is_file():
+        return None, (f"absent — no {REQUIREMENT_ARTIFACT} beside the instrument (unbuilt source tree). "
+                      f"THE PER-RUN ANCHOR AND THE TWO-CODEC CROSS-CHECK DID NOT RUN.")
+    raw = p.read_bytes()
+    try:
+        obj, findings = cbor.decode(raw)
+    except Exception as e:                                    # noqa: BLE001 — any decode failure is the same verdict
+        return None, f"REFUSED — this suite's decoder cannot read the requirement artifact: {e}"
+    if findings.tags or findings.non_canonical:
+        return None, (f"REFUSED — the requirement artifact is not canonical to this suite's decoder: "
+                      f"tags={findings.tags} non_canonical={findings.non_canonical}")
+    if cbor.encode(obj) != raw:
+        return None, ("REFUSED — THE TWO CODECS DISAGREE ABOUT CANONICAL FORM. tools/cbordiag.py wrote "
+                      "these bytes; this suite decoded and re-encoded them and got different ones. Every "
+                      "anchor in this report would be a number the two halves of this repo do not agree on.")
+    seen = f"sha256:{hashlib.sha256(raw).hexdigest()}"
+    declared = info.get("implemented_set_digest")
+    if declared and not declared.startswith("unavailable") and seen != declared:
+        return None, (f"REFUSED — the artifact's sha256 ({seen}) is not the implemented_set_digest "
+                      f"BUILD.json declares ({declared}). The bundle's two halves came from different builds.")
+    # Artifact keys are `<spec>/<id>`; the suite knows ids. Derive the mapping rather than
+    # constant-ing a directory name into the instrument (D16 / AP-13).
+    return {str(k).rsplit("/", 1)[-1]: (str(k), v) for k, v in obj.items()}, "ok"
+
+
+def anchor_field(info: dict, by_id: dict | None, note: str, selected: list[str]) -> dict:
+    """⭐ `GUIDE-CONFORMANCE` §3.1 item 7 — *a verdict is the check-set actually asserted, never a
+    proxy for it.* A published number MUST be anchored on a digest over the EXACT assertions in the
+    run, count AND content.
+
+    So this is computed over `selected`, not over what the bundle implements. Reporting the
+    implemented-set digest on a `-category` run would anchor the number on a set LARGER than the one
+    asserted — the "tracks which checks ran rather than what they assert" family the clause bans,
+    arriving from the other direction. Routed to us by `entity-system-generator`, 2026-09-15."""
+    # Named rather than left to inference, and named DIFFERENTLY: this is the BUILD fact — what the
+    # bundle implements — and it is provenance, never the anchor. Giving it the anchor's name is the
+    # substitution §3.1 item 7 bans, and is the same defect `entity-system-generator` is fixing on
+    # their own `corpus digest:` print line (a membership value under a content value's name).
+    build = {"implemented_set_digest": info.get("implemented_set_digest"),
+             "implemented_set_size": info.get("implemented_set_size", len(checks.CHECKS))}
+    if by_id is None:
+        return {"requirement_set_digest": "unavailable", "requirement_set_size": len(selected),
+                "scope": "the requirements this run asserted", "established": False, "why": note, **build}
+    missing = [r for r in selected if r not in by_id]
+    sel = {by_id[r][0]: by_id[r][1] for r in selected if r in by_id}
+    return {
+        "requirement_set_digest": f"sha256:{hashlib.sha256(cbor.encode(sel)).hexdigest()}",
+        "requirement_set_size": len(sel),
+        "scope": "the requirements this run asserted",
+        "established": not missing,
+        "codec": "the instrument's own canonical-CBOR encoder, over requirements it decoded itself",
+        "two_codec_crosscheck": "PASSED — tools' canonical bytes reproduce under this suite's codec",
+        **build,
+        **({"established": False, "missing_from_artifact": missing,
+            "why": "requirements were selected that the bundle's artifact does not carry, so the "
+                   "anchor cannot describe what was asserted"} if missing else {}),
+    }
 
 
 def spec_field(info: dict, selected: list[str]) -> dict:
@@ -114,8 +192,15 @@ def parse(argv: list[str]):
 def main(argv: list[str]) -> int:
     a, unknown = parse(argv)
     info = build_info()
+    by_id, anchor_note = requirement_set(info)
     if a.list_requirements:
+        # What this instrument DECLARES without running — and the value is a content digest over the
+        # declared requirements, not a membership hash of their names. `entity-system-generator`
+        # flagged that exact collision (their open G-4 to entity-core-go): §3.1 item 7 reserves the
+        # "set digest" name for a digest over ASSERTIONS, and shipping a membership value under it
+        # hands the ecosystem the proxy by name.
         print(json.dumps({"suite": SUITE, "spec": spec_field(info, list(checks.CHECKS)),
+                          "declared": anchor_field(info, by_id, anchor_note, list(checks.CHECKS)),
                           "requirements": info["requirement_digests"]}, indent=2))
         return 0
     if not a.addr:
@@ -133,6 +218,7 @@ def main(argv: list[str]) -> int:
     if a.category:
         selected = [r for r in selected if checks.CATEGORY.get(r) == a.category]
 
+    anchor = anchor_field(info, by_id, anchor_note, selected)
     broken = self_check()
     ctx = checks.Ctx(a.addr, a.read_timeout, a.sign_message, a.posture_pre_dispatch_layer, a.quiet_wait,
                      a.declared_max_payload)
@@ -155,6 +241,9 @@ def main(argv: list[str]) -> int:
     report = {
         "suite": {"name": SUITE, "version": info.get("suite_version"), "runtime": sys.version.split()[0], "build": info.get("from")},
         "spec": spec_field(info, selected),
+        # ⭐ GUIDE-CONFORMANCE §3.1 item 7's half of the dual anchor, over what THIS RUN asserted.
+        # The other half is `suite.version`. A match on only one is not a match.
+        "anchor": anchor,
         "profile": a.profile,
         "requirement_digests": {r: info["requirement_digests"].get(r) for r in selected},
         "posture": {
@@ -176,9 +265,14 @@ def main(argv: list[str]) -> int:
                     # checks whose verdict was withheld because a connection to the peer could not be opened (F57)
                     "unreachable": sum(1 for r in results if "connections_not_opened" in r.witnesses)},
         "peer": a.peer or a.addr, "status": status, "code": code,
-        # trusted = the instrument itself is sound for this run: its self-check passed, no suite defect, and every
-        # verdict it reached had a negative control that ran. It says nothing about whether the peer passed.
-        "trusted": not broken and not suite_defects and counts["INCONCLUSIVE"] == 0,
+        # trusted = the instrument itself is sound for this run: its self-check passed, no suite defect, every
+        # verdict it reached had a negative control that ran, AND the run can say what it asserted. It says
+        # nothing about whether the peer passed.
+        # ⛔ The anchor clause added 2026-09-15: a verdict whose check-set digest could not be established is
+        # a number nobody can compare to another number, which under GUIDE-CONFORMANCE §3.1 item 7 is not a
+        # publishable measurement. It must not read as trusted merely because the peer answered.
+        "trusted": (not broken and not suite_defects and counts["INCONCLUSIVE"] == 0
+                    and anchor.get("established") is True),
         "self_check": broken or "ok",
         "results": [r.__dict__ | {"arms": [arm.__dict__ for arm in r.arms]} for r in results],
     }

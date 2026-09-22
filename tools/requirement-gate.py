@@ -107,6 +107,21 @@ ARM_TABLES = {
 LEVEL_BASES = ("keyword", "entailed")
 
 REQUIRED = ("title", "spec", "snapshot", "level", "surface", "status", "id_status")
+
+# ── ADR-0003: two shapes live in this corpus at once, and the count of the old one only falls ──
+#
+# A requirement file used to be an obligation AND one concrete probe. ADR-0003 splits them: the
+# obligation stays here, the probe becomes a suite-authored item under suites/<name>/items/. The
+# migration is per-file, because converting 50 at once would mean authoring 50 `conformant` /
+# `non_conformant` blocks in one pass with no review — and §8.5a is explicit that a conversion
+# surfacing a requirement that is really two is A FINDING TO FILE, not something to fix inside a
+# formatting edit. You cannot file findings you did not stop to notice.
+#
+# So the gate reads BOTH shapes and ratchets the legacy count DOWN, exactly as UNEXECUTED-CEILING
+# and SOURCES-CITATION-DEBT do. A mixed corpus is a declared state; an undeclared one is drift.
+SPLIT_ONLY = ("conformant", "non_conformant")     # present => ADR-0003 shape
+LEGACY_ONLY = ("arm", "preconditions", "surface")  # present => pre-ADR-0003 shape
+UNSPLIT_CEILING = REQ_DIR / "UNSPLIT-CEILING"
 # Prose fields, held as an array of lines. See validate() for why this is not cosmetic.
 PROSE_FIELDS = ("header", "reading")
 ECP_ID = re.compile(r"^ECP-R([1-9][0-9]?|9[0-8])$")   # the allocated space: ECP-R1…ECP-R98
@@ -138,13 +153,47 @@ def load(path: Path) -> dict:
     return req
 
 
+def is_split(req: dict) -> bool:
+    """ADR-0003 shape? Decided by what the file CARRIES, never by a flag someone sets.
+
+    A `split = true` field would be a claim; the fields are the fact. This also makes the
+    half-migrated file — arms removed, outcomes not yet written — fail both branches loudly
+    instead of passing the one it happens to resemble."""
+    return any(req.get(k) for k in SPLIT_ONLY)
+
+
 def validate(req: dict, name: str, spec_dir: str | None = None) -> list[str]:
     f: list[str] = []
     add = f.append
+    split = is_split(req)
 
-    for field in REQUIRED:
+    required = tuple(x for x in REQUIRED if not (split and x == "surface")) if split else REQUIRED
+    for field in required:
         if not req.get(field):
             add(f"{name}: `{field}` is required")
+
+    # ── ADR-0003: the two shapes are mutually exclusive, and a hybrid is the dangerous state ──
+    if split:
+        for k in LEGACY_ONLY:
+            if req.get(k):
+                add(f"{name}: carries both shapes — `{k}` is a PROBE fact and this file has "
+                    f"`conformant`/`non_conformant`, so it is an ADR-0003 requirement. Move `{k}` "
+                    f"to the suite's item. A file holding both is the fusion ADR-0003 exists to "
+                    f"end, wearing the new field names.")
+        for k in SPLIT_ONLY:
+            v = req.get(k)
+            if v is not None and (not isinstance(v, list) or not v):
+                add(f"{name}: `{k}` must be a non-empty array of outcome rows")
+            for i, row in enumerate(v or []):
+                if not isinstance(row, dict) or not row.get("outcome"):
+                    add(f"{name}: `{k}` row {i} has no `outcome`")
+                elif not row.get("why"):
+                    add(f"{name}: `{k}` row {i} ({row.get('outcome')}) has no `why`. An outcome "
+                        f"class with no argument is a verdict nobody can check against the spec.")
+        if not req.get("non_conformant"):
+            add(f"{name}: no `non_conformant` outcomes. AGENTS.md requires BOTH arms — what a "
+                f"conformant peer does AND what a non-conformant one does. A requirement that only "
+                f"says what success looks like cannot be shown to measure anything.")
     if not req.get("reading"):
         add(f"{name}: no `reading`. A requirement authored from the spec states the reading it "
             f"pins, so a reviewer checks the REQUIREMENT against the SPEC rather than against what "
@@ -218,6 +267,14 @@ def validate(req: dict, name: str, spec_dir: str | None = None) -> list[str]:
             f"a blank is indistinguishable from nobody having looked.")
 
     # ── arms: at least one conformant, EXACTLY the negative control that is mandatory ─────
+    #
+    # ⛔ ADR-0003: under the split shape there are NO arms here and every rule below has moved to
+    # tools/item-gate.py — INCLUDING the mandatory negative control, which is the single most
+    # important rule in this tree. It is a property of a PROBE, not of an obligation, so the item
+    # gate is its correct home. **The migration must not be the edit that quietly drops it**: the
+    # item gate re-plants its defects rather than inheriting a claim that it enforces them.
+    if split:
+        return f
     arms = req.get("arm") or []
     if not arms:
         add(f"{name}: no [[requirement.arm]] — a requirement that describes no observation "
@@ -363,11 +420,17 @@ def executed_findings(stems: set[str], impl: dict[str, set[str]], ceiling: int |
     return f, unexecuted
 
 
-def read_ceiling() -> int | None:
+def read_int(path: Path) -> int | None:
+    """First non-comment, non-blank line as an int. Shared by both ratchets."""
     try:
-        return int(next(l for l in CEILING.read_text().splitlines() if l.strip() and not l.startswith("#")))
+        return int(next(l for l in path.read_text().splitlines()
+                        if l.strip() and not l.startswith("#")))
     except (OSError, StopIteration, ValueError):
         return None
+
+
+def read_ceiling() -> int | None:
+    return read_int(CEILING)
 
 
 def main(argv: list[str]) -> int:
@@ -385,7 +448,7 @@ def main(argv: list[str]) -> int:
         return 2
 
     findings, tally = [], {s: 0 for s in ID_STATUSES}
-    disputed = unreachable = predictions = entailed = 0
+    disputed = unreachable = predictions = entailed = legacy = 0
     for path in paths:
         try:
             req = load(path)
@@ -399,6 +462,18 @@ def main(argv: list[str]) -> int:
         unreachable += req.get("surface") == "unreachable"
         predictions += bool(req.get("predicted_disagreement"))
         entailed += req.get("level_basis") == "entailed"
+        legacy += not is_split(req)
+
+    # ── ADR-0003's ratchet: the legacy-shape count only falls ────────────────────────────
+    unsplit_ceiling = read_int(UNSPLIT_CEILING)
+    if unsplit_ceiling is None:
+        findings.append(f"{UNSPLIT_CEILING.relative_to(ROOT)} missing or unreadable — the "
+                        f"ADR-0003 ratchet has no ceiling, so it cannot hold")
+    elif legacy > unsplit_ceiling:
+        findings.append(f"{legacy} requirement file(s) still fuse the obligation with a probe, "
+                        f"above the ceiling of {unsplit_ceiling}. ADR-0003 splits them one at a "
+                        f"time and the count NEVER rises — a new requirement is authored in the "
+                        f"split shape, not added to the backlog.")
 
     impl = implemented(SUITES)
     ceiling = read_ceiling()
@@ -415,6 +490,8 @@ def main(argv: list[str]) -> int:
           f"{tally.get('pending-split', 0)} · unallocated {tally.get('unallocated', 0)}"
           f"   |   disputed {disputed} · unreachable {unreachable} · predictions {predictions}"
           f" · entailed {entailed}")
+    print(f"  ADR-0003 shape: split {len(paths) - legacy} · legacy {legacy} ≤ ceiling "
+          f"{unsplit_ceiling}   |   a mixed corpus is a DECLARED state, not drift")
     per_suite = " · ".join(f"{k} {len(v)}" for k, v in impl.items()) or "no suites"
     print(f"  executed by a suite: {len(paths) - unexecuted} of {len(paths)} ({per_suite})"
           f"   |   unexecuted {unexecuted} ≤ ceiling {ceiling}")
@@ -443,7 +520,46 @@ def self_test() -> int:
         c.update(kw)
         return c
 
+    # ── ADR-0003's split shape gets its own clean arm and its own planted defects ────────
+    # ⛔ The split branch RETURNS EARLY past every arm rule, so none of the 23 defects below
+    # exercises it. A new branch with no planted defect is a branch that has never been shown able
+    # to fail — the precise thing this gate exists to refuse in a requirement, arriving in the gate
+    # itself (AP-15).
+    clean_split = {
+        "id": "ECP-R1", "id_status": "allocated", "title": "t", "spec": "s",
+        "snapshot": "entity-core-protocol/v0.8.2.25", "level": "MUST", "status": "draft",
+        "reading": ["r"],
+        "conformant": [{"outcome": "coded_response", "why": "w"}],
+        "non_conformant": [{"outcome": "silent_drop", "why": "w"}],
+    }
+    if validate(clean_split, "ECP-R1.diag"):
+        print(f"SELF-TEST FAILED: the clean ADR-0003 requirement was rejected: "
+              f"{validate(clean_split, 'ECP-R1.diag')}", file=sys.stderr)
+        return 1
+
+    def mutate_split(**kw):
+        import copy
+        c = copy.deepcopy(clean_split)
+        c.update(kw)
+        return c
+
     planted = [
+        # ADR-0003 — the split shape. The first is the dangerous one: a file that kept its probe
+        # and grew the new fields is the fusion ADR-0003 exists to end, wearing new field names.
+        ("a HYBRID: split fields plus the probe's arms",
+         mutate_split(arm=[{"name": "a", "kind": "conformant", "why": "w"}]), "ECP-R1.diag"),
+        ("a HYBRID: split fields plus the probe's preconditions",
+         mutate_split(preconditions={"grants": []}), "ECP-R1.diag"),
+        ("a HYBRID: split fields plus `surface`, which is a probe fact",
+         mutate_split(surface="wire"), "ECP-R1.diag"),
+        ("a split requirement stating only what SUCCESS looks like",
+         mutate_split(non_conformant=None), "ECP-R1.diag"),
+        ("a split outcome row with no `outcome`",
+         mutate_split(conformant=[{"why": "w"}]), "ECP-R1.diag"),
+        ("a split outcome row with no `why` — a verdict nobody can check against the spec",
+         mutate_split(non_conformant=[{"outcome": "silent_drop"}]), "ECP-R1.diag"),
+        ("a split outcome block that is not an array",
+         mutate_split(conformant={"outcome": "x", "why": "w"}), "ECP-R1.diag"),
         ("no negative control",
          mutate(arm=[{"name": "a", "kind": "conformant", "why": "w"}]), "ECP-R1.diag"),
         ("an arm with no `why`",
@@ -553,8 +669,9 @@ def self_test() -> int:
     planted.append(("executed-ratchet (3)", None, None))
     planted.append(("layout-mirror (3)", None, None))
 
-    print(f"requirement-gate self-test: OK — clean definition accepted, "
-          f"{len(planted)} planted defects refused")
+    print(f"requirement-gate self-test: OK — BOTH shapes' clean definitions accepted, "
+          f"{len(planted)} planted defects refused (7 of them ADR-0003's split branch, "
+          f"3 of those the hybrid that keeps its probe and grows the new fields)")
     return 0
 
 

@@ -11,7 +11,7 @@
 # (`entity-system-generator` ADR-0001): host python is stdlib-only; anything needing a third-party
 # library runs in a container. `lint` stays containerised so the interpreter version is pinned.
 
-.PHONY: help build corpus test lint lint-native lint-ignored lint-sources lint-spec-data lint-requirements check clean \
+.PHONY: help build corpus test lint lint-native lint-ignored lint-sources lint-spec-data lint-requirements lint-items check clean \
         install-probe keystone-s1 keystone-oracle generator-s1 generator-oracle core-go-s1 core-go-oracle differential \
         substrate-go peer-up peer-down oracle-run register
 .DEFAULT_GOAL := help
@@ -77,7 +77,11 @@ help:
 # So the bundle carries one: a PINNED python-build-standalone CPython (musl) and the musl loader from a PINNED
 # alpine, started by suites/py-prototype/launcher.sh. Nothing is installed on the host; both pins are checked by sha256.
 # The requirement files the suite implements are digested into the bundle's BUILD.json, so every verdict names
-# the exact requirement text it measured.
+# the exact requirement text it measured. The bundle ALSO carries their canonical CBOR (requirements.cbor), so the
+# instrument computes a PER-RUN anchor over what it actually asserted, with its own codec -- GUIDE-CONFORMANCE
+# §3.1 item 7, which is the clause a published number is accountable to (not §5.1, which is a fixture-corpus
+# naming rule; routed to us by entity-system-generator 2026-09-15). That artifact is also where the two
+# independent canonical-CBOR codecs meet on the RUN path rather than only in `make test`.
 PYRT_URL     ?= https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-x86_64-unknown-linux-musl-install_only_stripped.tar.gz
 PYRT_SHA256  ?= 1f37044c8cdbd74d5ee112a753c65ef209fedd169c98f3e4e748a93e27eb27a4
 MUSL_IMAGE   ?= docker.io/library/alpine@sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e
@@ -98,7 +102,7 @@ $(CACHE)/pyrt.tgz:
 	@echo "$(PYRT_SHA256)  $(CACHE)/pyrt.tgz.part" | sha256sum -c --quiet || { echo "build: interpreter tarball does NOT match PYRT_SHA256 — refusing" >&2; rm -f $(CACHE)/pyrt.tgz.part; exit 2; }
 	mv $(CACHE)/pyrt.tgz.part $@
 
-build: $(SUITE_BIN)
+build: $(SUITE_BIN) $(OUT)/requirement-corpus.cbor
 
 $(SUITE_BIN): $(SUITE_SRC) $(CACHE)/pyrt.tgz $(addprefix $(REQ_DIR)/,$(addsuffix .diag,$(SUITE_REQS)))
 	@rm -rf $(SUITE_BIN).d && mkdir -p $(SUITE_BIN).d/pyrt $(SUITE_BIN).d/suite
@@ -107,7 +111,8 @@ $(SUITE_BIN): $(SUITE_SRC) $(CACHE)/pyrt.tgz $(addprefix $(REQ_DIR)/,$(addsuffix
 	cp -r suites/py-prototype/run.py suites/py-prototype/prototype $(SUITE_BIN).d/suite/
 	@python3 -B tools/build-info.py --req-dir $(REQ_DIR) --loader $(CACHE)/ld-musl-x86_64.so.1 \
 		--pyrt-sha256 $(PYRT_SHA256) --musl-image $(MUSL_IMAGE) \
-		--out $(SUITE_BIN).d/suite/BUILD.json $(SUITE_REQS)
+		--out $(SUITE_BIN).d/suite/BUILD.json \
+		--requirements-out $(SUITE_BIN).d/suite/requirements.cbor $(SUITE_REQS)
 	install -m 0755 suites/py-prototype/launcher.sh $@
 	@$@ -list-requirements >/dev/null && echo "build: $@ runs"
 
@@ -115,8 +120,12 @@ $(SUITE_BIN): $(SUITE_SRC) $(CACHE)/pyrt.tgz $(addprefix $(REQ_DIR)/,$(addsuffix
 # `DESIGN-THE-SUITE-CONTRACT` §2 calls the comparability anchor; before the 2026-09-15 format move
 # we sha256'd each file separately, which is a manifest and not an identity.
 corpus: $(OUT)/requirement-corpus.cbor
+# Host python3 (stdlib only, in the host contract) rather than $(PY): this target WRITES, and the
+# lint container mounts the repo read-only on purpose. The digest is content-derived, so the
+# interpreter cannot move it -- `make lint` re-derives and prints the same value in the pinned one.
 $(OUT)/requirement-corpus.cbor: $(wildcard $(REQ_DIR)/*.diag)
-	@$(PY) tools/requirement-corpus.py --out $@
+	@mkdir -p $(OUT)
+	@python3 -B tools/requirement-corpus.py --out $@
 
 # The codec against the snapshot's ECF corpus and Ed25519 against RFC 8032, before it touches any peer.
 test: $(SUITE_BIN)
@@ -207,7 +216,7 @@ differential:
 	python3 -B tools/differential.py --runs $(OUT)/runs --requirements $(REQ_DIR) --out $(OUT)/DIFFERENTIAL.md
 	@cat $(OUT)/DIFFERENTIAL.md
 
-lint: lint-ignored lint-suite-independence lint-suite-constants lint-sources lint-spec-data lint-requirements
+lint: lint-ignored lint-suite-independence lint-suite-constants lint-sources lint-spec-data lint-requirements lint-items
 
 # D17 / audit A6 pass C (2026-09-14, landed 2026-09-15). THE GAP THIS CLOSES: every other gate here
 # measures content WE PRODUCED, and all of them were green through four sessions in which this seat
@@ -261,6 +270,14 @@ lint-requirements:
 	@$(PY) tools/requirement-gate.py --self-test
 	@$(PY) tools/requirement-gate.py
 	@$(PY) tools/requirement-corpus.py
+
+# ADR-0003's other half. An ITEM is one suite's concrete probe: which bytes to send and which answers
+# are conformant. The requirement is shared between suites by design; this is not.
+# ⛔ THE MANDATORY NEGATIVE CONTROL LIVES HERE NOW, because the arms it governs moved here. Its
+# defects are RE-PLANTED in item-gate.py's self-test rather than assumed to have survived the move.
+lint-items:
+	@$(PY) tools/item-gate.py --self-test
+	@$(PY) tools/item-gate.py
 
 lint-native:
 	@echo "lint-native: host python3 — sanctioned, but the interpreter version is not pinned; reports cite make lint." >&2

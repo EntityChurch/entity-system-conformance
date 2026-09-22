@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "grantee": "default",
+      "grants": [
+        {
+          "handlers": {"include": ["system/tree"]},
+          "resources": {"include": ["conformance-probe/*"]},
+          "operations": {"include": ["get", "put"]}
+        }
+      ]
+    }
+  ]
+}

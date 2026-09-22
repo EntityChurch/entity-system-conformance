@@ -34,6 +34,10 @@ PEER_NAME    ?= cnf-peer
 PEER_PORT    ?= 9000
 # POSTURE is DECLARED, never inherited. Empty SEED_POLICY = the peer's bootstrap default.
 SEED_POLICY  ?=
+# The label a core-go run is filed under. A second posture is a second peer row, never an overwrite of the first:
+#   make peer-up SEED_POLICY=postures/tree-put-on-probe-root.seed-policy.json
+#   make core-go-s1 core-go-oracle CORE_GO_LABEL=entity-peer-tree-put
+CORE_GO_LABEL ?= entity-peer
 PEER_ARGS    ?=
 PROFILE      ?= core
 CATEGORY     ?=
@@ -101,8 +105,9 @@ $(S1): $(S1_SRC) $(CACHE)/pyrt.tgz $(addprefix requirements/core/,$(addsuffix .t
 	@python3 -c "import hashlib,json,subprocess,sys; \
 		v=subprocess.run(['git','describe','--always','--dirty'],capture_output=True,text=True).stdout.strip() or 'dev'; \
 		d={r:hashlib.sha256(open(f'requirements/core/{r}.toml','rb').read()).hexdigest() for r in sys.argv[1:]}; \
+		s={r:next((l.split('=',1)[1].strip().strip('\"') for l in open(f'requirements/core/{r}.toml') if l.startswith('snapshot')),'undeclared') for r in sys.argv[1:]}; \
 		rt={'pyrt_sha256':'$(PYRT_SHA256)','musl_loader_sha256':hashlib.sha256(open('$(CACHE)/ld-musl-x86_64.so.1','rb').read()).hexdigest(),'musl_image':'$(MUSL_IMAGE)'}; \
-		json.dump({'suite_version':v,'requirement_digests':d,'runtime':rt},open('$(S1).d/suite/BUILD.json','w'),indent=2)" $(S1_REQS)
+		json.dump({'suite_version':v,'requirement_digests':d,'requirement_snapshots':s,'runtime':rt},open('$(S1).d/suite/BUILD.json','w'),indent=2)" $(S1_REQS)
 	install -m 0755 suites/s1-py/launcher.sh $@
 	@$@ -list-requirements >/dev/null && echo "build: $@ runs"
 
@@ -181,21 +186,21 @@ core-go-s1: $(S1)
 	@mkdir -p $(OUT)/runs/core-go/s1-py
 	-podman run --rm --network $(NET) $(PODMAN_CAPS) -v $(abspath $(OUT)):/out:Z $(MUSL_IMAGE) \
 		/out/bin/s1-py -addr $(PEER_NAME):$(PEER_PORT) -peer core-go -posture-grants "$$(sed -n 's/^grants=//p' $(PEER_POSTURE))" \
-		-json-out /out/runs/core-go/s1-py/entity-peer.json
-	python3 tools/collect-run.py core-go --instrument s1-py --src $(OUT)/runs/core-go/s1-py --posture-file $(PEER_POSTURE) --out $(OUT)/runs entity-peer
+		-json-out /out/runs/core-go/s1-py/$(CORE_GO_LABEL).json
+	python3 tools/collect-run.py core-go --instrument s1-py --src $(OUT)/runs/core-go/s1-py --posture-file $(PEER_POSTURE) --out $(OUT)/runs $(CORE_GO_LABEL)
 
 core-go-oracle:
 	@test -f $(PEER_POSTURE) || { echo "core-go-oracle: COULD NOT LOOK — no $(PEER_POSTURE); run make peer-up (it records the posture)" >&2; exit 2; }
 	-$(MAKE) --no-print-directory oracle-run OUT=$(OUT)/runs/core-go/validate-peer
-	mv $(OUT)/runs/core-go/validate-peer/validate-peer.report.json $(OUT)/runs/core-go/validate-peer/entity-peer.json
-	python3 tools/collect-run.py core-go --instrument validate-peer --src $(OUT)/runs/core-go/validate-peer --posture-file $(PEER_POSTURE) --out $(OUT)/runs entity-peer
+	mv $(OUT)/runs/core-go/validate-peer/validate-peer.report.json $(OUT)/runs/core-go/validate-peer/$(CORE_GO_LABEL).json
+	python3 tools/collect-run.py core-go --instrument validate-peer --src $(OUT)/runs/core-go/validate-peer --posture-file $(PEER_POSTURE) --out $(OUT)/runs $(CORE_GO_LABEL)
 
 # Join every collected run: requirement id ↔ the oracle check each requirement file names.
 differential:
 	python3 tools/differential.py --runs $(OUT)/runs --requirements requirements/core --out $(OUT)/DIFFERENTIAL.md
 	@cat $(OUT)/DIFFERENTIAL.md
 
-lint: lint-ignored lint-suite-independence lint-spec-data lint-requirements
+lint: lint-ignored lint-suite-independence lint-suite-constants lint-spec-data lint-requirements
 
 # AP-10 (candidate): no suite is written in the reference oracle's language, and no suite reaches into another suite
 # or into tools/. Shared code is shared bugs; a shared language with the oracle is shared idioms and shared libraries.
@@ -206,6 +211,20 @@ lint-suite-independence:
 	@for d in suites/*/; do n=$$(basename $$d); \
 	   hits=$$(grep -rIo -E "suites/[a-z0-9-]+/|\.\./\.\./tools/|(from|import) tools" $$d --exclude=README.md 2>/dev/null | grep -v ":suites/$$n/$$"); \
 	   if [ -n "$$hits" ]; then echo "lint-suite-independence: $$n references another suite or tools/:" >&2; echo "$$hits" >&2; exit 1; fi; done
+# D16 / AP-13 (F43, F65): a run-defining input that the requirement files already carry MUST be derived, never
+# restated as a suite constant. A snapshot name in suite source is stamped into spec.* — the verdict's
+# comparability anchor — and is correct only until the requirement set cites two snapshots. The planted control
+# runs first: a gate that cannot be made to fail has not been shown to measure anything.
+SNAPDIRS := $(shell ls -d spec-data/*/ 2>/dev/null | xargs -n1 basename 2>/dev/null)
+lint-suite-constants:
+	@pat=$$(echo "$(SNAPDIRS)" | tr ' ' '|'); \
+	 if [ -z "$$pat" ]; then echo "lint-suite-constants: COULD NOT LOOK — no spec-data/ snapshots" >&2; exit 2; fi; \
+	 tmp=$$(mktemp -d); printf 'SNAPSHOT = "%s"\n' "$$(echo $(SNAPDIRS) | cut -d' ' -f1)" > $$tmp/planted.py; \
+	 grep -qIE "[\"'](.*)($$pat)" $$tmp/planted.py || { echo "lint-suite-constants: SELF-TEST FAILED — planted constant not refused" >&2; rm -rf $$tmp; exit 2; }; \
+	 rm -rf $$tmp; \
+	 hits=$$(grep -rInIE "^[A-Za-z_]+ *= *[\"'][^\"']*($$pat)" suites --include='*.py' --include='*.sh' --include='*.rs' --include='*.ts' 2>/dev/null); \
+	 if [ -n "$$hits" ]; then echo "lint-suite-constants: a suite asserts a spec-data/ snapshot as a constant — derive it from the requirement files (D16/AP-13):" >&2; echo "$$hits" >&2; exit 1; fi; \
+	 echo "lint-suite-constants: self-test OK (planted constant refused); 0 suite constant(s) naming a spec-data/ snapshot"
 	@echo "lint-suite-independence: $$(ls -d suites/*/ | wc -l) suite(s); none in the oracle's language, none reaching into another suite or tools/"
 
 # The gates below read the WORKING TREE. A file they validate that .gitignore excludes passes locally and is

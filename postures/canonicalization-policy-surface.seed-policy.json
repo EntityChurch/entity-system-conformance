@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "grantee": "default",
+      "grants": [
+        {
+          "handlers": {"include": ["system/tree"]},
+          "resources": {"include": ["conformance-probe/*", "system/capability/policy/*"]},
+          "operations": {"include": ["get", "put"]}
+        },
+        {
+          "handlers": {"include": ["system/capability"]},
+          "resources": {"include": ["system/capability/policy/*"]},
+          "operations": {"include": ["configure", "request"]}
+        }
+      ]
+    }
+  ]
+}

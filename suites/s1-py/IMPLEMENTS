@@ -26,3 +26,6 @@ ECP-R7
 UNALLOCATED-cbor-tag-rejected
 UNALLOCATED-duplicate-map-key-rejected
 ECP-R4-pending-b
+ECP-R4
+ECP-R41
+UNALLOCATED-unsupported-content-hash-format-refused

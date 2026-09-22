@@ -1113,6 +1113,27 @@ def _outcome_class(o: wire.Outcome) -> tuple:
     return (o.kind, o.status, o.code) if o.kind == "response" else (o.kind,)
 
 
+def _r4b_put_member(ctx: Ctx, res: Result) -> Arm:
+    """The file's third member: a put of an entity carrying a null optional, answered as the same put without it. Needs
+    `system/tree: put`; without it the member is UNMEASURABLE under that posture (a 403), never scored."""
+    member = "tree:put entity {type: \"system/capability/request\", data: {grants: [], ttl_ms: null}} (requires put grant)"
+    s = _handshake(ctx, Result("", "", ""))
+    if s is None:
+        return Arm("conformant", member, None, "could not look: handshake failed")
+    res.witnesses["put_member_grant"] = grant_covers(s, "system/tree", "put")
+    base = _put(s, _probe_path("r4b-base"), ident.entity("system/capability/request", {"grants": []}))
+    with_null = _put(s, _probe_path("r4b-null"), ident.entity("system/capability/request", {"grants": [], "ttl_ms": None}))
+    s.conn.close()
+    res.witnesses["put_member"] = {"baseline": base.brief(), "with_member": with_null.brief()}
+    if _posture_unmet(base) or _posture_unmet(with_null):
+        return Arm("conformant", member, None, f"UNMEASURABLE under this posture: baseline {base.brief()}, member {with_null.brief()}")
+    if base.kind != "response":
+        return Arm("conformant", member, None, f"could not look: baseline put {base.brief()}")
+    same = _outcome_class(with_null) == _outcome_class(base)
+    return Arm("conformant", member, same, f"answered as the baseline put: {with_null.brief()}" if same
+               else f"{with_null.brief()} where the baseline put got {base.brief()}")
+
+
 def check_r4b(ctx: Ctx) -> Result:
     res = Result("ECP-R4-pending-b", "encoding/r4b_unknown_field_not_refused", "ENTITY-CORE-PROTOCOL §2.10, §1.3")
     base = _raw_hello(ctx, wire.hello_probe(Identity()))
@@ -1128,8 +1149,13 @@ def check_r4b(ctx: Ctx) -> Result:
         else:
             same = _outcome_class(o) == _outcome_class(base)
             arms.append(Arm("conformant", member, same, f"answered as the baseline: {o.brief()}" if same else f"{o.brief()} where the baseline got {base.brief()}"))
-    # The put member needs `system/tree: put`; this suite does not implement it yet, and says so rather than dropping it.
-    res.witnesses["member_not_run"] = "tree:put of an entity carrying a null optional — requires a put grant; not implemented in s1-py"
+    put_arm = _r4b_put_member(ctx, res)
+    if put_arm.outcome.startswith("UNMEASURABLE under this posture"):
+        # Not a could-not-look: the posture withholds this one member, and the hello members are no less measured for it.
+        # Recorded as the file says ("UNMEASURABLE and reported so"), and the verdict covers the members that ran.
+        res.witnesses["member_unmeasurable_under_posture"] = put_arm.outcome
+    else:
+        arms.append(put_arm)
     # WITNESS: the control as first written (F58) — the member in a tag. It borrows cbor-tag-rejected's verdict, so unscored.
     res.witnesses["tagged_member"] = _raw_hello(ctx, wire.hello_probe(Identity(), extra=(("x_cnf_probe", cbor.Tag(1, 1)),))).brief()
     # Control, suite-side: the comparator must tell three differing outcome pairs apart and hold one equal pair.
@@ -1141,6 +1167,221 @@ def check_r4b(ctx: Ctx) -> Result:
     control = Arm("negative-control", "control", detected and equal,
                   "comparator refused 3 differing pairs and held the equal one" if detected and equal else "comparator did NOT discriminate")
     _finish_arms(res, arms, control)
+    return res
+
+
+# ── encoding, put surface: ECP-R4, ECP-R41, …unsupported-content-hash-format-refused (+ ECP-R4-pending-b's put member) ──
+#
+# §6.3's `system/tree:put` is the one core surface that stores a caller's entity and serves it back, and the one where a
+# mis-sized hash, a mismatched hash and an unsupported format code get DIFFERENT codes. Every file here needs
+# `system/tree: put` on a path the suite owns. That is a POSTURE: the handshake grant decides it, not the peer's
+# conformance. A 403 on a put is therefore never scored — the member is UNMEASURABLE under that posture, and the report
+# carries the grant the handshake issued so a reader can see which posture it was.
+
+PROBE_ROOT = "conformance-probe/s1py"
+
+
+def _probe_path(tag: str) -> str:
+    return f"{PROBE_ROOT}/{tag}-{os.urandom(6).hex()}"  # peer-relative; §5.4 canonicalize resolves it to the local peer
+
+
+def _put(s: wire.Session, path: str, ent: object) -> wire.Outcome:
+    s.conn.send(s.signed(wire.request_id("put"), "system/tree", "put", resource={"targets": [path]},
+                         params=wire.tree_put_params(ent)))
+    return s.read_response()
+
+
+def _unbind(s: wire.Session, path: str) -> str:
+    """Best-effort cleanup (§6.3 put with `entity` absent). Recorded, never scored."""
+    s.conn.send(s.signed(wire.request_id("unbind"), "system/tree", "put", resource={"targets": [path]},
+                         params=wire.tree_put_params(remove=True)))
+    return s.read_response().brief().split(" (request_id")[0]
+
+
+def _posture_unmet(o: wire.Outcome) -> bool:
+    return o.kind == "response" and o.status == 403
+
+
+def _put_posture_witness(s: wire.Session, res: Result) -> None:
+    res.witnesses["precondition_put_grant"] = grant_covers(s, "system/tree", "put")
+
+
+def returned_entity_bytes_equal(put: dict, got: wire.Outcome) -> tuple[bool | None, str]:
+    """ECP-R4's assertion: `type`, `data` and `content_hash` of the entity `get` served, AS ENCODED BYTES, equal what was
+    put. Decoded equality is exactly the lossy round-trip §5.4 rules out, so the bytes are sliced from the frame."""
+    if got.kind != "response":
+        return None, f"get: {got.brief()}"
+    if got.status != 200:
+        return False, f"accepted by put, then get answered {got.status} {got.code or '-'}"
+    if got.raw is None or cbor.raw_at(got.raw, ("root", "data", "result")) is None:
+        return False, "get 200 carries no result"
+    diffs = []
+    for f in ("type", "data", "content_hash"):
+        served = cbor.raw_at(got.raw, ("root", "data", "result", f))
+        sent = cbor.encode(put[f])
+        if served != sent:
+            diffs.append(f"{f}: sent {sent.hex()[:48]} served {served.hex()[:48] if served is not None else 'absent'}")
+    return (True, "type, data and content_hash byte-identical") if not diffs else (False, "; ".join(diffs))
+
+
+R4_MEMBERS = (
+    ("an unknown top-level data field", "test/v1", {"x": 1, "x_cnf_unknown": "kept"}),
+    ("an unknown field nested two maps deep", "test/v1", {"x": 1, "outer": {"inner": {"x_cnf_unknown": [1, "two"]}}}),
+    ("a declared-optional-looking field whose value is null", "test/v1", {"x": 1, "x_cnf_optional": None}),
+    ("a data field holding bytes shaped like a hash under unallocated format code 0x7E", "test/v1",
+     {"ref": b"\x7e" + bytes(range(32))}),
+    ("an unknown entity type string", "cnf-probe/unmodelled-type/v1", {"x": 1}),
+    ("a float requiring half precision (1.5 → F9 3E00)", "test/v1", {"f": 1.5}),
+    ("a map whose keys sort differently by insertion than canonically", "test/v1", {"zzz": 1, "b": 2, "aa": 3}),
+)
+
+
+def _raw_map(pairs: list[tuple[str, bytes]]) -> bytes:
+    """A map written in the given order from already-encoded values — only for fixtures that must be non-canonical."""
+    return bytes([0xA0 | len(pairs)]) + b"".join(cbor.encode(k) + v for k, v in pairs)
+
+
+def _fixture_get(type_raw: bytes, data_raw: bytes, hash_raw: bytes) -> wire.Outcome:
+    result = _raw_map([("data", data_raw), ("type", type_raw), ("content_hash", hash_raw)])
+    rdata = _raw_map([("result", result), ("status", cbor.encode(200)), ("request_id", cbor.encode("fixture"))])
+    body = _raw_map([("root", _raw_map([("data", rdata), ("type", cbor.encode(wire.RESPONSE))])), ("included", b"\xa0")])
+    return wire.classify(body, len(body))
+
+
+def r4_fixtures() -> tuple[list[tuple[str, dict, wire.Outcome]], tuple[dict, wire.Outcome]]:
+    """Three self-consistent get responses each missing one member's content (must FAIL the assertion), and one faithful
+    response (must hold). Every broken fixture's content_hash is correct FOR ITS OWN BYTES: an assertion that only checks
+    the served entity's own hash passes all three, which is the defect the control exists to catch."""
+    import hashlib
+    enc = cbor.encode
+    unknown = ident.entity("test/v1", {"x": 1, "x_cnf_unknown": "kept"})
+    nulled = ident.entity("test/v1", {"x": 1, "x_cnf_optional": None})
+    ordered = ident.entity("test/v1", {"zzz": 1, "b": 2, "aa": 3})
+    stripped = ident.entity("test/v1", {"x": 1})
+    insertion = _raw_map([("zzz", enc(1)), ("b", enc(2)), ("aa", enc(3))])
+    insertion_hash = b"\x00" + hashlib.sha256(_raw_map([("data", insertion), ("type", enc("test/v1"))])).digest()
+    broken = [
+        ("unknown field stripped, rehashed", unknown, _fixture_get(enc("test/v1"), enc(stripped["data"]), enc(stripped["content_hash"]))),
+        ("null dropped, rehashed", nulled, _fixture_get(enc("test/v1"), enc(stripped["data"]), enc(stripped["content_hash"]))),
+        ("keys re-sorted by insertion, rehashed", ordered, _fixture_get(enc("test/v1"), insertion, enc(insertion_hash))),
+    ]
+    faithful = (unknown, _fixture_get(enc(unknown["type"]), enc(unknown["data"]), enc(unknown["content_hash"])))
+    return broken, faithful
+
+
+def check_r4(ctx: Ctx) -> Result:
+    res = Result("ECP-R4", "encoding/r4_put_get_round_trip_byte_identical", "ENTITY-CBOR-ENCODING §5.4, ENTITY-CORE-PROTOCOL §1.8, §2.10")
+    s = _handshake(ctx, res)
+    if s is None:
+        return res
+    _put_posture_witness(s, res)
+    arms, cleanup = [], {}
+    for member, type_, data in R4_MEMBERS:
+        path = _probe_path("r4")
+        ent = ident.entity(type_, data)
+        p = _put(s, path, ent)
+        if p.kind != "response":
+            arms.append(Arm("conformant", member, None, f"could not look: put {p.brief()}"))
+            break
+        if _posture_unmet(p):
+            arms.append(Arm("conformant", member, None, f"UNMEASURABLE under this posture: put {p.status} {p.code or '-'}"))
+            continue
+        if p.status != 200:
+            # A refusal here is ECP-R4-pending-b's question, not this file's: nothing was stored, so nothing can be preserved.
+            arms.append(Arm("conformant", member, None, f"UNMEASURABLE: put refused {p.status} {p.code or '-'} — nothing stored to preserve"))
+            continue
+        s.conn.send(s.signed(wire.request_id("get"), "system/tree", "get", resource={"targets": [path]}))
+        g = s.read_response()
+        held, why = returned_entity_bytes_equal(ent, g)
+        arms.append(Arm("conformant", member, held, why))
+        cleanup[member] = _unbind(s, path)
+    res.witnesses["unbind"] = cleanup
+    s.conn.close()
+    broken, faithful = r4_fixtures()
+    refused = {name: returned_entity_bytes_equal(put, fx)[0] for name, put, fx in broken}
+    kept = returned_entity_bytes_equal(*faithful)[0]
+    ok = all(v is False for v in refused.values()) and kept is True
+    control = Arm("negative-control", "control", ok,
+                  f"assertion refused {sum(v is False for v in refused.values())} of 3 self-consistent lossy fixtures and "
+                  f"{'held' if kept else 'did NOT hold'} the faithful one")
+    _finish_arms(res, arms, control)
+    return res
+
+
+def _mis_sized_arm(name: str, o: wire.Outcome) -> Arm:
+    if _posture_unmet(o):
+        return Arm("conformant", name, None, f"UNMEASURABLE under this posture: {o.status} {o.code or '-'}")
+    if o.kind != "response":
+        return Arm("conformant", name, None, f"could not look: {o.brief()}")
+    if o.status == 400 and o.code == "invalid_request":
+        return Arm("conformant", name, True, "400 invalid_request")
+    return Arm("conformant", name, False, f"{o.status} {o.code or '-'} — assertion (400 invalid_request) does not hold"
+               + (" — the length check did not run before the comparison" if o.code == "hash_mismatch" else ""))
+
+
+def check_r41(ctx: Ctx) -> Result:
+    res = Result("ECP-R41", "encoding/r41_put_mis_sized_hash_invalid_request", "ENTITY-CORE-PROTOCOL §1.2, §6.3")
+    s = _handshake(ctx, res)
+    if s is None:
+        return res
+    _put_posture_witness(s, res)
+    good = ident.entity("test/v1", {"x": 1})
+    digest = good["content_hash"][1:]
+    members = [("0x00 + 31-byte digest", b"\x00" + digest[:31]), ("0x00 + 33-byte digest", b"\x00" + digest + b"\x00")]
+    advertised = s.responder_hello.get("hash_formats") if isinstance(s.responder_hello, dict) else None
+    res.witnesses["responder_hash_formats"] = advertised if advertised is not None else "absent (§4.5: means [\"ecfv1-sha256\"])"
+    if isinstance(advertised, list) and "ecfv1-sha384" in advertised:
+        members.append(("0x01 + 32-byte digest (only if the peer advertises ecfv1-sha384)", b"\x01" + digest))
+    else:
+        res.witnesses["member_not_run"] = "0x01 + 32-byte digest: the peer does not advertise ecfv1-sha384 (the file's condition)"
+    arms = []
+    for name, h in members:
+        o = _put(s, _probe_path("r41"), dict(good, content_hash=h))
+        res.witnesses[name] = o.brief()
+        arms.append(_mis_sized_arm(name, o))
+        if o.kind != "response":
+            break
+    c = _put(s, _probe_path("r41-control"), dict(good, content_hash=wire.flip_last(good["content_hash"])))
+    res.witnesses["control"] = c.brief()
+    if _posture_unmet(c) or c.kind != "response":
+        control = Arm("negative-control", "control", None, f"could not look: {c.brief()}")
+    else:
+        control = Arm("negative-control", "control", c.status == 400 and c.code == "hash_mismatch",
+                      f"correctly sized, last digest byte flipped: {c.status} {c.code or '-'} (must be 400 hash_mismatch)")
+    s.conn.close()
+    _finish_arms(res, arms, control)
+    return res
+
+
+def check_unsupported_format(ctx: Ctx) -> Result:
+    res = Result("UNALLOCATED-unsupported-content-hash-format-refused", "encoding/put_unsupported_content_hash_format",
+                 "ENTITY-CORE-PROTOCOL §1.2, §4.7 row 5, §6.3")
+    s = _handshake(ctx, res)
+    if s is None:
+        return res
+    _put_posture_witness(s, res)
+    good = ident.entity("test/v1", {"x": 1})
+    o = _put(s, _probe_path("fmt7e"), dict(good, content_hash=b"\x7e" + good["content_hash"][1:]))
+    res.witnesses["put_7e"] = o.brief()
+    if _posture_unmet(o):
+        conformant = Arm("conformant", "put-unsupported-format", None, f"UNMEASURABLE under this posture: {o.status} {o.code or '-'}")
+    elif o.kind != "response":
+        conformant = Arm("conformant", "put-unsupported-format", None, f"could not look: {o.brief()}")
+    else:
+        conformant = _coded_refusal("put-unsupported-format", o, 400, "unsupported_content_hash_format")
+    path00 = _probe_path("fmt00")
+    c = _put(s, path00, good)
+    res.witnesses["put_00"] = c.brief()
+    if c.kind == "response" and c.status == 200:
+        res.witnesses["unbind"] = _unbind(s, path00)
+    s.conn.close()
+    if _posture_unmet(c) or c.kind != "response":
+        control = Arm("negative-control", "control", None, f"could not look: {c.brief()}")
+    else:
+        control = Arm("negative-control", "control", c.status == 200, f"same entity, format byte 0x00: {c.status} {c.code or '-'} (must be 200)")
+    # WITNESS-ONLY: row 5 is reachable on a hello, but the responder's precedence against §4.5a is unstated.
+    res.witnesses["hello_7e"] = _raw_hello(ctx, wire.hello_probe(Identity(), root_format=0x7E)).brief()
+    _finish(res, conformant, control)
     return res
 
 
@@ -1309,6 +1550,9 @@ CHECKS = {
     "UNALLOCATED-cbor-tag-rejected": check_cbor_tag,
     "UNALLOCATED-duplicate-map-key-rejected": check_dup_key,
     "ECP-R4-pending-b": check_r4b,
+    "ECP-R4": check_r4,
+    "ECP-R41": check_r41,
+    "UNALLOCATED-unsupported-content-hash-format-refused": check_unsupported_format,
     # LAST, deliberately: these send the largest frames any check sends, and a peer that dies on one must not turn every
     # requirement after it into a could-not-look.
     "ECP-R66": check_r66,
@@ -1322,7 +1566,8 @@ CATEGORY = {rid: "connectivity" for rid in CHECKS} | {"UNALLOCATED-key-type-mutu
     | {rid: "encoding" for rid in ("ECP-R2", "ECP-R12", "ECP-R7-pending-b", "UNALLOCATED-emitted-frames-are-canonical-ecf",
                                    "UNALLOCATED-emitted-entities-conform-to-protocol-types",
                                    "UNALLOCATED-emitted-optional-fields-absent-not-null", "ECP-R3", "ECP-R7",
-                                   "UNALLOCATED-cbor-tag-rejected", "UNALLOCATED-duplicate-map-key-rejected", "ECP-R4-pending-b")}
+                                   "UNALLOCATED-cbor-tag-rejected", "UNALLOCATED-duplicate-map-key-rejected", "ECP-R4-pending-b",
+                                   "ECP-R4", "ECP-R41", "UNALLOCATED-unsupported-content-hash-format-refused")}
 
 
 def run(rid: str, ctx: Ctx) -> Result:

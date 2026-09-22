@@ -44,6 +44,16 @@ make peer-up core-go-s1         # core-go, bootstrap posture
 make differential               # every instrument, by requirement id → output/DIFFERENTIAL.md
 ```
 
+**Surfaces a posture decides.** `system/tree:put` (the `encoding` put rows) and the policy subtree plus
+`system/capability:configure` (`peer_canonicalization`) are reachable only under a grant that covers them. A `403` there is
+**never scored**: the member is UNMEASURABLE under that posture, and the handshake grant is in the witnesses. core-go's
+bootstrap grant covers neither, so it runs once per declared posture, each filed as its own peer row:
+
+```
+make peer-up SEED_POLICY=postures/tree-put-on-probe-root.seed-policy.json
+make core-go-s1 core-go-oracle CORE_GO_LABEL=entity-peer-tree-put
+```
+
 Diagnostic flags: `-requirements ECP-R1,ECP-R6` · `-sign-message hash33|digest32|ecf` (F30) · `-posture-grants <label>`
 · `-posture-pre-dispatch-layer` · `-declared-max-payload <bytes>` (the peer's §4.10(a) bound, from its posture; absent, `ECP-R66`
 SKIPs) · `-list-requirements`.

@@ -242,6 +242,12 @@ class Session:
         return frame(envelope(execute_entity(rid, uri, operation, params=params, resource=resource)))
 
 
+def tree_put_params(ent: object = None, remove: bool = False) -> dict:
+    """§3.9 system/tree/put-request. `entity` present stores and binds; absent removes the binding (§6.3). The params
+    entity is hashed canonically over whatever `ent` is, so a defect inside `ent` is the only defect the frame carries."""
+    return entity("system/tree/put-request", {} if remove else {"entity": ent})
+
+
 ABSENT = object()  # a hello field OMITTED from the map — a different wire shape from an empty list (§4.5)
 
 
@@ -277,7 +283,7 @@ def probe_entity(type_: str, data: object, corrupt: bool = False) -> dict:
 
 
 def hello_probe(me: Identity, extra: tuple = (), corrupt_root: bool = False, corrupt_params: bool = False,
-                included: dict | None = None, wrap_tag: int | None = None) -> bytes:
+                included: dict | None = None, wrap_tag: int | None = None, root_format: int | None = None) -> bytes:
     """A §3.8 hello with extra data PAIRS appended (a key may repeat; a value may be a Tag), every hash over the bytes sent
     unless told to corrupt one. `wrap_tag` puts a tag around the whole payload. Returns the framed bytes."""
     base = (("peer_id", me.peer_id), ("nonce", os.urandom(32)), ("protocols", [PROTOCOL_VERSION]),
@@ -285,6 +291,8 @@ def hello_probe(me: Identity, extra: tuple = (), corrupt_root: bool = False, cor
     params = probe_entity("system/protocol/connect/hello", cbor.Pairs(base + tuple(extra)), corrupt=corrupt_params)
     root = probe_entity(EXECUTE, {"request_id": request_id("hello-probe"), "uri": CONNECT, "operation": "hello",
                                   "params": params}, corrupt=corrupt_root)
+    if root_format is not None:  # the digest stays SHA-256 over the bytes sent; only the single format byte changes
+        root["content_hash"] = bytes([root_format]) + root["content_hash"][1:]
     env: object = {"root": root, "included": included or {}}
     if wrap_tag is not None:
         env = cbor.Tag(wrap_tag, env)

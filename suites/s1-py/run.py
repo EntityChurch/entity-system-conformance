@@ -22,24 +22,55 @@ sys.path.insert(0, str(HERE))
 from s1py import checks, ed25519, ident  # noqa: E402
 
 SUITE = "s1-py"
-SNAPSHOT = "core-0.8.2.21"
+
+# ⛔ There is deliberately NO `SNAPSHOT = "core-0.8.2.21"` constant here, and there must never be one again.
+# `snapshot` is a field on every requirement file (spec-data/README.md rule 3). A constant here restates an
+# input the requirement set already carries, cannot disagree with it loudly, and stamps the guess into
+# `spec.*` — which is the COMPARABILITY ANCHOR of the verdict document. It was correct for exactly as long as
+# every requirement cited one snapshot, and wrong from the first re-base onward. See F65 / AP-13 / D16; the
+# same shape as F43's hand-typed posture. A run has a snapshot SET and it is DERIVED, never asserted.
+# `make lint-suite-independence` refuses any suite constant naming a spec-data/ directory.
+
+
+def _snapshot_of(path: Path) -> str:
+    """The requirement's own `snapshot` field, read as text so the bundle needs no TOML parser at build time."""
+    for line in path.read_text().splitlines():
+        if line.startswith("snapshot"):
+            return line.split("=", 1)[1].strip().strip('"')
+    return "undeclared"
 
 
 def build_info() -> dict:
-    """Written by `make build` into the bundle: suite version and the sha256 of every requirement file this
-    suite implements, so each verdict names the exact requirement text it measured. Run from the source tree
-    instead, the digests are computed from ../../requirements/core, and the report says so."""
+    """Written by `make build` into the bundle: suite version, and the sha256 AND DECLARED SNAPSHOT of every
+    requirement file this suite implements, so each verdict names the exact requirement text it measured and
+    the exact spec text that text was authored against. Run from the source tree instead, both are computed
+    from ../../requirements/core, and the report says so."""
     p = HERE / "BUILD.json"
     if p.is_file():
         info = json.loads(p.read_text())
         info["from"] = "bundle"
+        info.setdefault("requirement_snapshots", {})
         return info
     reqs = HERE.parent.parent / "requirements" / "core"
-    digests = {}
+    digests, snaps = {}, {}
     for rid in checks.CHECKS:
         f = reqs / f"{rid}.toml"
         digests[rid] = hashlib.sha256(f.read_bytes()).hexdigest() if f.is_file() else "unavailable"
-    return {"suite_version": "source-tree", "requirement_digests": digests, "from": "source tree (unbuilt)"}
+        snaps[rid] = _snapshot_of(f) if f.is_file() else "unavailable"
+    return {"suite_version": "source-tree", "requirement_digests": digests, "requirement_snapshots": snaps,
+            "from": "source tree (unbuilt)"}
+
+
+def spec_field(info: dict, selected: list[str]) -> dict:
+    """The verdict's `spec` block, DERIVED from the requirements actually selected for THIS run.
+
+    A set, never a scalar: a run legitimately spans snapshots — mid-re-base within one area, and always once
+    a peer is measured against core plus an extension. `mixed` is not a defect to hide; it is the fact a
+    consumer needs in order to know what two reports may be compared on."""
+    snaps = {info.get("requirement_snapshots", {}).get(r, "unavailable") for r in selected}
+    return {"snapshots": sorted(snaps),
+            "by_requirement": {r: info.get("requirement_snapshots", {}).get(r, "unavailable") for r in selected},
+            "homogeneous": len(snaps) == 1}
 
 
 def self_check() -> str | None:
@@ -77,7 +108,8 @@ def main(argv: list[str]) -> int:
     a, unknown = parse(argv)
     info = build_info()
     if a.list_requirements:
-        print(json.dumps({"suite": SUITE, "snapshot": SNAPSHOT, "requirements": info["requirement_digests"]}, indent=2))
+        print(json.dumps({"suite": SUITE, "spec": spec_field(info, list(checks.CHECKS)),
+                          "requirements": info["requirement_digests"]}, indent=2))
         return 0
     if not a.addr:
         print(f"{SUITE}: -addr is required", file=sys.stderr)
@@ -115,7 +147,7 @@ def main(argv: list[str]) -> int:
 
     report = {
         "suite": {"name": SUITE, "version": info.get("suite_version"), "runtime": sys.version.split()[0], "build": info.get("from")},
-        "spec": {"snapshot": SNAPSHOT},
+        "spec": spec_field(info, selected),
         "profile": a.profile,
         "requirement_digests": {r: info["requirement_digests"].get(r) for r in selected},
         "posture": {

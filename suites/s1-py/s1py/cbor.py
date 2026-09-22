@@ -336,3 +336,28 @@ def decode(data: bytes, max_depth: int = 256) -> tuple[object, Findings]:
     if n != len(data):
         raise CBORError(f"{len(data) - n} trailing bytes after one complete item")
     return v, f
+
+
+def raw_at(data: bytes, keys: tuple) -> bytes | None:
+    """The ENCODED BYTES of the value reached by following text `keys` through nested maps, exactly as they appear in
+    `data`. None when a step is not a map or the key is absent. For requirements that compare bytes, never decoded values
+    (ECP-R4): a decode and re-encode is the lossy round-trip such a requirement exists to rule out."""
+    r = _Reader(bytes(data), 256)
+    for key in keys:
+        ib = r.take(1)[0]
+        if ib >> 5 != 5:
+            return None
+        count = r.arg(ib & 0x1F, 5)
+        n, found = 0, False
+        while count is None and r.b[r.i:r.i + 1] != b"\xff" or count is not None and n < count:
+            k = r.item(1)
+            n += 1
+            if k == key:
+                found = True
+                break
+            r.item(1)
+        if not found:
+            return None
+    start = r.i
+    r.item(1)
+    return r.b[start:r.i]

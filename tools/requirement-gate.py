@@ -45,6 +45,55 @@ SURFACES = ("wire", "host-seam", "offline", "cross-peer", "unreachable")
 STATUSES = ("draft", "reviewed", "ratified", "disputed")
 ID_STATUSES = ("allocated", "pending-split", "unallocated")
 ARM_KINDS = ("conformant", "negative-control", "non-conformant")
+
+# The arm's OUTCOME vocabulary, closed and gated from 2026-09-14 (F67).
+#
+# It was unvalidated until an author added `[[requirement.arm.inconclusive]]` to ECP-R7 and this gate
+# reported 0 findings — a fourth outcome kind, invented mid-file, silently certified. The failure mode
+# is not the new word: it is that `[[requirement.arm.acccept]]` would have passed too, and a typo'd
+# assertion is an assertion that never runs while its file still reads as measured. That is `AP-8`'s
+# family — a gate certifying something it does not look at — one table over.
+#
+# ⛔ AND THE VOCABULARY WAS ENUMERATED FROM THE CORPUS, NOT FROM THE AUTHOR'S MEMORY (AP-3).
+# The first cut of this table listed four members and went red on 20 files: `assert` — the MOST USED
+# form in the tree, 74 arms — was missing from it. `AP-3` is precisely "a rule stated over the cases
+# its author had in mind; the gate went red on its own corpus and the GATE was wrong." It is recorded
+# here because the fix took one minute and the lesson is the expensive part: a closed vocabulary is
+# derived by counting, and a gate whose first run reds the corpus is reporting on itself.
+#
+#   step         — how the arm is driven. Needs `op`; nests inside the arm (Q2)
+#   assert       — a predicate on a CAPTURED value: `capture` + `kind` (+ equals/not_equals/expect)
+#   accept       — a permitted OUTCOME. One or more; the arm passes on any (Q2: a set, not one
+#                  `expect`, because two conformant outcomes are often both permitted)
+#   refuse       — an OUTCOME that fails the arm. Where the obligation actually bites
+#   witness      — a FIELD recorded and never scored. Takes `field`, not `outcome`
+#   inconclusive — ⭐ an OUTCOME the requirement deliberately declines to score, because an open
+#                  question owns it. Added 2026-09-14 for ECP-R7 under core-0.8.2.24: `close` and
+#                  `silence` are CQ-35's and CQ-34's, and this file must neither accept them (which is
+#                  what the .21 text's "any non-200" did, silently pre-empting the ruling in the
+#                  permissive direction) nor fail them (pre-empting it in the strict one). Yields
+#                  INCONCLUSIVE, which the suite already reports and which is NOT a pass (ADR-0012).
+#                  ⚠ THIS IS A FORMAT CHANGE and it restarts CQ-12's ratification clock — deliberately.
+#
+# `why` is NOT required on an individual row: the corpus carries 26 `assert` rows and one `accept` row
+# without it, and reddening them would be this comment's own anti-pattern a second time. The arm-level
+# `why` is required and that is where a reviewer reads the argument.
+# ⛔ AND THE REQUIRED FIELD IS THE INTERSECTION ACROSS EVERY ROW, NOT THE MODE.
+# Second miss in the same edit: `assert` was given `capture`, which is in 63 of its 74 rows and in the
+# three most common shapes — and is absent from a bare state predicate (`kind = "connected"`,
+# `kind = "inbound_execute_count_within_window", equals = 2`). Two negative controls went red for being
+# correct. **`kind` is what every assert row carries.** Counting is not enough: take the INTERSECTION
+# of fields present in every row, because the mode describes the common case and a gate must describe
+# the whole corpus. `why` is deliberately NOT required even where it is currently universal — that is
+# an accident of 50 files, not an earned rule, and the arm-level `why` is where the argument is read.
+ARM_TABLES = {
+    "step":         "op",
+    "assert":       "kind",
+    "accept":       "outcome",
+    "refuse":       "outcome",
+    "witness":      "field",
+    "inconclusive": "outcome",
+}
 # ADDED 2026-09-12 (batch 3) — THE FIRST FIELD ADDED SINCE THE FORMAT'S FIRST CUT, AND IT RESTARTS
 # CQ-12's RATIFICATION CLOCK ON PURPOSE. Batch 2 authored two MUSTs whose level was ARGUED from
 # entailment rather than quoted from a keyword (F11) and said a third would make that a format change;
@@ -152,6 +201,32 @@ def validate(req: dict, name: str) -> list[str]:
         if not arm.get("why"):
             add(f"{name}: arm {arm.get('name', i)!r} has no `why`. The why is what a reviewer "
                 f"checks against the spec; without it the arm is an assertion nobody can audit.")
+        # F67: the arm's table vocabulary is CLOSED, and an unknown key is refused rather than
+        # ignored. An ignored `acccept` is an assertion that silently never runs, in a file that
+        # still counts toward every number this gate prints.
+        for key, val in arm.items():
+            if not isinstance(val, list):
+                continue
+            required = ARM_TABLES.get(key)
+            if required is None:
+                add(f"{name}: arm {arm.get('name', i)!r} has table {key!r}, not in "
+                    f"{', '.join(ARM_TABLES)}. An unrecognised table is SILENTLY NEVER EVALUATED "
+                    f"while the file still reads as measured (F67).")
+                continue
+            for j, row in enumerate(val):
+                if not isinstance(row, dict):
+                    add(f"{name}: arm {arm.get('name', i)!r} {key}[{j}] is not a table.")
+                elif not row.get(required):
+                    add(f"{name}: arm {arm.get('name', i)!r} {key}[{j}] needs `{required}`.")
+        # An arm that can only pass has not been shown to measure anything — the charter's rule 2,
+        # applied to the arm rather than to the file. Scoped to OUTCOME-shaped conformant arms:
+        # `assert`-shaped ones fail by their predicate, and the negative control is exempt BY
+        # CONSTRUCTION, since its whole job is to fire on the conformant path.
+        if (arm.get("kind") == "conformant" and arm.get("accept")
+                and not arm.get("refuse") and not arm.get("assert")):
+            add(f"{name}: conformant arm {arm.get('name', i)!r} declares `accept`, no `refuse` and "
+                f"no `assert`. It cannot fail, so it measures nothing — name what the obligation "
+                f"forbids.")
     # THE ONE EXEMPTION, AND IT WAS EARNED ON THE GATE'S FIRST REAL RUN (F8).
     #
     # "Every requirement has a negative control" is the charter's rule and it was written here
@@ -337,6 +412,37 @@ def self_test() -> int:
         ("a level outside §8.5a's closed six", mutate(level="REQUIRED"), "ECP-R1.toml"),
         ("a level_basis outside keyword/entailed", mutate(level_basis="implied"), "ECP-R1.toml"),
         ("an entailed level whose reading argues nothing", mutate(level_basis="entailed"), "ECP-R1.toml"),
+        # F67, planted three ways. The first is the real incident: a fourth outcome kind invented in a
+        # file and certified clean. The second is the one that actually costs a run — a typo'd `accept`
+        # that is silently never evaluated. The third is an arm with no way to fail.
+        ("an arm outcome table outside the closed vocabulary",
+         mutate(arm=[{"name": "a", "kind": "conformant", "why": "w",
+                      "accept": [{"outcome": "ok", "why": "w"}],
+                      "refuse": [{"outcome": "bad", "why": "w"}],
+                      "sometimes": [{"outcome": "x", "why": "w"}]},
+                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.toml"),
+        ("a typo'd accept table, which would silently never be evaluated",
+         mutate(arm=[{"name": "a", "kind": "conformant", "why": "w",
+                      "acccept": [{"outcome": "ok", "why": "w"}],
+                      "refuse": [{"outcome": "bad", "why": "w"}]},
+                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.toml"),
+        ("a conformant arm that accepts and can never refuse",
+         mutate(arm=[{"name": "a", "kind": "conformant", "why": "w",
+                      "accept": [{"outcome": "ok", "why": "w"}]},
+                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.toml"),
+        # The rule this one guards was WRONG on its first cut (`capture`, the mode) and reddened two
+        # correct negative controls. It is planted so the corrected rule (`kind`, the intersection)
+        # is shown able to fail rather than merely shown able to pass the corpus.
+        ("an assert row with no `kind`",
+         mutate(arm=[{"name": "a", "kind": "conformant", "why": "w",
+                      "assert": [{"capture": "x", "equals": 1}]},
+                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.toml"),
+        ("a witness declared as an outcome instead of a field",
+         mutate(arm=[{"name": "a", "kind": "conformant", "why": "w",
+                      "accept": [{"outcome": "ok", "why": "w"}],
+                      "refuse": [{"outcome": "bad", "why": "w"}],
+                      "witness": [{"outcome": "x", "why": "w"}]},
+                     {"name": "c", "kind": "negative-control", "why": "w"}]), "ECP-R1.toml"),
     ]
     for label, doc, fname in planted:
         doc = {k: v for k, v in doc.items() if v is not None}

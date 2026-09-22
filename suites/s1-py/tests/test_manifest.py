@@ -85,6 +85,34 @@ class EmittedFixtures(unittest.TestCase):
             self.assertIsNone(pred([{"root": None, "included": {}}])[0], pred.__name__)
 
 
+class PutSurface(unittest.TestCase):
+    """ECP-R4's byte comparison and ECP-R41's arm, each shown able to fail."""
+
+    def test_lossy_fixtures_refused_faithful_held(self):
+        broken, faithful = checks.r4_fixtures()
+        for name, put, fx in broken:
+            self.assertIs(checks.returned_entity_bytes_equal(put, fx)[0], False, name)
+        self.assertIs(checks.returned_entity_bytes_equal(*faithful)[0], True)
+
+    def test_decoded_equality_would_have_passed_the_reordered_fixture(self):
+        # Why the comparison is on bytes: decoded, the insertion-ordered map IS the put map.
+        broken, _ = checks.r4_fixtures()
+        name, put, fx = broken[2]
+        self.assertEqual(fx.envelope["root"]["data"]["result"]["data"], put["data"])
+        self.assertIs(checks.returned_entity_bytes_equal(put, fx)[0], False)
+
+    def test_not_served_is_fail_and_no_answer_is_could_not_look(self):
+        _, (put, _) = checks.r4_fixtures()
+        self.assertIs(checks.returned_entity_bytes_equal(put, _resp("g", 404, "not_found"))[0], False)
+        self.assertIsNone(checks.returned_entity_bytes_equal(put, wire.Outcome("timeout"))[0])
+
+    def test_mis_sized_arm(self):
+        self.assertIs(checks._mis_sized_arm("m", _resp("p", 400, "invalid_request")).held, True)
+        self.assertIs(checks._mis_sized_arm("m", _resp("p", 400, "hash_mismatch")).held, False)
+        self.assertIs(checks._mis_sized_arm("m", _resp("p", 200)).held, False)
+        self.assertIsNone(checks._mis_sized_arm("m", _resp("p", 403, "capability_denied")).held)
+
+
 class NoPeer(unittest.TestCase):
     """F57's negative control, executed: every check against an address where nothing listens. A connection that never
     opened is not an observation of any peer, so the only permitted verdict is SKIP. Before the fix this run scored four

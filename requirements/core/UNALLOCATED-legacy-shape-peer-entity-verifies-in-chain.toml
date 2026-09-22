@@ -1,0 +1,136 @@
+## UNALLOCATED — ENTAILED — a chain link whose party is a v7.64-shape system/peer (peer_id in data) verifies exactly as the same link with a v7.65-shape entity does.
+##
+## Batch 4. What `composition_1_interleaved_chain` measures. §3.5 says chains "MAY interleave; each link
+## verifies if its referenced content_hash is locatable" — a MAY on the chain's author, and no keyword on the
+## verifier. The verifier's obligation is argued. Chain construction itself is `capability`'s (§5.5 is read
+## whole there); this file varies ONE input and asserts the verdict does not move.
+
+[requirement]
+id_status   = "unallocated"
+under       = ""
+title       = "Presenting a delegated chain whose intermediate party is referenced by the hash of a v7.64-shape system/peer entity yields the same outcome class as the identical chain built with that party's v7.65-shape entity"
+spec        = "ENTITY-CORE-PROTOCOL §3.5 ('v7.64 entities (with peer_id field in data) and v7.65 entities (without) coexist by content_hash. Pre-v7.65 cap chains remain verifiable byte-for-byte against the entities they reference. ... Chains MAY interleave; each link verifies if its referenced content_hash is locatable.')"
+spec_also   = ["§7 ('CONFORMANCE — Same outcome required. Implementations MAY use different logic but MUST produce the same ALLOW/DENY (or equivalent) result for all inputs'; §5's algorithms are CONFORMANCE)", "§5.5 verify_capability_chain (identities resolved by lookup: `grantee_identity = included[current.data.grantee]`; linkage `hash_equals(parent.data.grantee, current.data.granter)`)", "§5.5 delegation chain verification (ECP floor row 'Delegation chain verification')", "§4.5a item 1a ('every consumer *derives* its hash rather than fetching it') — IN TENSION, F39", "§3.6 token.grantee ('MUST resolve to a present system/peer entity in local store or wire envelope's included map; per-link in chain')", "§2.10 ('Entities MAY contain fields in `data` not defined in the type')", "§5.3 hash comparison by byte equality", "ENTITY-NATIVE-TYPE-SYSTEM §10.1 (declares peer_id a field) — F29"]
+snapshot    = "core-0.8.2.21"
+level       = "MUST"
+level_basis = "entailed"
+profile     = ["core"]
+surface     = "wire"
+status      = "draft"
+routed      = "docs/status/FINDINGS-FROM-AUTHORING.md F29, F37, F39"
+
+reading = """
+WHO THE KEYWORD BINDS. "Chains MAY interleave" permits a chain AUTHOR to mix shapes. "each link verifies if its
+referenced content_hash is locatable" is indicative and has no keyword. So nothing says, in so many words, "a
+verifier MUST accept a v7.64-shape party".
+
+THE ENTAILMENT. §7: algorithms in §5 are "CONFORMANCE — Same outcome required. Implementations MAY use different
+logic but MUST produce the same ALLOW/DENY (or equivalent) result for all inputs." §5.5's `verify_capability_chain`
+resolves every party BY LOOKUP of the hash the link references — `grantee_identity = included[current.data.grantee]`,
+the signer candidate `included[candidate]`, the signature verified under that entity's key — and links by
+`hash_equals(parent.data.grantee, current.data.granter)`. Nothing in it reads `data` beyond the key, and a
+v7.64-shape entity carries the key. So on the probe and on its twin the algorithm takes the same branches and
+returns the same result, and §7's MUST makes that result binding on every implementation. §3.5's composition
+paragraph says the same in prose: "Pre-v7.65 cap chains remain verifiable byte-for-byte against the entities they
+reference." ENTAILED, from a keyword (§7) applied to an algorithm (§5.5).
+
+⚠ CORRECTED AFTER REVIEW. The first draft argued from §4.5a item 4 and quoted it as "MUST NOT re-derive a received
+identity's content_hash" — the sentence continues "under a different (e.g. its own preferred) format", so item 4 is
+about FORMAT, not basis, and does not support this file. The §7 + §5.5 argument above replaces it.
+
+THE COUNTER-READING, AND WHY IT IS ROUTED RATHER THAN SHIPPED DISPUTED (F39). §4.5a item 1a justifies pinning the
+identity entity to 0x00 by saying it is "wholly recoverable from the public peer-id, so every consumer *derives* its
+hash rather than fetching it", and item 4 closes: "An implementation that derives an identity hash ... is using
+**one** function, and that is the conformant shape". A verifier built on that sentence derives H65(B) from B's key
+and never matches the link's H64(B) — refusing every pre-v7.65 chain. We judge this is not a real degree of freedom:
+the sentence carries no keyword, it is the rationale for a format pin, and it contradicts both the CONFORMANCE
+algorithm and §3.5's explicit composition statement. But a reader could build a peer on it, so it is routed (F39)
+and the non-conformant witness below names exactly that peer.
+
+THE ASSERTION IS A DIFFERENCE, NOT A VERDICT. This batch has not read §5.5 whole (it is `capability`'s) and
+does not claim to know whether the chain below is ALLOWED — root trust, attenuation, caveats and depth are
+§5.5's. What it asserts is that swapping one party's entity shape — same key, same signatures, different party
+hash consistently everywhere that party is named — does not change the outcome class. If the v7.65 twin is
+refused for a §5.5 reason, the pair is void (recorded), not passed.
+
+THE CHAIN. root (granter: the peer; grantee: A, the authenticated caller — the authenticate response's grant,
+§6.9a.2) → link 1, signed by A (granter A; grantee B) → link 2, signed by B (granter B; grantee A). Presented
+by A as author. B's party hash is H64(B) in the probe and H65(B) in the twin; B's entity is in `included`.
+Every other byte is identical except the hashes and signatures that necessarily change with it.
+
+⚠ F29 IS WHY THIS IS NOT A FORMALITY. A peer following ENTITY-NATIVE-TYPE-SYSTEM §10.1, where `peer_id` is a
+declared field, may validate the v7.65 twin as MISSING a field; a peer following core may refuse the v7.64
+shape as carrying one it was told not to author. Either breaks the pair in a different direction.
+"""
+
+[requirement.preconditions]
+grants       = ["an authenticate grant covering one probe request and delegable at depth ≥ 2 (no no_delegation caveat, max_delegation_depth ≥ 2 or absent)"]
+identities   = ["A (caller)", "B (second suite key, never connected)"]
+handlers     = []
+posture_axes = ["seed_policy", "declared_limits"]
+note         = "if the authenticate grant is not delegable, both arms are refused for the same §5.7 reason and the pair is void — reported UNMEASURABLE under that posture."
+
+[[requirement.arm]]
+name  = "shape-invariant"
+kind  = "conformant"
+given = "the chain in `reading`, once with H65(B) (twin) and once with H64(B) (probe), each on its own request"
+why   = "the entailed MUST: the shape of a party's entity does not change a chain verdict."
+  [[requirement.arm.step]]
+  op      = "connect"
+  capture = "as_A"
+  [[requirement.arm.step]]
+  op      = "mint_chain"
+  capture = "chain_v765"
+  links   = "root → A→B (signed A) → B→A (signed B), B referenced by H65(B)"
+  [[requirement.arm.step]]
+  op      = "mint_chain"
+  capture = "chain_v764"
+  links   = "the same, B referenced by H64(B); included carries B's v7.64-shape entity"
+  [[requirement.arm.step]]
+  op         = "send_execute"
+  capture    = "twin"
+  capability = "$chain_v765"
+  [[requirement.arm.step]]
+  op         = "send_execute"
+  capture    = "probe"
+  capability = "$chain_v764"
+  [[requirement.arm.assert]]
+  kind    = "same_outcome_class"
+  capture = "twin,probe"
+  when    = "twin.status == 200"
+  why     = "void, not passed, when the twin itself is refused."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the probe chain rebuilt around a FRESH key B′ (never used in this run or before), with B′'s v7.64-shape entity OMITTED from included"
+why   = """MANDATORY ANTI-VACUITY. The link is unresolvable, so the chain MUST be refused. Proves the verifier actually \
+RESOLVES the legacy party rather than skipping per-link resolution — a verifier that never looks at B passes the \
+main arm for the wrong reason. ⚠ Two corrections from review: (1) a fresh key, because §3.6 lets a peer resolve from \
+its "local content store", and the probe just sent B's entity; (2) refusal is asserted, not a code — the missing \
+entity is both link 1's grantee (§5.5: 401 `unresolvable_grantee`) and link 2's granter, whose signature lookup \
+fails first in §5.5's own loop order and has no pinned code."""
+  [[requirement.arm.step]]
+  op         = "send_execute"
+  capture    = "probe_unresolvable"
+  capability = "$chain_v764_fresh_B_without_entity"
+  [[requirement.arm.refuse]]
+  outcome = "coded_response"
+  status  = 200
+  capture = "probe_unresolvable"
+  why     = "an unresolvable party admitted."
+  [[requirement.arm.witness]]
+  field = "status_and_code"
+  why   = "401 unresolvable_grantee vs a 403 from the granter-side lookup — which layer a peer hits first."
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a verifier that derives each party's hash from its public key under the v7.65 basis — the shape §4.5a item 1a's \"every consumer derives\" sentence describes (F39)"
+expect = "the twin is 200 and the probe is 403 (grantee/granter linkage fails on the derived hash)"
+why    = "its outcome differs from §5.5's algorithm on this input, which §7 forbids; every pre-v7.65 chain in the network stops verifying on this peer."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = "peer_canonicalization/composition_1_interleaved_chain"
+oracle_note       = "provenance only. The check cites 'V7 §1.3 v7.65 §2.4'; V7 §1.3 is ECF and §2.4 is Primitive Types in the snapshot — the proposal's §2.4 is meant (F33)."

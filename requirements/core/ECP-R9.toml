@@ -92,14 +92,18 @@ why   = "§4.2's state qualifier."
   outcome = "close"
   why     = "a close is a refusal too, and §4.2's 'MUST be served' excludes it under either reading."
   [[requirement.arm.accept]]
-  outcome = "coded_response"
-  status  = 200
-  why     = "reading B's answer; conformant under A as well."
-  [[requirement.arm.accept]]
-  outcome = "coded_response"
-  status  = 400
-  code    = "invalid_request"
-  why     = "reading A's answer: §4.7's unknown-connect-operation row. PENDING F10 — if arch rules B, this accept moves to refuse."
+  outcome       = "coded_response"
+  status_not_in = [401, 403]
+  why           = """§4.2's obligation is that the EXECUTE is not refused FOR THE ABSENCE of author, capability or \
+signature. Any coded answer that is not auth-class is outside that refusal: 200 (reading B), 400 invalid_request \
+(reading A, §4.7's unknown-connect-operation row), and a peer that implements `ping` and refuses OUR params \
+shape. Which of those a peer gives is the status_and_code witness below, never scored here.
+AMENDED 2026-09-13, AFTER THE FIRST EXECUTION (F40). This arm listed exactly {200, 400 invalid_request}. Run \
+against entity-core-go's entity-peer it FAILED on `400 invalid_params` — message "ping params must be \
+system/network/ping, got primitive/any": the peer implements ping with EXTENSION-NETWORK's params type, which is \
+not in this snapshot (F10), and refused our §3.2 empty-params shape. That is a served, non-auth answer. The \
+enumerated accept set was narrower than this file's own title and reading; the defect was the requirement's, \
+and only running it showed it."""
   [[requirement.arm.witness]]
   field = "status_and_code"
   why   = "which reading the cohort implements. Recorded, never scored beyond the arms above."

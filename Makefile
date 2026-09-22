@@ -11,7 +11,8 @@
 # (`entity-system-generator` ADR-0001): host python is stdlib-only; anything needing a third-party
 # library runs in a container. `lint` stays containerised so the interpreter version is pinned.
 
-.PHONY: help build test lint lint-native lint-spec-data lint-requirements check clean \
+.PHONY: help build test lint lint-native lint-ignored lint-spec-data lint-requirements check clean \
+        install-probe keystone-s1 keystone-oracle generator-s1 generator-oracle core-go-s1 core-go-oracle differential \
         substrate-go peer-up peer-down oracle-run register
 .DEFAULT_GOAL := help
 
@@ -44,7 +45,14 @@ help:
 	@echo "  lint        spec-data digests + ECP id index + requirement schema, in $(PYTHON_IMAGE)"
 	@echo "  lint-native the same on host python3 (in the host contract; unpinned interpreter version)"
 	@echo "  check       build + test + lint"
-	@echo "  build/test  no suites under suites/ yet"
+	@echo "  build       suite 1 (suites/s1-py) -> $(S1) + $(S1).d (pinned interpreter, requirement digests)"
+	@echo "  test        suite 1's codec vs the ECF corpus, Ed25519 vs RFC 8032, in the pinned interpreter"
+	@echo
+	@echo "  keystone-s1     suite 1 on KEYSTONE_PEERS via keystone census --probe  (default: $(KEYSTONE_PEERS))"
+	@echo "  keystone-oracle validate-peer on the same peers via the same driver"
+	@echo "  generator-s1 / generator-oracle   the same pair on GENERATOR_TARGETS via host-launch"
+	@echo "  core-go-s1 / core-go-oracle   the same pair against core-go entity-peer (after peer-up)"
+	@echo "  differential    join all collected runs by requirement id -> $(OUT)/DIFFERENTIAL.md"
 	@echo
 	@echo "  substrate-go   build the reference image via $(SUBSTRATE_GO)'s own 'make build'"
 	@echo "  peer-up        run $(GO_IMAGE) entity-peer as $(PEER_NAME) on network $(NET)"
@@ -56,13 +64,158 @@ help:
 	@echo
 	@echo "See AGENTS.md for what this repo is for and the three prohibitions."
 
-build:
-	@echo "build: no suites under suites/ yet — AGENTS.md, bring-up step 6."
+# ── suite 1 (suites/s1-py) ────────────────────────────────────────────────────────────────────
+# Python, stdlib only, NOT Go (operator, 2026-09-13): the reference oracle and the reference peer are both Go, so
+# an instrument in Go would share the one language whose idioms the ecosystem's measurements already carry.
+#
+# The standard slots exec the instrument inside each peer's own toolchain image, where no interpreter is common.
+# So the bundle carries one: a PINNED python-build-standalone CPython (musl) and the musl loader from a PINNED
+# alpine, started by suites/s1-py/launcher.sh. Nothing is installed on the host; both pins are checked by sha256.
+# The requirement files the suite implements are digested into the bundle's BUILD.json, so every verdict names
+# the exact requirement text it measured.
+PYRT_URL     ?= https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-x86_64-unknown-linux-musl-install_only_stripped.tar.gz
+PYRT_SHA256  ?= 1f37044c8cdbd74d5ee112a753c65ef209fedd169c98f3e4e748a93e27eb27a4
+MUSL_IMAGE   ?= docker.io/library/alpine@sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e
+S1_REQS      := $(shell grep -v "^#" suites/s1-py/IMPLEMENTS)
+S1           := $(OUT)/bin/s1-py
+S1_SRC       := $(shell find suites/s1-py/run.py suites/s1-py/s1py -name '*.py') suites/s1-py/launcher.sh suites/s1-py/IMPLEMENTS
+CACHE        := $(OUT)/cache
+# The pinned interpreter, run on the repo read-only: `make test` executes the same bits the slots will.
+PYRT = podman run --rm --network=none $(PODMAN_CAPS) -v $(CURDIR):/repo:ro,Z -v $(abspath $(S1)).d:/b:ro,Z -w /repo/suites/s1-py \
+	-e PYTHONHOME=/b/pyrt/python -e PYTHONDONTWRITEBYTECODE=1 $(MUSL_IMAGE) /b/pyrt/ld-musl-x86_64.so.1 --library-path /b/pyrt/python/lib /b/pyrt/python/bin/python3.12 -s -B
 
-test:
-	@echo "test: no suites under suites/ yet."
+$(CACHE)/pyrt.tgz:
+	@mkdir -p $(CACHE)
+	podman run --rm $(PODMAN_CAPS) -v $(abspath $(CACHE)):/cache:Z $(MUSL_IMAGE) \
+		sh -c 'wget -q -O /cache/pyrt.tgz.part "$(PYRT_URL)" && cp -L /lib/ld-musl-x86_64.so.1 /cache/ld-musl-x86_64.so.1'
+	@echo "$(PYRT_SHA256)  $(CACHE)/pyrt.tgz.part" | sha256sum -c --quiet || { echo "build: interpreter tarball does NOT match PYRT_SHA256 — refusing" >&2; rm -f $(CACHE)/pyrt.tgz.part; exit 2; }
+	mv $(CACHE)/pyrt.tgz.part $@
 
-lint: lint-spec-data lint-requirements
+build: $(S1)
+
+$(S1): $(S1_SRC) $(CACHE)/pyrt.tgz $(addprefix requirements/core/,$(addsuffix .toml,$(S1_REQS)))
+	@rm -rf $(S1).d && mkdir -p $(S1).d/pyrt $(S1).d/suite
+	tar -xzf $(CACHE)/pyrt.tgz -C $(S1).d/pyrt
+	install -m 0755 $(CACHE)/ld-musl-x86_64.so.1 $(S1).d/pyrt/ld-musl-x86_64.so.1
+	cp -r suites/s1-py/run.py suites/s1-py/s1py $(S1).d/suite/
+	@python3 -c "import hashlib,json,subprocess,sys; \
+		v=subprocess.run(['git','describe','--always','--dirty'],capture_output=True,text=True).stdout.strip() or 'dev'; \
+		d={r:hashlib.sha256(open(f'requirements/core/{r}.toml','rb').read()).hexdigest() for r in sys.argv[1:]}; \
+		rt={'pyrt_sha256':'$(PYRT_SHA256)','musl_loader_sha256':hashlib.sha256(open('$(CACHE)/ld-musl-x86_64.so.1','rb').read()).hexdigest(),'musl_image':'$(MUSL_IMAGE)'}; \
+		json.dump({'suite_version':v,'requirement_digests':d,'runtime':rt},open('$(S1).d/suite/BUILD.json','w'),indent=2)" $(S1_REQS)
+	install -m 0755 suites/s1-py/launcher.sh $@
+	@$@ -list-requirements >/dev/null && echo "build: $@ runs"
+
+# The codec against the snapshot's ECF corpus and Ed25519 against RFC 8032, before it touches any peer.
+test: $(S1)
+	$(PYRT) -m unittest discover -s tests -v
+
+# ── run it ────────────────────────────────────────────────────────────────────────────────────
+# Keystone first: its census driver launches each peer in that peer's own container, exactly as for
+# the reference oracle, and swaps in our instrument via its documented probe slot. The launcher and its
+# bundle are installed into keystone's GITIGNORED output/s4-oracles/ — their extension point, no tracked
+# file touched.
+KEYSTONE       ?= ../entity-core-keystone
+KEYSTONE_PEERS ?= python rust go typescript
+PROBE_NAME     := cnf-s1-py
+
+install-probe: $(S1)
+	@rm -rf $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME).d
+	cp -a $(S1).d $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME).d
+	install -m 0755 $(S1) $(KEYSTONE)/output/s4-oracles/$(PROBE_NAME)
+
+keystone-s1: install-probe
+	cd $(KEYSTONE) && tools/run-cohort-census.sh --probe $(PROBE_NAME) $(KEYSTONE_PEERS)
+	python3 tools/collect-run.py keystone --instrument s1-py --src $(KEYSTONE)/output/scratch/$(PROBE_NAME) \
+		--keystone $(KEYSTONE) --out $(OUT)/runs $(KEYSTONE_PEERS)
+
+# The reference oracle on the SAME peers, via the same driver, for the differential.
+# ⚠ A NON-probe census ends by STAMPING keystone's TRACKED tools/peer-tiers.tsv with the oracle pin.
+# Measured 2026-09-13: a no-op only because the stamped ref already matched. Our diagnostic run must
+# never move their roster, so: refuse to start if that file is already modified (we could not tell our
+# change from theirs), and restore it afterwards if — and only if — this run is what changed it.
+keystone-oracle:
+	@git -C $(KEYSTONE) diff --quiet -- tools/peer-tiers.tsv || { echo "keystone-oracle: REFUSING — $(KEYSTONE)/tools/peer-tiers.tsv has uncommitted changes; the census would stamp over them" >&2; exit 2; }
+	-cd $(KEYSTONE) && tools/run-cohort-census.sh $(KEYSTONE_PEERS)
+	@git -C $(KEYSTONE) diff --quiet -- tools/peer-tiers.tsv || { git -C $(KEYSTONE) checkout -- tools/peer-tiers.tsv; echo "keystone-oracle: the census stamped keystone's roster; restored (it was clean before this run)"; }
+	python3 tools/collect-run.py keystone --instrument validate-peer --src $(KEYSTONE)/output/scratch/census \
+		--keystone $(KEYSTONE) --out $(OUT)/runs $(KEYSTONE_PEERS)
+
+# The generator's composed peers, through ITS one-copy launcher (tools/host-launch). Suite 1 goes through the
+# CLIENT= slot, not ORACLE=: same boot protocol, but ORACLE= also starts core-go's entity-peer as a reference
+# (for the oracle's `origination` checks), and a non-Go suite with no cross-peer requirement has no business
+# needing a Go binary to exist. Mounted the generator's way: the parent tree READ-ONLY with `label=disable`,
+# the only writable mount our own output/.
+GENERATOR          ?= ../entity-system-generator
+GENERATOR_TARGETS  ?= python rust typescript
+GENERATOR_COMP     ?= content
+GEN_RUN = podman run --rm --network=none --security-opt label=disable --timeout 900 \
+	-v $(abspath $(KEYSTONE)/..):/church:ro -w /church/$(notdir $(abspath $(GENERATOR))) \
+	-v $(abspath $(OUT))/runs/generator:/out
+gen_image = $$(python3 -c "import tomllib;print(tomllib.load(open('$(GENERATOR)/languages/'+'$$t'+'/profile.toml','rb'))['toolchain']['image'])")
+
+generator-s1: install-probe
+	@mkdir -p $(OUT)/runs/generator/s1-py
+	@for t in $(GENERATOR_TARGETS); do \
+		echo "== generator $$t/$(GENERATOR_COMP): s1-py (CLIENT slot)"; \
+		$(GEN_RUN) -e CLIENT=/church/$(notdir $(abspath $(KEYSTONE)))/output/s4-oracles/$(PROBE_NAME) $(gen_image) \
+			./tools/host-launch $$t $(GENERATOR_COMP) -peer $$t-$(GENERATOR_COMP) -profile core -json-out /out/s1-py/$$t-$(GENERATOR_COMP).json \
+			| grep -E "^(PASS|FAIL|SKIP|INCON|ERROR|s1-py|    )" ; \
+	done
+	python3 tools/collect-run.py generator --instrument s1-py --src $(OUT)/runs/generator/s1-py --generator $(GENERATOR) \
+		--comp $(GENERATOR_COMP) --out $(OUT)/runs $(addsuffix -$(GENERATOR_COMP),$(GENERATOR_TARGETS))
+
+generator-oracle:
+	@mkdir -p $(OUT)/runs/generator/validate-peer
+	@for t in $(GENERATOR_TARGETS); do \
+		echo "== generator $$t/$(GENERATOR_COMP): validate-peer -profile core (every category: a requirement may name a check outside connectivity)"; \
+		$(GEN_RUN) $(gen_image) \
+			./tools/host-launch $$t $(GENERATOR_COMP) -profile core -json-out /out/validate-peer/$$t-$(GENERATOR_COMP).json | tail -2 ; \
+	done
+	python3 tools/collect-run.py generator --instrument validate-peer --src $(OUT)/runs/generator/validate-peer --generator $(GENERATOR) \
+		--comp $(GENERATOR_COMP) --out $(OUT)/runs $(addsuffix -$(GENERATOR_COMP),$(GENERATOR_TARGETS))
+
+# core-go's reference peer on the bootstrap posture (peer-up), our suite in its own container on the network.
+core-go-s1: $(S1)
+	@test -f $(PEER_POSTURE) || { echo "core-go-s1: COULD NOT LOOK — no $(PEER_POSTURE); run make peer-up (it records the posture)" >&2; exit 2; }
+	@mkdir -p $(OUT)/runs/core-go/s1-py
+	-podman run --rm --network $(NET) $(PODMAN_CAPS) -v $(abspath $(OUT)):/out:Z $(MUSL_IMAGE) \
+		/out/bin/s1-py -addr $(PEER_NAME):$(PEER_PORT) -peer core-go -posture-grants "$$(sed -n 's/^grants=//p' $(PEER_POSTURE))" \
+		-json-out /out/runs/core-go/s1-py/entity-peer.json
+	python3 tools/collect-run.py core-go --instrument s1-py --src $(OUT)/runs/core-go/s1-py --posture-file $(PEER_POSTURE) --out $(OUT)/runs entity-peer
+
+core-go-oracle:
+	@test -f $(PEER_POSTURE) || { echo "core-go-oracle: COULD NOT LOOK — no $(PEER_POSTURE); run make peer-up (it records the posture)" >&2; exit 2; }
+	-$(MAKE) --no-print-directory oracle-run OUT=$(OUT)/runs/core-go/validate-peer
+	mv $(OUT)/runs/core-go/validate-peer/validate-peer.report.json $(OUT)/runs/core-go/validate-peer/entity-peer.json
+	python3 tools/collect-run.py core-go --instrument validate-peer --src $(OUT)/runs/core-go/validate-peer --posture-file $(PEER_POSTURE) --out $(OUT)/runs entity-peer
+
+# Join every collected run: requirement id ↔ the oracle check each requirement file names.
+differential:
+	python3 tools/differential.py --runs $(OUT)/runs --requirements requirements/core --out $(OUT)/DIFFERENTIAL.md
+	@cat $(OUT)/DIFFERENTIAL.md
+
+lint: lint-ignored lint-suite-independence lint-spec-data lint-requirements
+
+# AP-10 (candidate): no suite is written in the reference oracle's language, and no suite reaches into another suite
+# or into tools/. Shared code is shared bugs; a shared language with the oracle is shared idioms and shared libraries.
+ORACLE_LANG_GLOBS := *.go go.mod go.sum
+lint-suite-independence:
+	@bad=$$(for g in $(ORACLE_LANG_GLOBS); do find suites -name "$$g"; done); \
+	 if [ -n "$$bad" ]; then echo "lint-suite-independence: suite source in the reference oracle's language (Go) — AP-10:" >&2; echo "$$bad" >&2; exit 1; fi
+	@for d in suites/*/; do n=$$(basename $$d); \
+	   hits=$$(grep -rIo -E "suites/[a-z0-9-]+/|\.\./\.\./tools/|(from|import) tools" $$d --exclude=README.md 2>/dev/null | grep -v ":suites/$$n/$$"); \
+	   if [ -n "$$hits" ]; then echo "lint-suite-independence: $$n references another suite or tools/:" >&2; echo "$$hits" >&2; exit 1; fi; done
+	@echo "lint-suite-independence: $$(ls -d suites/*/ | wc -l) suite(s); none in the oracle's language, none reaching into another suite or tools/"
+
+# The gates below read the WORKING TREE. A file they validate that .gitignore excludes passes locally and is
+# absent from every clone — a green run over something nobody else has. Host git: it is the repository, not a
+# language toolchain. Without git this is could-not-look, reported, never a pass.
+lint-ignored:
+	@command -v git >/dev/null || { echo "lint-ignored: COULD NOT LOOK — no git on host" >&2; exit 2; }
+	@ign=$$(git ls-files --others --ignored --exclude-standard -- requirements spec-data tools docs suites); \
+	 if [ -n "$$ign" ]; then echo "lint-ignored: gated files excluded by .gitignore:" >&2; echo "$$ign" >&2; exit 1; fi; \
+	 echo "lint-ignored: 0 gated files excluded by .gitignore"
 
 # The snapshot contract, enforced rather than promised. Each gate carries its own executed control.
 lint-spec-data:
@@ -89,6 +242,11 @@ clean:
 substrate-go:
 	$(MAKE) -C $(SUBSTRATE_GO) build
 
+# The posture is RECORDED BY THE TARGET THAT LAUNCHES THE PEER, and every downstream run reads that record. Until
+# 2026-09-13 core-go-s1 passed `-posture-grants bootstrap-default` and collect-run typed the same string, whatever
+# SEED_POLICY/PEER_ARGS peer-up had actually been given: a hand-typed posture, in the seat founded on refusing one.
+PEER_POSTURE := $(OUT)/peer-up.posture
+
 peer-up:
 	@podman network exists $(NET) || podman network create $(NET) >/dev/null
 	@podman rm -f $(PEER_NAME) >/dev/null 2>&1 || true
@@ -96,8 +254,15 @@ peer-up:
 		$(if $(SEED_POLICY),-v $(abspath $(SEED_POLICY)):/posture/seed-policy.json:ro$(comma)Z) \
 		$(GO_IMAGE) entity-peer -addr 0.0.0.0:$(PEER_PORT) \
 		$(if $(SEED_POLICY),--seed-policy-file /posture/seed-policy.json) $(PEER_ARGS)
+	@mkdir -p $(OUT)
+	@printf 'image=%s\nimage_id=%s\nseed_policy=%s\nseed_policy_sha256=%s\npeer_args=%s\ngrants=%s\nstarted_at=%s\n' \
+		"$(GO_IMAGE)" "$$(podman image inspect --format '{{.Id}}' $(GO_IMAGE))" \
+		"$(if $(SEED_POLICY),$(SEED_POLICY),none)" "$(if $(SEED_POLICY),$$(sha256sum $(SEED_POLICY) | cut -d' ' -f1),-)" "$(PEER_ARGS)" \
+		"$(if $(SEED_POLICY),seed-policy:$$(sha256sum $(SEED_POLICY) | cut -c1-16),$(if $(findstring open-access,$(PEER_ARGS)),open-access,bootstrap-default))$(if $(PEER_ARGS), args=$(PEER_ARGS))" \
+		"$$(date -u +%s)" > $(PEER_POSTURE)
 	@for i in $$(seq 1 40); do podman logs $(PEER_NAME) 2>&1 | grep -q "Ready to accept" && break; sleep 0.25; done
 	@podman logs $(PEER_NAME) 2>&1 | grep -E "Peer ID|Listening|Ready"
+	@echo "peer-up: posture recorded in $(PEER_POSTURE): $$(grep ^grants= $(PEER_POSTURE))"
 
 oracle-run:
 	@mkdir -p $(OUT)

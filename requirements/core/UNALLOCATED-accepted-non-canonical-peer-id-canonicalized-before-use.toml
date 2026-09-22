@@ -1,0 +1,175 @@
+## UNALLOCATED — a non-canonical peer_id the peer ACCEPTS is canonicalized before any tree lookup, cap-state operation or stored-policy lookup.
+##
+## Batch 4. §1.5's carve-out: decoding is optional, canonicalizing what was decoded is not. No §9 row (F37).
+## What `peer_canon_2_canonicalize_on_storage` measures, at the surfaces where "storage form is canonical" is
+## observable over the wire rather than asserted about internals.
+
+[requirement]
+id_status = "unallocated"
+under     = ""
+title     = "When the peer accepts a peer_id presented in non-canonical form, it resolves it as the canonical form: the same tree, the same policy entry — never a second namespace keyed by the presented string"
+spec      = "ENTITY-CORE-PROTOCOL §1.5 ('Implementations MUST canonicalize on acceptance: wire form is presentation; storage form is canonical. Before any tree-lookup, cap-state operation, or stored-policy entry, the impl MUST canonicalize')"
+spec_also = ["§1.4 ('non-canonical forms in stored tree paths are non-conformant')", "§1.4 dispatch routing / §6.5 step 3 (a foreign namespace is refused 400 invalid_request) — ECP-R43", "§6.2 policy resolution ('an exact match on the caller's Base58 peer-id') and §6.9a.1 (hex → Base58 → default)", "§6.2 writing policy entries ('Direct `system/tree:put` against `system/capability/policy/*` also works ... raw `tree:put` skips those' normalization invariants)", "§3.6 policy-entry.peer_pattern comment (lists only 66-hex and `default`) — IN TENSION with §6.2's Base58 form, F35", "§7.4 (non-canonical wire forms received on decode MUST canonicalize before storage)"]
+snapshot  = "core-0.8.2.21"
+level     = "MUST"
+profile   = ["core"]
+surface   = "wire"
+status    = "draft"
+routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F31, F35, F37"
+
+reading = """
+PARSE THE CARVE-OUT FIRST (AP-4). Three modal clauses, three different subjects:
+  (1) "Implementations MAY decode `peer_id`s presented in non-canonical form" — decoding is OPTIONAL. A peer
+      that does not decode treats the string as a peer_id it does not have, which is conformant.
+  (2) "Implementations MUST canonicalize on acceptance ... Before any tree-lookup, cap-state operation, or
+      stored-policy entry, the impl MUST canonicalize" — conditional on acceptance, and UNCONDITIONAL within
+      it. This file.
+  (3) "Impls MAY refuse non-canonical form at construction or handshake" — scoped to two places. Its effect
+      at the handshake is disputed (F31, its own file).
+So the only non-conformant outcome is the third one: DECODED (acted on as a real peer) and NOT canonicalized
+— a put that lands at a path keyed by the presented string, a lookup that misses the canonical entry.
+
+THE DISCRIMINATING OUTCOMES, per surface:
+  - URI namespace segment. `/{S(self)}/…` where S(self) is the SHA-256 form of the peer's OWN key (decoded
+    from its canonical hello.peer_id). Not decoding → "an inbound EXECUTE targeting a non-self peer_id" →
+    400 `invalid_request` (ECP-R43). Decoding → it IS self, canonicalized → the request runs against
+    `/{C(self)}/…`. Both conformant. Non-conformant: 200 on a put via S(self) and the entity NOT readable via
+    C(self) — a second namespace.
+  - Stored-policy lookup at authenticate. A policy entry written ONLY at the Base58 key `C(K)` (the caller's
+    canonical form), with a distinctive grant; caller then authenticates presenting S(K). ⚠ Written with a RAW
+    `system/tree:put`, not `configure`: §6.2 names `configure` as the path for "normalization invariants", and an
+    Ed25519 `C(K)` carries the key, so a `configure` that eagerly rewrites the key to hex is plausible — after
+    which S(K) would hit the form-invariant hex entry and pass without canonicalizing anything (found by review).
+    §6.2: "raw `tree:put` skips those". A read-back before K connects confirms the entry is still at `C(K)`. If the handshake is
+    accepted, the lookup must canonicalize → matches `C(K)` → the distinctive grant. Non-conformant: the
+    lookup keys on S(K), misses, falls through to `default`. Reachable only under reading A of F31, so this
+    member is void when the handshake is refused.
+
+WHY THE PATH MEMBER NEEDS NO DISPUTE. §1.5's "MAY refuse ... at construction or handshake" does not name
+dispatch. At dispatch the choice is (1)'s decode-or-not, and both branches are named outcomes above.
+
+WHAT IS NOT OBSERVABLE, SAID SO. "Storage form is canonical" for state the peer never exposes (connection
+tables, caches, `system/peer/status/{peer_id}` when unpopulated — §3.13 is SHOULD) has no wire observation.
+Those are not members; the two surfaces above are where the MUST has a consequence a caller sees.
+"""
+
+[requirement.preconditions]
+grants       = ["system/tree: put, get on a path under the suite's own subtree", "system/tree: put, get on system/capability/policy/* (policy member only)"]
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["seed_policy"]
+note         = "the path member needs a put+get grant on a suite-owned path; the control proves it is present, and without it the member is UNMEASURABLE under that posture. The policy member needs put+get on the policy subtree, and reading A of UNALLOCATED-non-canonical-handshake-peer-id (void if the handshake is refused). A peer on §3.6's comment that refuses a Base58 peer_pattern voids the policy member (F35), recorded."
+
+[requirement.domain]
+axis    = "non_canonical_reference_surface"
+members = ["URI namespace segment: put via /{S(self)}/cnf/canon-probe, then get via /{C(self)}/cnf/canon-probe", "stored-policy lookup at authenticate: entry at system/capability/policy/{C(K)} only; caller presents S(K)"]
+
+[[requirement.arm]]
+name  = "canonicalized"
+kind  = "conformant"
+given = "an authenticated connection with the grants above; S(x) = Base58(0x01 0x01 || SHA-256(pubkey)), C(x) = Base58(0x01 0x00 || pubkey)"
+why   = "§1.5's MUST, at the two surfaces where skipping it is observable."
+  [[requirement.arm.step]]
+  op        = "connect"
+  capture   = "operator"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "put_via_sha256_form"
+  uri       = "/{S(self)}/system/tree"
+  operation = "put"
+  note      = "entity {type: \"test/v1\", data: {\"probe\": <nonce>}} at /{S(self)}/cnf/canon-probe"
+  [[requirement.arm.accept]]
+  outcome = "coded_response"
+  status  = 200
+  capture = "put_via_sha256_form"
+  why     = "decoded and canonicalized; the get below must then return it."
+  [[requirement.arm.accept]]
+  outcome = "coded_response"
+  status  = 400
+  code    = "invalid_request"
+  capture = "put_via_sha256_form"
+  why     = "not decoded — a foreign namespace (ECP-R43). Conformant; the member records `not-decoded`."
+  [[requirement.arm.refuse]]
+  outcome = "any other status or code"
+  capture = "put_via_sha256_form"
+  why     = "the control proved the same put succeeds via C(self), so anything else (a 403, a 404, a 500) is a peer that decoded the target and then did not treat it as the canonical one — for example, authorized it against the presented string. ⚠ Added after review: the first draft scored nothing outside {200, 400}."
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "get_via_canonical"
+  uri       = "/{C(self)}/system/tree"
+  operation = "get"
+  note      = "path /{C(self)}/cnf/canon-probe"
+  [[requirement.arm.assert]]
+  kind    = "returned_entity_bytes_equal_put"
+  capture = "put_via_sha256_form,get_via_canonical"
+  when    = "put_via_sha256_form.status == 200"
+  why     = "decoded ⇒ canonicalized ⇒ one namespace."
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "policy_write_K"
+  uri       = "system/tree"
+  operation = "put"
+  note      = "system/capability/policy/{C(K)} := policy-entry {peer_pattern: C(K), grants: [a grant-entry with a distinctive resources include the default entry does not carry]} — raw put, see reading"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "policy_still_base58_K"
+  uri       = "system/tree"
+  operation = "get"
+  note      = "system/capability/policy/{C(K)} before K connects: must be 200, or the policy member is void (recorded)"
+  [[requirement.arm.step]]
+  op           = "connect"
+  capture      = "as_K_sha256_form"
+  identity     = "K"
+  peer_id_form = "sha256-form"
+  [[requirement.arm.assert]]
+  kind    = "grant_includes_resource"
+  capture = "as_K_sha256_form"
+  equals  = "the distinctive include"
+  when    = "as_K_sha256_form.handshake == completed and policy_still_base58_K.status == 200"
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the same two surfaces with the CANONICAL form presented: a put via /{C(self)}/… to a second path, and a SECOND key K2, with its own raw-put entry at policy/{C(K2)}, authenticating with C(K2). ⚠ A distinct key is load-bearing: §6.9a.1's first-contact SHOULD may rewrite a matched Base58 entry to hex, after which K presenting S(K) would hit the hex entry — which is form-invariant — and pass the main arm without canonicalizing anything. Run before or after the main arm; K2 never touches K's entry"
+why   = "MANDATORY ANTI-VACUITY. Proves the put+get round-trips and a Base58-keyed entry resolves at all on this peer under this posture, so a failure of the main arm is attributable to the presented FORM — not to missing grants, an unimplemented Base58 policy form, or a tree that does not return what was put."
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "put_via_canonical"
+  uri       = "/{C(self)}/system/tree"
+  operation = "put"
+  note      = "entity {type: \"test/v1\", data: {\"probe\": <nonce2>}} at /{C(self)}/cnf/canon-control"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "get_control_via_canonical"
+  uri       = "/{C(self)}/system/tree"
+  operation = "get"
+  note      = "path /{C(self)}/cnf/canon-control"
+  [[requirement.arm.assert]]
+  kind    = "returned_entity_bytes_equal_put"
+  capture = "put_via_canonical,get_control_via_canonical"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "policy_write_K2"
+  uri       = "system/tree"
+  operation = "put"
+  note      = "system/capability/policy/{C(K2)} := the same distinctive policy-entry, peer_pattern C(K2)"
+  [[requirement.arm.step]]
+  op           = "connect"
+  capture      = "as_K2_canonical"
+  identity     = "K2"
+  peer_id_form = "canonical"
+  [[requirement.arm.assert]]
+  kind    = "grant_includes_resource"
+  capture = "as_K2_canonical"
+  equals  = "the distinctive include"
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer that decodes a non-canonical peer_id and keys storage by the presented string"
+expect = "the put via S(self) answers 200 and the get via C(self) is 404; or K presenting S(K) receives the `default` grant while K presenting C(K) receives the distinctive one"
+why    = "one identity, two namespaces and two authorities — §1.5's operator-coherence failure, which is the entire reason the canonical form is mandated."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = "peer_canonicalization/peer_canon_2_canonicalize_on_storage"

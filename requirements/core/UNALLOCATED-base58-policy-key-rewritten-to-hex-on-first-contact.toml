@@ -1,0 +1,152 @@
+## UNALLOCATED — SHOULD — a policy entry keyed by a Base58 peer-id is rewritten to the hex identity-hash key once that peer connects.
+##
+## Batch 4. §6.9a.1 / §6.2 first-contact canonicalization. A different "canonical" from §1.5's: the KEY of the
+## policy path moves from peer-id to identity hash. A SHOULD with no §9.2 row, and §6.2 calls it the rule-3
+## discipline, which is a MUST (F35).
+
+[requirement]
+id_status = "unallocated"
+under     = ""
+title     = "After a peer whose policy entry exists only at system/capability/policy/{Base58 peer-id} authenticates, an equivalent entry exists at policy/{hex identity hash} and the Base58-keyed entry does not"
+spec      = "ENTITY-CORE-PROTOCOL §6.9a.1 ('First-contact canonicalization (per v7.64 §2.3, SHOULD): when a Base58-form policy entry matches, the peer SHOULD canonicalize — write an equivalent hex-form entry at the identity-hash path carrying the same `(scope, bounds)`, then delete the Base58-form entry.')"
+spec_also = ["§6.9a.1 ('Canonicalization timing is impl-defined ... Conformance tests the eventual canonicalized state, not the precise timing.')", "§6.2 ('on first contact the implementation SHOULD canonicalize the entry to hex in place, per the §3.6 rule-3 lazy-canonicalization discipline') — §3.6 rule 3 is MUST, F35", "§6.2 resolution order (hex, then Base58, then default)", "§9.1 'Policy-derived authenticate grant' (ECP-R63) — the resolution, not this rewrite", "§6.2 writing policy entries (raw `tree:put` 'skips' configure's normalization invariants)", "§6.9a.0 ('The validator harness MUST NOT enumerate artifact paths') — scoped to seed artifacts; see reading"]
+snapshot  = "core-0.8.2.21"
+level     = "SHOULD"
+profile   = ["core"]
+surface   = "wire"
+status    = "draft"
+routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F35, F37"
+
+reading = """
+THE LEVEL IS THE KEYWORD, TWICE. §6.9a.1 "SHOULD canonicalize"; §6.2 "SHOULD canonicalize the entry to hex in
+place". §6.2 then says it is "per the §3.6 rule-3 lazy-canonicalization discipline" — and rule 3 is a MUST. The
+two are different acts on different objects (rule 3 rewrites a peer reference INSIDE a pattern to canonical
+Base58; this rewrites a policy path KEY from Base58 to hex), so the cross-reference borrows a discipline, not a
+level. Authored at SHOULD from the two sentences that state this act; the borrowed MUST is routed (F35).
+
+"EVENTUAL", AND WHAT WE DECLARE. "Timing is impl-defined ... impls MAY defer canonicalization to first
+cap-match at request-time. Both timings satisfy". Policy is consulted at authenticate (§6.9a) and at
+`system/capability:request` (§6.2) — not on a tree read. So the observation is taken after the handshake AND after
+one `capability:request` by K (the latest trigger the text names), then after `observation_window`. ⚠ Corrected
+after review: the first draft sent a `tree:get`, which consults no policy, and would have WARNed a peer deferring to
+request-time. Declared, never assumed.
+
+WRITTEN RAW, AND WHY (found by review). An Ed25519 `C(K)` carries the key, so a `configure` applying §6.2's
+"normalization invariants" may write the hex key at once. That is not forbidden, and it would make the control
+(J's entry still Base58, no hex) fail a conformant peer. Both entries are therefore written with a raw
+`system/tree:put`, which §6.2 says "skips those", and read back before any contact: if a hex entry exists already,
+the file is void (recorded) rather than scored.
+
+§6.9a.0'S "MUST NOT ENUMERATE ARTIFACT PATHS". That sentence is about the SEED policy's two artifact shapes, which
+are "impl-private per §9.4". The entries here are written by the suite at the path §6.2 and §6.9a.1 define, and
+§6.9a.1 itself says "Conformance tests the eventual canonicalized state" of exactly these keys. Read back, not
+enumerated.
+
+WHICH Base58 FORM. The key is written in canonical form `C(K)`. Writing `S(K)` would stack this file on F35's
+open question (a non-canonical form in a stored tree path, which §1.4 calls non-conformant) and on F31.
+
+SCORED AS A WARN. A SHOULD is never a gate (DESIGN §3).
+"""
+
+[requirement.preconditions]
+grants       = ["system/tree: put, get on system/capability/policy/*"]
+identities   = ["caller", "K (never connected before the put)", "J (never connected)"]
+handlers     = ["system/capability with the request operation"]
+posture_axes = ["seed_policy", "observation_window"]
+
+[[requirement.arm]]
+name  = "rewritten"
+kind  = "conformant"
+given = "the caller raw-puts policy/{C(K)} with a distinctive grant (covering one system/capability:request); reads back both keys; K authenticates with C(K) and sends one capability:request; wait observation_window"
+why   = "§6.9a.1's SHOULD, at the eventual state the section says conformance tests."
+  [[requirement.arm.step]]
+  op        = "connect"
+  capture   = "operator"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "put_base58_K"
+  uri       = "system/tree"
+  operation = "put"
+  note      = "system/capability/policy/{C(K)} := policy-entry {peer_pattern: C(K), grants: [<distinctive, includes system/capability request>]}"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "pre_contact_hex_K"
+  uri       = "system/tree"
+  operation = "get"
+  note      = "system/capability/policy/{lowercase hex of H(K)} — must be 404, or the file is void"
+  [[requirement.arm.step]]
+  op       = "connect"
+  capture  = "as_K"
+  identity = "K"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "K_capability_request"
+  uri       = "system/capability"
+  operation = "request"
+  note      = "a request within the distinctive grant — the request-time cap-match §6.9a.1 names"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "read_hex_key"
+  uri       = "system/tree"
+  operation = "get"
+  note      = "after observation_window: system/capability/policy/{lowercase hex of H(K)}"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "read_base58_key"
+  uri       = "system/tree"
+  operation = "get"
+  note      = "system/capability/policy/{C(K)}"
+  [[requirement.arm.assert]]
+  kind    = "status"
+  capture = "read_hex_key"
+  equals  = 200
+  when    = "pre_contact_hex_K.status == 404"
+  [[requirement.arm.assert]]
+  kind    = "status"
+  capture = "read_base58_key"
+  equals  = 404
+  when    = "pre_contact_hex_K.status == 404"
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "the same raw put for a key J that never connects; both of J's keys read after the same window"
+why   = "MANDATORY ANTI-VACUITY. J's Base58 entry must still be there and no hex entry for J may exist: proves the rewrite is triggered by CONTACT, and that the main arm's 404 is not a peer that discards Base58-keyed entries (which would also make ECP-R63's Base58 resolution step unreachable). Raw put, so no configure-time normalization can make a conformant peer fail it."
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "put_base58_J"
+  uri       = "system/tree"
+  operation = "put"
+  note      = "system/capability/policy/{C(J)} := policy-entry {peer_pattern: C(J), grants: [<the same>]}"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "read_base58_key_J"
+  uri       = "system/tree"
+  operation = "get"
+  note      = "after K's contact and observation_window: system/capability/policy/{C(J)}"
+  [[requirement.arm.step]]
+  op        = "send_execute"
+  capture   = "read_hex_key_J"
+  uri       = "system/tree"
+  operation = "get"
+  note      = "system/capability/policy/{lowercase hex of H(J)}"
+  [[requirement.arm.assert]]
+  kind    = "status"
+  capture = "read_base58_key_J"
+  equals  = 200
+  [[requirement.arm.assert]]
+  kind    = "status"
+  capture = "read_hex_key_J"
+  equals  = 404
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer that resolves the Base58 entry and never rewrites it"
+expect = "read_base58_key is 200 and read_hex_key is 404 indefinitely"
+why    = "a SHOULD, so a WARN: the entry keeps working via the Base58 resolution step, but identity-keyed tooling (quorum, controller, operator identities 'work in hex form only', §6.9a.1) never sees it."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = ""
+oracle_note       = "no `peer_canonicalization` reference check cites §6.9a.1. The proposal names a v7.64-era `policy_dual_form` category (POL-DF-2) as the legacy site; not looked up."

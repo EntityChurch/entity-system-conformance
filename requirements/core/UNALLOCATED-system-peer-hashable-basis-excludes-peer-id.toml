@@ -1,0 +1,116 @@
+## UNALLOCATED — peer_id is not in the system/peer hashable basis: the identity hash is a pure function of (public_key, key_type).
+##
+## Batch 4. What `peer_canon_1_content_hash_invariance` measures. A MUST NOT in §3.5 with no §9 row (F37),
+## and the document the type system is defined in says the opposite (F29).
+
+[requirement]
+id_status = "unallocated"
+under     = ""
+title     = "Every system/peer entity the peer authors has no peer_id in data, and every identity hash it derives for a party equals content_hash({type: \"system/peer\", data: {public_key, key_type}}) whatever peer_id form that party presented"
+spec      = "ENTITY-CORE-PROTOCOL §3.5 ('peer_id MUST NOT appear in the system/peer entity's hashable basis. content_hash(system/peer) is a pure function of (public_key, key_type) and is invariant under wire-form peer_id choice.')"
+spec_also = ["§1.4 ('Under v7.65, `content_hash(system/peer)` is a pure function of `(public_key, key_type)` and is invariant under wire-form `peer_id` choice')", "§4.6 construction ('peer_entity = Entity { type: \"system/peer\", data: { public_key, key_type } }')", "§1.5 two-layer key_type surface (data.key_type is the lowercase string, e.g. \"ed25519\")", "§4.5a item 1a (the identity entity is hashed at 0x00 — a separate file)", "§3.6 token.grantee ('Hash of grantee's peer entity')", "§4.4 'Normative wire example' — CONTRADICTS (the granter's system/peer carries \"peer_id\" in data), F29", "§3.13 ('the entity content is `{peer_id}`'; table: 'Entity type — `{peer_id}` keypair-bearing entity') — CONTRADICTS, F29", "ENTITY-NATIVE-TYPE-SYSTEM §10.1 and Appendix B — CONTRADICT (declare peer_id a field of system/peer), F29"]
+snapshot  = "core-0.8.2.21"
+level     = "MUST NOT"
+profile   = ["core"]
+surface   = "wire"
+status    = "draft"
+routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F29, F37"
+
+reading = """
+THE SENTENCE, PARSED (AP-4). §3.5's comment: "P×I primitive discipline: peer_id MUST NOT appear in the
+system/peer entity's hashable basis. content_hash(system/peer) is a pure function of (public_key, key_type)
+and is invariant under wire-form peer_id choice." The keyword is on the first sentence; the second is its
+consequence, stated so a reader knows what the prohibition buys. The hashable basis is `{type, data}` (§7.1),
+so "not in the hashable basis" means "not in `data`".
+
+WHO IS BOUND. The sentence has no party. The next paragraph limits it: "v7.64 entities (with peer_id field in
+data) and v7.65 entities (without) coexist by content_hash. Pre-v7.65 cap chains remain verifiable". A
+receiver is therefore NOT told to refuse a legacy-shape entity — that is `COMPOSITION-1`'s file. The MUST NOT
+binds AUTHORING: the entity a peer creates for an identity, and the hash it derives to refer to one.
+
+TWO SURFACES, ONE OBLIGATION. (1) The peer's own `system/peer` entity, wherever it emits one — §4.4 puts the
+granter's in the authenticate response's `included`; `system/peer/self` (§3.13) is SHOULD-bound. (2) The
+identity hash it DERIVES for the caller: the grant names the caller as `grantee`, "Hash of grantee's peer
+entity" (§3.6). A peer that put `peer_id` in its basis computes a different grantee for the same key under a
+different presented form — exactly the non-invariance the second sentence rules out. The two members CAN fail
+independently (a peer that emits a hard-coded entity copied from §4.4's example and derives hashes correctly
+fails only (1)) — as the members of any domain can. The obligation is one sentence; the members are where it is
+observed, and each is reported separately.
+
+WHAT THIS FILE DOES NOT DECIDE. Whether a non-canonical `authenticate.peer_id` is accepted at all is disputed
+(F31, its own file). The invariance member runs only on a connection where it WAS accepted; a refusal voids
+that member and scores nothing here.
+
+⛔ F29, AND WHY WE AUTHOR FROM §3.5 ANYWAY. The contradiction is not only in the type-system document. Core's
+own §4.4 "Normative wire example" shows the granter's `system/peer` with `"peer_id": "..."` in `data`; §3.13
+says three times that the entity content is `{peer_id}`; core §2.8 says "`peer_id` on `system/peer` entities";
+ENTITY-NATIVE-TYPE-SYSTEM §10.1 and Appendix B declare the field. Against them: §3.5's keyword, §4.6's
+construction (with a NOTE saying so), §1.4, and §4.5a item 1a. ⚠ Found by review; a first draft cited only the
+type-system document.
+WHY THE KEYWORD WINS HERE, BY THE TEXT RATHER THAN BY COUNT (AP-4). §3 opens: "All protocol types defined as
+`system/type` entities. This section IS the message specification." A type's fields are §3's to define. §4.4's
+example is normative for what the authenticate response CARRIES and where (`result`, `included`); an example
+cannot redefine a §3 type, and §3.5 states the field's absence with a MUST NOT. §3.13's sentences are
+descriptive and carry no keyword. So a peer copying §4.4's example fails member (1), and the file says so on
+purpose; the contradiction is routed (F29) so the example stops teaching it.
+
+EXTRA FIELDS. §2.10 permits unknown fields in `data`. This file asserts only the ABSENCE of `peer_id`, never
+"exactly two keys" — the proposal's "`data` SHALL be `{public_key, key_type}` only" (v7.65 §2.1) did not
+reach the snapshot, and asserting it would invent a MUST (F1's shape).
+"""
+
+[requirement.preconditions]
+grants       = []
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["seed_policy"]
+note         = "surface (1) needs the peer to emit its own system/peer entity somewhere observable — not-observed otherwise, never passed. Surface (2) needs the authenticate response to carry a grant naming the caller as grantee (§6.9a.2)."
+
+[requirement.domain]
+axis    = "identity_hash_surface"
+members = ["the peer's own system/peer entity, where emitted: data has no `peer_id` key and content_hash recomputes over {type, data}", "authenticate response grant.grantee, caller presenting the canonical peer_id", "authenticate response grant.grantee, same key, caller presenting the SHA-256 form (only if that handshake is accepted — F31)"]
+
+[[requirement.arm]]
+name  = "invariant"
+kind  = "conformant"
+given = "caller key K (Ed25519, public key P); H = content_hash({type: \"system/peer\", data: {public_key: P, key_type: \"ed25519\"}}) under 0x00"
+why   = "§3.5's MUST NOT, observed on the peer's own entity and on the hash it derives for the caller."
+  [[requirement.arm.step]]
+  op           = "connect"
+  capture      = "canonical"
+  peer_id_form = "canonical"
+  [[requirement.arm.step]]
+  op           = "connect"
+  capture      = "legacy"
+  peer_id_form = "sha256-form"
+  note         = "a fresh connection, same key. If the handshake is refused, this member is void (F31) — recorded, not scored."
+  [[requirement.arm.assert]]
+  kind    = "emitted_system_peer_has_no_peer_id"
+  capture = "canonical"
+  [[requirement.arm.assert]]
+  kind    = "grant_grantee_equals"
+  capture = "canonical"
+  equals  = "H"
+  [[requirement.arm.assert]]
+  kind    = "grant_grantee_equals"
+  capture = "legacy"
+  equals  = "H"
+  why     = "invariance under wire-form peer_id choice — the second sentence of §3.5, the reason the first exists."
+
+[[requirement.arm]]
+name   = "control"
+kind   = "negative-control"
+given  = "suite-side: H' = content_hash({type: \"system/peer\", data: {peer_id: C(K), public_key: P, key_type: \"ed25519\"}}), the v7.64 shape"
+expect = "`grant_grantee_equals H` fails when the fixture grantee is H'; passes when it is H"
+why    = "MANDATORY ANTI-VACUITY. Proves the assertion distinguishes the two bases byte-for-byte (two unrelated SHA-256 digests), so a peer hashing the v7.64 shape cannot pass by an assertion that compares only the format byte or the length."
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer that authors system/peer per ENTITY-NATIVE-TYPE-SYSTEM §10.1"
+expect = "its own entity carries data.peer_id; grant.grantee is H' on the canonical connection and a third value on the SHA-256-form connection"
+why    = "every signature `signer` and cap `granter`/`grantee` it emits then names an identity no conformant verifier derives (§4.5a item 4: 'manufactures a second form and breaks the equality')."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = "peer_canonicalization/peer_canon_1_content_hash_invariance"

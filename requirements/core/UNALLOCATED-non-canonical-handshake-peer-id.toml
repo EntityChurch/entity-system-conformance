@@ -1,0 +1,146 @@
+## UNALLOCATED — ⚖ DISPUTED — is an authenticate whose peer_id is a valid NON-canonical form of the signing key refused 401 identity_mismatch, or accepted?
+##
+## Batch 4. §4.6 step 3 derives the expected peer_id with §7.4, which constructs canonical form only; §1.5's
+## wire-acceptance carve-out says a non-canonical form MAY be decoded and refusal is a deployment's stricter
+## policy. The same input is a MUST-refuse under one and a permitted accept under the other. F31.
+
+[requirement]
+id_status = "unallocated"
+under     = ""
+title     = "An authenticate whose peer_id (and hello.peer_id) is the SHA-256 form of the Ed25519 key it is signed with is refused 401 identity_mismatch"
+spec      = "ENTITY-CORE-PROTOCOL §4.6 step 3 ('The responder MUST verify that `authenticate.peer_id` is the peer-id derived from `authenticate.public_key` (per the §1.5 / §7.4 construction `Base58(key_type ‖ hash_type ‖ hash(public_key))`). A mismatch MUST be rejected with status 401 `identity_mismatch`.')"
+spec_also = ["§1.5 wire-acceptance carve-out ('Implementations MAY decode `peer_id`s presented in non-canonical form ... Impls MAY refuse non-canonical form at construction or handshake under stricter local policy (deployment choice).') — CONTRADICTS", "§7.4 ('MUST construct using canonical `hash_type`'; the SHA-256 form for Ed25519 'is the §1.5 wire-acceptance carve-out (decode-only for backwards compat)')", "§4.6 ('The responder MUST also verify `authenticate.peer_id == hello.peer_id`')", "§4.7 (a MUST-emit code table — no code for a policy refusal of a non-canonical form)", "§1.4 peer reference formula ('Base58(key_type || hash_type || hash(pubkey))') — wrong for identity-multihash"]
+snapshot  = "core-0.8.2.21"
+level     = "MUST"
+profile   = ["core"]
+surface   = "wire"
+status    = "disputed"
+routed    = "docs/status/FINDINGS-FROM-AUTHORING.md F31"
+
+reading = """
+READING R — REFUSE, 401 identity_mismatch. Step 3 says the peer_id must be "the peer-id derived from
+`authenticate.public_key` (per the §1.5 / §7.4 construction". §7.4 is the derivation and it has one output:
+`hash_type = canonical_hash_type(key_type)`. A SHA-256-form string is not that output, so it is "a mismatch",
+and "A mismatch MUST be rejected with status 401 `identity_mismatch`". The responder has everything it needs:
+the key is in the same message. Under R the carve-out's MAY-decode governs peer_ids met ELSEWHERE (paths,
+patterns, gossip), never the one being bound to a key.
+
+READING A — ACCEPT (and canonicalize), with refusal a deployment option. §1.5: "Implementations MAY decode
+`peer_id`s presented in non-canonical form ... for backwards compatibility with older implementations.
+Implementations MUST canonicalize on acceptance ... derive `(public_key, key_type)` from the presented form
+(post-handshake when pubkey is available ...)". And explicitly: "Impls MAY refuse non-canonical form at
+construction or handshake under stricter local policy". If refusing at handshake is a STRICTER local policy,
+accepting at handshake is the default one — which R makes impossible. And step 3's own formula is written
+with `hash_type` free ("key_type ‖ hash_type ‖ hash(public_key)"), which reads as "consistent with the
+presented hash_type", not "equal to the canonical string".
+
+WHY WE DO NOT PICK. Both readings quote a keyword over the same input and neither sentence names the other.
+The proposal the carve-out came from (v7.65 §5.1) scopes acceptance to "pre-v7.64 cohorts ... still rotating
+to canonical form" and "MAY refuse ... at construction or handshake", which favours A — but a proposal is not
+the specification (prohibition 2), and §4.6 step 3 was rewritten later (0.8.1, 0.8.2.4) without touching the
+carve-out. Real degrees of freedom.
+
+WHAT BOTH READINGS AGREE ON, AND IS THEREFORE NOT DISPUTED, AND SCORED ELSEWHERE:
+  - a SHA-256-form string whose digest is NOT SHA-256 of the signing key never completes a handshake (a
+    mismatch under both; a strict policy may refuse it earlier, with an unpinned code), and a canonical-form
+    string for a different key is 401 `identity_mismatch` under every reading and policy (the control below;
+    `ECP-R51`, connect-time proof-of-possession, is the floor row, and is not authored in this batch);
+  - under A, an accepted handshake binds the CANONICAL identity: grantee invariance
+    (`UNALLOCATED-system-peer-hashable-basis-excludes-peer-id`) and canonical lookup
+    (`UNALLOCATED-accepted-non-canonical-peer-id-canonicalized-before-use`).
+
+A GAP UNDER A, ROUTED WITH THE DISPUTE. A stricter-policy refusal has no code. §4.7 is "a normative MUST-emit
+contract" and lists none for it; a peer refusing with 401 identity_mismatch, 400 invalid_request, or a close
+would each be defensible. If A is ruled, the code must be too.
+
+WORDING, ROUTED WITH THE DISPUTE. §4.6 step 3 and §1.4 (and, by review, §2.8, §5.4's `is_peer_id` comment and
+ENTITY-NATIVE-TYPE-SYSTEM §4.8, as "Ed25519 + SHA-256") all write the construction as
+`Base58(key_type ‖ hash_type ‖ hash(public_key))`. For the canonical Ed25519 form "the digest IS the public
+key" — there is no hash. The formula is the pre-v7.64 construction and should cite §7.4's pseudocode instead.
+"""
+
+[requirement.dispute]
+question       = "Is an authenticate whose peer_id is a valid non-canonical form of its own public key an identity_mismatch (§4.6 step 3 via §7.4) or an acceptable presentation that the responder canonicalizes (§1.5 carve-out) — and if accepted by default, what code does a stricter-policy refusal emit?"
+why_it_matters = "a client still presenting the SHA-256 form connects to an A peer and is refused 401 by an R peer. Every downstream canonicalization requirement (lookup, policy, grantee invariance) is reachable over the handshake only under A."
+owner          = "entity-system-architecture"
+our_lean       = "none recorded. Under R, §1.5's 'MAY refuse ... at handshake' is vacuous; under A, step 3's 'derived ... per §7.4' is not literally a derivation. Both readings make one sentence do less than it says."
+blocked_work   = "this requirement; the handshake members of the two files named in `reading`."
+suite_reports  = "SKIP — disputed, naming this question. The witness arm runs and records outcome and code."
+
+[requirement.preconditions]
+grants       = []
+identities   = ["caller"]
+handlers     = []
+posture_axes = ["seed_policy", "close_wait_bound"]
+
+[[requirement.arm]]
+name  = "reading-R-refused"
+kind  = "conformant"
+given = "hello.peer_id = authenticate.peer_id = Base58(0x01 0x01 || SHA-256(P)); authenticate.public_key = P, signed with K; all other steps valid"
+why   = "conformant under R only. NOT SCORED while disputed."
+  [[requirement.arm.step]]
+  op           = "connect"
+  capture      = "sha256_form"
+  peer_id_form = "sha256-form"
+  [[requirement.arm.witness]]
+  field = "outcome_status_and_code"
+  why   = "the cohort's split is the most useful input to the ruling."
+
+[[requirement.arm]]
+name  = "reading-A-accepted"
+kind  = "conformant"
+given = "the same input"
+why   = "conformant under A only: the handshake completes. NOT SCORED while disputed."
+  [[requirement.arm.step]]
+  op           = "connect"
+  capture      = "sha256_form_a"
+  peer_id_form = "sha256-form"
+  [[requirement.arm.witness]]
+  field = "outcome_status_and_code"
+  why   = "same observation, recorded against the other reading."
+
+[[requirement.arm]]
+name  = "control"
+kind  = "negative-control"
+given = "two scored probes, each on a fresh connection, public_key = P and signed with K: (i) hello.peer_id = authenticate.peer_id = C(P'), the CANONICAL form of a different key P'; (ii) the same with S(P'), the SHA-256 form of the different key"
+why   = """MANDATORY ANTI-VACUITY, and scored now, because both are wrong under every reading AND every local policy. \
+(i) is a plain identity mismatch in canonical form: §4.6 step 3 → 401 `identity_mismatch`, which no stricter \
+policy changes. (ii) must merely NOT COMPLETE: under R it is a mismatch; under A the digest is not SHA-256(P), so \
+it is a mismatch; and a strict peer may refuse the form earlier with a code §4.7 does not pin — so (ii) asserts \
+refusal, never a code. ⚠ Corrected after review: the first draft scored (ii) as 401 `identity_mismatch`, which a \
+strict-policy peer refusing at hello would fail while conformant."""
+  [[requirement.arm.step]]
+  op           = "connect"
+  capture      = "wrong_key_canonical"
+  peer_id_form = "canonical-of-other-key"
+  [[requirement.arm.assert]]
+  kind    = "status"
+  capture = "wrong_key_canonical"
+  equals  = 401
+  [[requirement.arm.assert]]
+  kind    = "error_code"
+  capture = "wrong_key_canonical"
+  equals  = "identity_mismatch"
+  [[requirement.arm.step]]
+  op           = "connect"
+  capture      = "wrong_key_sha256_form"
+  peer_id_form = "sha256-form-of-other-key"
+  [[requirement.arm.refuse]]
+  outcome = "handshake_completes"
+  capture = "wrong_key_sha256_form"
+  why     = "the one outcome no reading permits: a SHA-256-form string bound to a key it is not the hash of."
+  [[requirement.arm.witness]]
+  field = "outcome_status_and_code"
+  why   = "which step refused it, and with what code — input to the F31 code question."
+
+[[requirement.arm]]
+name   = "non-conformant-witness"
+kind   = "non-conformant"
+given  = "a peer that treats any decodable Base58 peer_id as bound to any key"
+expect = "control probe (ii) completes the handshake — it decodes the SHA-256 form and never compares the digest"
+why    = "the §4.6 step-3 hazard: 'an unbound proof lets a caller act under another peer's identity'. Non-conformant under both readings."
+
+[requirement.notes]
+peer_attributable = true
+oracle_check      = "peer_canonicalization/peer_canon_2_canonicalize_on_storage"
+oracle_note       = "provenance only. The check's citation says 'non-canonical wire form decodes' — it asserts reading A. Whether it presents the form at the handshake or elsewhere is not known from its citation."

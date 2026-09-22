@@ -2,7 +2,10 @@
 *.pem
 *.secret
 *.key
-*-pat*
+# Token files (`github-pat`, `gh-pat.txt`). Was `*-pat*` until 2026-09-12, which also matched every
+# `cap-pattern` requirement file and silently kept three of them out of the commit — see lint-ignored.
+*-pat
+*-pat.*
 
 # Local agent context — injectable, never committed (ADR-0020).
 AGENTS.local.md
@@ -16,3 +19,6 @@ scratch/
 
 # Consumed peers are vendored deliberately and per-peer; nothing here is auto-pulled.
 substrate/**/build/
+
+# Python bytecode (suite runs set PYTHONDONTWRITEBYTECODE; a host-side test run does not).
+__pycache__/

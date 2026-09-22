@@ -198,6 +198,47 @@ def validate(req: dict, name: str) -> list[str]:
     return f
 
 
+# ── the executed-by-a-suite ratchet (D14, 2026-09-13) ─────────────────────────────────────────────
+#
+# Fifty requirement files were authored, reviewed and gated before one of them was run against a peer.
+# The first run is what proved the format, the arms and the controls executable (AP-9). A requirement no
+# suite implements is a claim nobody has tried to fail, so the count of them is printed every run and
+# may only go DOWN: it is capped by requirements/UNEXECUTED-CEILING, which is lowered by hand when a
+# suite implements more and never raised.
+SUITES = ROOT / "suites"
+CEILING = REQ_DIR / "UNEXECUTED-CEILING"
+
+
+def implemented(suites: Path) -> dict[str, set[str]]:
+    out = {}
+    for manifest in sorted(suites.glob("*/IMPLEMENTS")):
+        ids = {l.strip() for l in manifest.read_text().splitlines() if l.strip() and not l.startswith("#")}
+        out[manifest.parent.name] = ids
+    return out
+
+
+def executed_findings(stems: set[str], impl: dict[str, set[str]], ceiling: int | None) -> tuple[list[str], int]:
+    f = []
+    for suite, ids in impl.items():
+        for rid in sorted(ids - stems):
+            f.append(f"suites/{suite}/IMPLEMENTS names {rid!r}, which is no requirement file — a suite "
+                     f"claiming a requirement that does not exist reports coverage of nothing")
+    unexecuted = len(stems - set().union(*impl.values())) if impl else len(stems)
+    if ceiling is None:
+        f.append(f"{CEILING.relative_to(ROOT)} missing or unreadable — the ratchet has no ceiling, so it cannot hold")
+    elif unexecuted > ceiling:
+        f.append(f"{unexecuted} requirement files are implemented by no suite, above the ceiling of {ceiling}. "
+                 f"New requirements land WITH their suite implementation (D14); author less or implement more")
+    return f, unexecuted
+
+
+def read_ceiling() -> int | None:
+    try:
+        return int(next(l for l in CEILING.read_text().splitlines() if l.strip() and not l.startswith("#")))
+    except (OSError, StopIteration, ValueError):
+        return None
+
+
 def main(argv: list[str]) -> int:
     if "--self-test" in argv:
         return self_test()
@@ -227,6 +268,11 @@ def main(argv: list[str]) -> int:
         predictions += bool(req.get("predicted_disagreement"))
         entailed += req.get("level_basis") == "entailed"
 
+    impl = implemented(SUITES)
+    ceiling = read_ceiling()
+    ex_findings, unexecuted = executed_findings({p.stem for p in paths}, impl, ceiling)
+    findings.extend(ex_findings)
+
     for finding in findings:
         print(f"  FINDING {finding}", file=sys.stderr)
 
@@ -237,6 +283,9 @@ def main(argv: list[str]) -> int:
           f"{tally.get('pending-split', 0)} · unallocated {tally.get('unallocated', 0)}"
           f"   |   disputed {disputed} · unreachable {unreachable} · predictions {predictions}"
           f" · entailed {entailed}")
+    per_suite = " · ".join(f"{k} {len(v)}" for k, v in impl.items()) or "no suites"
+    print(f"  executed by a suite: {len(paths) - unexecuted} of {len(paths)} ({per_suite})"
+          f"   |   unexecuted {unexecuted} ≤ ceiling {ceiling}")
     return 1 if findings else 0
 
 
@@ -295,6 +344,19 @@ def self_test() -> int:
             print(f"SELF-TEST FAILED: {label} validated clean. Its failure mode is a requirement "
                   f"that reads as measured and is not.", file=sys.stderr)
             return 1
+
+    # The ratchet, planted: a manifest naming a missing file, a count above the ceiling, a missing ceiling.
+    stems = {"ECP-R1", "ECP-R2", "ECP-R3"}
+    if executed_findings(stems, {"s": {"ECP-R1"}}, 2)[0]:
+        print("SELF-TEST FAILED: the ratchet refused a count AT its ceiling", file=sys.stderr)
+        return 1
+    for label, impl, ceil in [("a manifest naming no file", {"s": {"ECP-R1", "ECP-R999"}}, 5),
+                              ("unexecuted above the ceiling", {"s": {"ECP-R1"}}, 1),
+                              ("no ceiling at all", {"s": {"ECP-R1"}}, None)]:
+        if not executed_findings(stems, impl, ceil)[0]:
+            print(f"SELF-TEST FAILED: {label} passed the executed ratchet", file=sys.stderr)
+            return 1
+    planted.append(("executed-ratchet (3)", None, None))
 
     print(f"requirement-gate self-test: OK — clean definition accepted, "
           f"{len(planted)} planted defects refused")

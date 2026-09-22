@@ -14,6 +14,7 @@ level      = "MUST"
 profile    = ["core"]
 surface    = "wire"
 status     = "draft"
+routed     = "docs/status/FINDINGS-FROM-AUTHORING.md F49"
 
 reading = """
 §3.3, closing sentence: "These are the only two wire message types. Any message that is neither
@@ -40,6 +41,14 @@ connection is conformant; a peer that keeps SERVING new requests on the connecti
 refusal is observed as "a subsequent valid request on the same connection is answered", not as a
 timer — a timer would score a slow close as a failure the text does not state. The run still needs a
 bound on how long it waits for the close, and that bound is a posture value, recorded.
+
+EXECUTED 2026-09-13 (s1-py, 8 peers) — AND A TENSION THIS READING HAD NOT CONSIDERED. Six peers (core-go,
+Keystone python/rust/go, generator python/rust) keep serving after the probe; both typescript peers close. The
+reference oracle has no check for this row. Before any of the six is scored as an implementation defect, one
+authority outside the snapshot has to be ruled on: ecosystem ADR-0002 adopts "MUST-ignore-unknowns so extensions
+never break old readers" for field AND OPCODE identifiers, and lists writing that rule into the spec as an open
+follow-up. The snapshot never wrote it, and §3.3 / §6.5 say close. A cohort ignoring an unknown message type may be
+following the ADR's intent. The arms are unchanged — the text is unambiguous — and the question is arch's (F49).
 
 STATE. The row carries no state qualifier. The probe is sent on an ESTABLISHED connection, because on
 a pre-handshake connection §4's handshake errors could plausibly be read as governing first, and that

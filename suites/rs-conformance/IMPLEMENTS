@@ -1,0 +1,19 @@
+# rs-conformance — the requirement ids this suite claims.
+#
+# Column 2 is the snapshot THE CHECK CODE WAS WRITTEN AGAINST (AP-18 / F76). It is a declaration,
+# not something any gate can verify, and its job is to make drift a conscious line in a diff.
+#
+# All three rows are declared reviewed rather than `unreviewed`, and the claim is narrow and
+# specific: each check in `src/checks.rs` was authored in the same session as, and by reading,
+# both the requirement file and the pinned spec sections it cites. No check here predates its
+# obligation, which is the condition AP-18 is about. The first re-authoring of any of these three
+# requirements resets that claim — bump the column only after re-reading the check.
+#
+# ⚠ ECP-R7 is claimed as an OBSERVER, not as a scoring check. It emits a verdict of SKIP with
+# peer_attributable:false, because §1.8 item 1 (0.8.2.26) forbids a conformance check asserting a
+# refusal on its input. Claiming it here means "this suite reaches the surface and records what
+# happened", never "this suite scores peers on it".
+
+ECP-R57	entity-core-protocol/v0.8.2.26
+ECP-R3	entity-core-protocol/v0.8.2.26
+ECP-R7	entity-core-protocol/v0.8.2.26

@@ -71,9 +71,25 @@ def literals(path: Path, text: str) -> list[tuple[int, str]]:
     return out
 
 
+# ⛔⭐ BUILD OUTPUT IS NOT AUTHORED CONTENT, and this exclusion was added 2026-09-17, the day the
+# first COMPILED suite appeared. `rs-conformance` derives its snapshot from the requirement files in
+# a build script -- exactly what D16/AP-13 requires -- and cargo writes the DERIVED value into
+# `target/**/out/snapshot.rs` as a string literal. This gate read that generated file and reported
+# a hardcoded constant. ⚠ **It was flagging the correct implementation, for doing the right thing.**
+#
+# THIRD GATE IN ONE DAY WITH THIS ASSUMPTION (with lint-suite-independence and lint-ignored): every
+# gate over `suites/**` was written when the only suite was hand-written Python, and silently
+# assumed every file under it was typed by a person. **A compiled suite falsifies that**, and the
+# assumption was invisible until one existed -- which is the whole argument for building a second
+# suite rather than reasoning about one.
+BUILD_DIRS = {"target", "__pycache__", "node_modules", "dist", "build", ".git", "out"}
+
+
 def scan(tokens: list[str], root: Path = SUITES) -> list[str]:
     findings = []
-    for path in sorted(p for p in root.rglob("*") if p.suffix in SUFFIXES and p.is_file()):
+    for path in sorted(p for p in root.rglob("*")
+                       if p.suffix in SUFFIXES and p.is_file()
+                       and not (BUILD_DIRS & set(p.relative_to(root).parts))):
         try:
             text = path.read_text()
         except (OSError, UnicodeDecodeError):

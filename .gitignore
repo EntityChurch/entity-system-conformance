@@ -22,3 +22,8 @@ substrate/**/build/
 
 # Python bytecode (suite runs set PYTHONDONTWRITEBYTECODE; a host-side test run does not).
 __pycache__/
+
+# Compiled-suite build output. NOT authored content: cargo writes derived values here, and
+# three gates misread it as hand-written source on 2026-09-17 (the day the first compiled suite
+# appeared). lint-ignored excludes these paths for the same reason.
+suites/*/target/

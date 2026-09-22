@@ -220,9 +220,19 @@ def main(argv: list[str]) -> int:
     print("  " + " · ".join(f"{k} {v}" for k, v in sorted(by_suite.items())))
     # ⭐ The sentence AGENTS.md promises and no tooling here could produce until ADR-0003: joint
     # coverage, DERIVED from `drives` rather than claimed.
-    print(f"  requirements driven: {len(driven)} of {len(reqs)}"
-          f"   |   ⚠ ONE suite, so this is not yet joint coverage — it is one instrument's reach, "
-          f"and a second suite is what makes the number mean what it says")
+    # ⛔⭐ THIS LINE SAID "ONE suite" UNCONDITIONALLY, and went on saying it after a second suite
+    # landed in the tree — reported by the suite-2 author on 2026-09-17, who could see it was false
+    # and could not fix it without editing a gate they were told not to touch. **A status line that
+    # cannot change is not a status line; it is a constant that reads like a measurement**, which is
+    # the defect this seat exists to refuse, in this seat's own output. Derived from disk now.
+    n_suites = len([d for d in sorted(SUITES.iterdir()) if d.is_dir() and (d / "items").is_dir()])
+    if n_suites <= 1:
+        note = ("⚠ ONE suite, so this is not yet joint coverage — it is one instrument's reach, "
+                "and a second suite is what makes the number mean what it says")
+    else:
+        note = (f"⭐ {n_suites} suites — this IS joint coverage. ⚠ And agreement between them is NOT "
+                f"coverage: it is the weakest signal in a correlated stack. The disagreement is the product")
+    print(f"  requirements driven: {len(driven)} of {len(reqs)}   |   {note}")
     return 1 if findings else 0
 
 

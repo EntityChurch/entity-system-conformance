@@ -17,18 +17,6 @@ impl J {
     pub fn s(v: &str) -> J {
         J::S(v.to_string())
     }
-    pub fn opt_s(v: &Option<String>) -> J {
-        match v {
-            Some(x) => J::S(x.clone()),
-            None => J::Null,
-        }
-    }
-    pub fn opt_n(v: &Option<u64>) -> J {
-        match v {
-            Some(x) => J::N(*x),
-            None => J::Null,
-        }
-    }
 }
 
 pub fn write(v: &J, indent: usize, out: &mut String) {

@@ -138,10 +138,25 @@ def main(argv: list[str]) -> int:
     try:
         for m in manifests:
             r = rows(m)
-            if len(r) < MIN_ROWS:
-                print(f"implements-gate: COULD NOT LOOK — {m} has {len(r)} row(s), below "
-                      f"MIN_ROWS={MIN_ROWS}. A manifest that has stopped parsing reports a clean "
-                      f"run over nothing.", file=sys.stderr)
+            # ⛔⭐ THE FLOOR IS ON THE TREE, NOT ON EACH MANIFEST — corrected 2026-09-17, the day the
+            # first second suite arrived and this gate REFUSED THE WHOLE TREE because of it.
+            #
+            # `MIN_ROWS` exists so that a manifest which has stopped parsing cannot report a clean
+            # run over nothing. Applied PER MANIFEST it did something else entirely: a legitimate
+            # 3-requirement suite -- **the exact scale `docs/BRIEF-SUITE-2.md` mandates** (*"you are
+            # building two scoreable checks and one observer … a suite claiming broad coverage on
+            # day one is a suite that is transcribing"*) -- tripped it, and because the failure is
+            # COULD NOT LOOK for the whole run it **also stopped suite 1's 28 rows being checked.**
+            #
+            # ⇒ The gate we built to enforce small honest suites refused the first one, and took the
+            # large suite's coverage down with it. Reported by the suite-2 author, who worked around
+            # it rather than editing a gate -- correctly.
+            #
+            # An EMPTY manifest is still could-not-look: that is the parse failure the floor is for,
+            # and it is per-manifest because it has to be.
+            if not r:
+                print(f"implements-gate: COULD NOT LOOK — {m} has no rows. A manifest that has "
+                      f"stopped parsing reports a clean run over nothing.", file=sys.stderr)
                 return 2
             total += len(r)
             f, u = validate(r, m.parent.name, requirement_snapshot)
@@ -149,6 +164,14 @@ def main(argv: list[str]) -> int:
             unreviewed += u
     except GateError as exc:
         print(f"implements-gate: COULD NOT LOOK — {exc}", file=sys.stderr)
+        return 2
+
+    # The floor the per-manifest one was trying to be: if EVERY manifest in the tree has collapsed,
+    # the total collapses with it and a clean run over nothing is exactly what you would see.
+    if total < MIN_ROWS:
+        print(f"implements-gate: COULD NOT LOOK — {total} row(s) across {len(manifests)} manifest(s), "
+              f"below MIN_ROWS={MIN_ROWS}. One small suite is normal and expected; the whole tree "
+              f"being this small means the manifests have stopped parsing.", file=sys.stderr)
         return 2
 
     ceiling = read_int(DEBT)

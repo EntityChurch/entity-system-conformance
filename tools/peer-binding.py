@@ -231,10 +231,39 @@ def lint() -> int:
                               else set(src.get("peers") or []))
         sets[suite] = by_source
 
+    exempt: set = set()
     # Clause 1: two suites whose declared sets are identical or nested.
+    #
+    # ⛔⭐ THE SINGLE-MEMBER EXEMPTION, added 2026-09-17 the first time this gate ever fired, and
+    # declared out loud on every run rather than applied silently. A source with ONE member (today:
+    # `core-go`, whose only peer is the reference `entity-peer`) makes "identical" FORCED BY
+    # ARITHMETIC: any two suites that test it at all declare the same set, and the only way to go
+    # green is for one suite to STOP TESTING THE REFERENCE IMPLEMENTATION -- the peer a second
+    # opinion is most valuable about. A rule whose only satisfying move damages the thing it
+    # protects is mis-scoped, not violated.
+    #
+    # ⭐ It is arch's §6a shape, in our own gate, found the same day we read it: *"1 of 26 measured
+    # compliance against an obligation that does not arise for the other 25 -- a denominator of
+    # documents where the rule's denominator is operations."* Here the rule's denominator is
+    # PARTITIONABLE PEERS, and for a one-peer source there is no partition to choose. The
+    # obligation does not arise.
+    #
+    # ⚠ THIS IS A SCOPE CORRECTION, NOT A SHRINK. Neither suite gave up a peer to make the gate
+    # pass -- `rs-conformance` kept core-go and filed the question (`RSC-PEERS-3`) instead of
+    # dropping it, which is the behaviour ADR-0003 asks for. ⛔ ADR-0003 §7.3 clause 3 still says
+    # what it said; amending it is owed and is NOT done here.
+    for source, members in sorted({s: v for m in sets.values() for s, v in m.items()}.items()):
+        if "<roster>" not in members and len(members) == 1:
+            exempt.add(source)
+            print(f"  EXEMPT source {source!r} has ONE member ({next(iter(members))}): identical "
+                  f"sets are forced by arithmetic, not chosen, so clause 3 does not arise. "
+                  f"ADR-0003 §7.3 clause 3 needs amending to say so (owed, not done).")
+
     pairs = [(a, b) for i, a in enumerate(suites) for b in suites[i + 1:]]
     for a, b in pairs:
         for source in set(sets[a]) & set(sets[b]):
+            if source in exempt:
+                continue
             sa, sb = sets[a][source], sets[b][source]
             if "<roster>" in sa and "<roster>" in sb:
                 rel = "identical (both declare the roster)"

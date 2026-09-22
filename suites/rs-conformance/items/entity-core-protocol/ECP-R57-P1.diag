@@ -1,0 +1,183 @@
+{
+  "header": [
+    "ECP-R57-P1 — rs-conformance's probe for the wrong-root-message-type obligation.",
+    "",
+    "⛔ AUTHORED WITHOUT READING ANY OTHER SUITE'S ITEM. ADR-0003 makes the item the suite-private",
+    "half precisely so that two suites do not share an assertion. Suite 1 has an item driving this",
+    "same requirement; it was not opened, and if the two probes turn out to agree that is evidence",
+    "rather than coincidence.",
+    "",
+    "⚠ ON THE ID, AND IT IS A REAL AMBIGUITY RATHER THAN A QUIBBLE. `ECP-R57-P1` is derived from",
+    "the requirement id plus a probe ordinal (D18: derived, never coined). But the ordinal is",
+    "per-suite, so a second suite authoring its first probe for the same requirement derives the",
+    "SAME id. The two are distinguished only by `author` and by the directory. ⇒ CITING AN ITEM BY",
+    "BARE ID IS AMBIGUOUS ACROSS SUITES — the same defect AGENTS-STANDARD names for routing packets",
+    "(`cite by the FULL stem`), one object down. Cite `<suite>/<id>`. Reported, not worked around."
+  ],
+
+  "id": "ECP-R57-P1",
+  "author": "rs-conformance",
+  "class": "validate-peer check",
+  "class_basis": [
+    "GUIDE-CONFORMANCE §7.0's first class: behavioral, driven over the wire against a running",
+    "peer. This probe opens a TCP connection, writes one §5.1 frame and reads the answer; there",
+    "is no fixture corpus, no host-seam API and nothing implementation-internal about it. §4.11's",
+    "own `Conformance` paragraph says of this class: \"Every member is drivable over the wire.\""
+  ],
+  "drives": [
+    "entity-core-protocol/ECP-R57"
+  ],
+  "surface": "wire",
+  "status": "draft",
+  "snapshot": "entity-core-protocol/v0.8.2.26",
+
+  "preconditions": {
+    "posture": "pre-handshake-floor",
+    "connection_state": "not_established",
+    "grants": "none required — the probe's root is not an EXECUTE and reaches no handler",
+    "identities": "none — no author, no capability, no signature",
+    "connection_reuse": "none; a fresh TCP connection per arm",
+    "why_declared_as_data": [
+      "A precondition stated only as English inside a skip message is not declared. The reference",
+      "oracle run twice under two postures changed the SIZE of its check set (778 -> 717) with 54",
+      "severities moving, and nothing in either report said which was which."
+    ],
+    "state_divergence_from_the_requirement": [
+      "⚠ ECP-R57's `reading` says its subject is sent on an ESTABLISHED connection. THIS PROBE",
+      "SENDS IT PRE-HANDSHAKE, and the difference is declared rather than assumed away.",
+      "",
+      "The argument: §6.5's dispatch chain places the `Other type?` arm at the SAME level as",
+      "`Root is EXECUTE?`, i.e. before any branch that consults connection state — state is only",
+      "consulted INSIDE the EXECUTE branch (`URI = system/protocol/connect AND connection not",
+      "established?`). So the arm is reached identically in either state. §3.3's sentence and",
+      "§4.11's row likewise carry no state qualifier.",
+      "",
+      "⛔ THAT IS AN ARGUMENT, NOT A MEASUREMENT. The established-posture run is NOT TAKEN by this",
+      "suite, because reaching leg 2 of §4.1's handshake needs an Ed25519 signature this suite does",
+      "not implement. If the two postures ever disagree on this row, this probe measured one of",
+      "them and said so."
+    ]
+  },
+
+  "arm": [
+    {
+      "name": "conformant_coded_refusal",
+      "kind": "conformant",
+      "given": "an established TCP connection to the peer, no frames previously sent on it",
+      "why": [
+        "§3.3's closing sentence at 0.8.2.25: a frame whose root entity is neither EXECUTE nor",
+        "EXECUTE_RESPONSE is invalid and the peer MUST answer `400 invalid_request`; §4.11 is its",
+        "normative home and the close is the peer's own choice. §4.11's cause table, fifth row,",
+        "pins the code to THIS cause: `Root entity is neither EXECUTE nor EXECUTE_RESPONSE ->",
+        "400 invalid_request, stated at §3.3`.",
+        "",
+        "The subject is a MESSAGE of the wrong type, never bytes that fail to decode: §4.11's",
+        "FRAMING arm is a different row with the same code and a different cause, and at 0.8.2.26",
+        "that arm is explicitly `bytes that DO NOT DECODE`. So the subject is canonical ECF,",
+        "correctly length-prefixed, self-consistently hashed, and carries no CBOR tag — a tag",
+        "would land it on §4.11's tag-policy row (`400 non_canonical_ecf`) instead."
+      ],
+      "step": [
+        {
+          "op": "send_frame",
+          "detail": "envelope { root: entity(type=`primitive/any`, data=`a0`, content_hash=SHA-256(ECF({type,data}))) }, no `included` map, §5.1 framing"
+        },
+        {
+          "op": "read_frame",
+          "detail": "one answer, within the declared read deadline"
+        }
+      ],
+      "accept": [
+        {
+          "outcome": "coded_response",
+          "status": 400,
+          "code": "invalid_request",
+          "detail": "an EXECUTE_RESPONSE root carrying status 400 and result.data.code `invalid_request`"
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "silent_drop",
+          "detail": "§4.11's FIRST named failure — no response and no close. SCORED SEPARATELY."
+        },
+        {
+          "outcome": "bare_close",
+          "detail": "§4.11's SECOND named failure — closed with no coded frame. SCORED SEPARATELY. ⛔ A probe that reports these two under one verdict string still gets every top-line result right and has destroyed the distinction §4.11 states in terms; the two remedies are opposite."
+        },
+        {
+          "outcome": "request_admitted",
+          "detail": "any 2xx — the frame was processed rather than refused"
+        },
+        {
+          "outcome": "coded_response_wrong_code",
+          "detail": "a coded refusal carrying any other code. §4.11: the code selects the caller's remedy, so a code merely in the right family is still wrong."
+        }
+      ],
+      "witness": [
+        {
+          "field": "closed_after_answer",
+          "detail": "RECORDED, NEVER SCORED. §4.11 makes the close the peer's own choice and neither shape is preferred. Under 0.8.2.21 the close WAS the obligation; a probe that still watches the socket is measuring a rule that no longer exists."
+        },
+        {
+          "field": "correlation",
+          "detail": "NOT ASSERTED. The probe's root is not an EXECUTE and carries no `request_id`, so no id is available and §4.11's best-effort UNCORRELATED coded frame is conformant here."
+        }
+      ]
+    },
+    {
+      "name": "negative_control_correct_root_type",
+      "kind": "negative-control",
+      "given": "a fresh TCP connection, no frames previously sent on it",
+      "why": [
+        "⛔ THE ARM THAT MAKES THE PROBE MEAN ANYTHING. Send the SAME input with the ONE thing under",
+        "test corrected — the root's type — and require the peer to ANSWER AFFIRMATIVELY. Without",
+        "it a peer that refuses absolutely everything passes the conformant arm above, and the",
+        "suite reports a green row for a peer that never read a byte.",
+        "",
+        "⛔ THE BAR IS AN AFFIRMATIVE 2xx, NOT `any response`. A control that accepts any response",
+        "accepts the exact refusal that must VOID the probe. This is the specific defect a sibling",
+        "instrument shipped inside its own control on 2026-09-16, so it is stated as the arm's",
+        "condition rather than left to the implementation.",
+        "",
+        "The corrected input is a `hello` EXECUTE on `system/protocol/connect` — §3.2 and §4.2",
+        "exempt that path from `author` and `capability`, so the control needs no grant, no",
+        "identity and no signature, and cannot be voided by a posture."
+      ],
+      "step": [
+        {
+          "op": "send_frame",
+          "detail": "envelope { root: EXECUTE(uri=`system/protocol/connect`, operation=`hello`, params=hello entity per §3.8) }, every hash truthful"
+        },
+        {
+          "op": "read_frame",
+          "detail": "one answer"
+        }
+      ],
+      "accept": [
+        {
+          "outcome": "hello_answered",
+          "status": 200,
+          "detail": "an EXECUTE_RESPONSE with a 2xx status — §4.1: the responder replies with its own hello data"
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "control_void",
+          "detail": "ANYTHING ELSE voids the probe: a 4xx, a 5xx, a bare close, a silence, an unreadable answer, an unreachable peer. The requirement's row is then reported SKIP with the reason and `peer_attributable: false` — a skip counts as a failure ([ADR-0012]) and is never quietly a pass."
+        }
+      ]
+    }
+  ],
+
+  "measured": [
+    "First run 2026-09-17 against `entity-core-go` (`make peer-up`, posture grants=bootstrap-default,",
+    "peer id 2K9pU3RohYnRu5L3bM9xjUgsVmvtaaoZNXwTD47o6GgjgW).",
+    "",
+    "CONTROL HELD — 200 EXECUTE_RESPONSE to the corrected hello, so the probe is attributable.",
+    "PROBE: `silent_drop`. No frame and no close before the deadline. §4.11's FIRST named failure.",
+    "",
+    "⚠ ONE PEER. This establishes nothing about any distribution and is not routed as a cohort",
+    "finding. The ten declared keystone peers are unrun (their toolchain images were not built in",
+    "this session), and that is declared in PEERS.diag rather than left to inference."
+  ]
+}

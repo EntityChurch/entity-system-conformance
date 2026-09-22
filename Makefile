@@ -93,7 +93,8 @@ help:
 # The requirement files the suite implements are digested into the bundle's BUILD.json, so every verdict names
 # the exact requirement text it measured. The bundle ALSO carries their canonical CBOR (requirements.cbor), so the
 # instrument computes a PER-RUN anchor over what it actually asserted, with its own codec -- GUIDE-CONFORMANCE
-# §3.1 item 7, which is the clause a published number is accountable to (not §5.1, which is a fixture-corpus
+# §3.6 item 7 (was §3.1 item 7 until arch renumbered it on 2026-09-16, closing F74's duplicate-number
+# defect), which is the clause a published number is accountable to (not §5.1, which is a fixture-corpus
 # naming rule; routed to us by entity-system-generator 2026-09-15). That artifact is also where the two
 # independent canonical-CBOR codecs meet on the RUN path rather than only in `make test`.
 PYRT_URL     ?= https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-x86_64-unknown-linux-musl-install_only_stripped.tar.gz
@@ -435,14 +436,28 @@ lint-sources:
 
 # AP-10 (candidate): no suite is written in the reference oracle's language, and no suite reaches into another suite
 # or into tools/. Shared code is shared bugs; a shared language with the oracle is shared idioms and shared libraries.
-ORACLE_LANG_GLOBS := *.go go.mod go.sum
+#
+# ⛔⭐ THE NEGATION CARVE-OUT, added 2026-09-17, AND IT FIRED ON THE FIRST SECOND SUITE THAT EVER
+# EXISTED. `suites/rs-conformance/src/main.rs` opens with a module comment declaring WHAT IT DID NOT
+# READ -- "⛔ WHAT THIS SUITE DID NOT READ, because that is the whole point of it existing:
+# `suites/py-prototype/**` …". The gate greps for the literal path and cannot tell "I read this"
+# from "I declare I did not read this", so it refused the honest act, in the one file where that
+# declaration is most useful to a reviewer.
+#
+# THIS IS THE SECOND INSTANCE OF ONE SHAPE HERE. docs/SOURCES-CITATION-DEBT had it on day one: the
+# STATUS entry REPORTING the debt cited the unread section three more times and the ratchet refused
+# the commit. Its note is the rule: "Describing a gap is the opposite of relying on it, and a gate
+# that punishes the honest act is a gate people route around."
+#
+# ⚠ SCOPE, because the weakening must be bounded: only a line carrying an explicit negation is
+# exempt. A suite QUOTING another suite's design in a comment still trips -- that is a real leak,
+# and a comment cannot be a dependency but it can be evidence of having read one. Like every
+# declaration-based gate here (PEERS.diag exclusions, SOURCES read-state), this is auditable rather
+# than tamper-proof, and that is the posture on purpose.
+ORACLE_LANG_GLOBS := *.go go.mod go.sum   # kept for `make help`; the gate is tools/suite-independence.py
 lint-suite-independence:
-	@bad=$$(for g in $(ORACLE_LANG_GLOBS); do find suites -name "$$g"; done); \
-	 if [ -n "$$bad" ]; then echo "lint-suite-independence: suite source in the reference oracle's language (Go) — AP-10:" >&2; echo "$$bad" >&2; exit 1; fi
-	@for d in suites/*/; do n=$$(basename $$d); \
-	   hits=$$(grep -rIo -E "suites/[a-z0-9-]+/|\.\./\.\./tools/|(from|import) tools" $$d --exclude=README.md 2>/dev/null | grep -v ":suites/$$n/$$"); \
-	   if [ -n "$$hits" ]; then echo "lint-suite-independence: $$n references another suite or tools/:" >&2; echo "$$hits" >&2; exit 1; fi; done
-	@echo "lint-suite-independence: $$(ls -d suites/*/ | wc -l) suite(s); none in the oracle's language, none reaching into another suite or tools/"
+	@$(PY) tools/suite-independence.py --self-test
+	@$(PY) tools/suite-independence.py
 
 # D16 / AP-13 (F43, F65): a run-defining input that the requirement files already carry MUST be derived,
 # never restated as a suite constant. Its planted controls, its hole and why it is now a tool rather than
@@ -456,7 +471,8 @@ lint-suite-constants:
 # language toolchain. Without git this is could-not-look, reported, never a pass.
 lint-ignored:
 	@command -v git >/dev/null || { echo "lint-ignored: COULD NOT LOOK — no git on host" >&2; exit 2; }
-	@ign=$$(git ls-files --others --ignored --exclude-standard -- requirements spec-data tools docs suites); \
+	@ign=$$(git ls-files --others --ignored --exclude-standard -- requirements spec-data tools docs suites \
+	        | grep -vE "/(target|__pycache__|node_modules|dist|build)/"); \
 	 if [ -n "$$ign" ]; then echo "lint-ignored: gated files excluded by .gitignore:" >&2; echo "$$ign" >&2; exit 1; fi; \
 	 echo "lint-ignored: 0 gated files excluded by .gitignore"
 

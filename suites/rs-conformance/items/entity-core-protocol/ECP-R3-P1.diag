@@ -1,0 +1,214 @@
+{
+  "header": [
+    "ECP-R3-P1 — rs-conformance's probe for root-entity content_hash validation.",
+    "",
+    "⛔⭐ THIS ITEM DISAGREES WITH ITS OWN REQUIREMENT FILE ABOUT WHETHER A CODE IS PINNED, AND THE",
+    "DISAGREEMENT IS EMITTED RATHER THAN RESOLVED HERE. ECP-R3's `reading` concludes \"ANY status",
+    "and code satisfies this file; the FRAME is what is asserted\", arguing that §4.11's cause",
+    "table has no root-hash row \"by arch's deliberate design\" and that §1.8/§7.2 assign no code.",
+    "Read against the snapshot THAT FILE ITSELF DECLARES, the argument does not hold — see the",
+    "`contested` block. The probe therefore SCORES the half both readings share (the frame",
+    "obligation) and WITNESSES the (status, code) with the contested evaluation attached.",
+    "",
+    "Prohibition 2: we state what the spec requires, we do not decide it. Unilaterally failing the",
+    "cohort on a code the requirement file says is unpinned would be authoring the specification;",
+    "silently adopting the file's conclusion against the pinned text would be the check-bug horn of",
+    "our own three-way table. Routing it is the third option and it is the right one."
+  ],
+
+  "id": "ECP-R3-P1",
+  "author": "rs-conformance",
+  "class": "validate-peer check",
+  "class_basis": [
+    "GUIDE-CONFORMANCE §7.0's first class: behavioral, over the wire, against a running peer. The",
+    "input is one §5.1 frame and the observation is the peer's answer on the same connection.",
+    "§6.5 places `Validate root entity hash` in the inbound dispatch chain, which is a wire path."
+  ],
+  "drives": [
+    "entity-core-protocol/ECP-R3"
+  ],
+  "surface": "wire",
+  "status": "draft",
+  "snapshot": "entity-core-protocol/v0.8.2.26",
+
+  "preconditions": {
+    "posture": "pre-handshake-floor",
+    "connection_state": "not_established",
+    "grants": "none — §4.2 makes `system/protocol/connect` the sole pre-authorized path in any connection state",
+    "identities": "none — §3.2 exempts the connection path from `author` and `capability`, and no signature is sent",
+    "connection_reuse": "none; a fresh TCP connection per arm",
+    "why_a_hello_is_the_vehicle": [
+      "A hello needs no author, no capability and no signature, so a refusal of a MIS-HASHED hello",
+      "can only be about the hash, and an answered one proves the hash was not checked. No posture",
+      "can be blamed for either outcome. This is the requirement file's own argument and it",
+      "survives contact with §4.2."
+    ]
+  },
+
+  "arm": [
+    {
+      "name": "conformant_coded_refusal_of_a_mis_hashed_root",
+      "kind": "conformant",
+      "given": "a fresh TCP connection, no frames previously sent on it",
+      "why": [
+        "§1.8 item 1: \"Compute expected hash from `{type, data}`, compare with `content_hash`,",
+        "reject on mismatch.\" §7.2 gives the algorithm as NORMATIVE and ends in REJECT. §6.5 places",
+        "it first after decode. ENTITY-CBOR-ENCODING §5.2: \"never trust a claimed hash without",
+        "verification.\"",
+        "",
+        "THE REFUSAL'S SHAPE is §4.11's, and 0.8.2.26 is what makes §4.11 reach this cause: \"The",
+        "table assigns CODES; it does not define the CLASS [MUST]. Membership is decided by the",
+        "boundary in this section's first sentence ... and EVERY MEMBER CARRIES THE FRAME",
+        "OBLIGATION whether or not its cause has a row here.\" A mis-hashed root hello is refused",
+        "before the frame becomes an admitted request. It is a member.",
+        "",
+        "THE DEFECT IS ONE BIT, on purpose. A structurally odd hash could plausibly be refused by a",
+        "length check or a format-code check, and those are different rows; a single flipped bit in",
+        "the digest leaves the field the right width under the right format code, so the only thing",
+        "that can refuse it is the comparison."
+      ],
+      "step": [
+        {
+          "op": "send_frame",
+          "detail": "envelope { root: EXECUTE(uri=`system/protocol/connect`, operation=`hello`, params=hello per §3.8) } with the ROOT entity's carried content_hash differing from SHA-256(ECF({type,data})) by one bit; everything else canonical, correctly framed, no tag, no `included`"
+        },
+        {
+          "op": "read_frame",
+          "detail": "one answer"
+        }
+      ],
+      "accept": [
+        {
+          "outcome": "coded_response",
+          "detail": "a coded EXECUTE_RESPONSE refusal on the wire. ⚠ SCORED ON THE FRAME ONLY — the (status, code) is witnessed and evaluated under `contested`, not scored."
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "hello_answered",
+          "detail": "THE FAILURE THE ROW EXISTS FOR: a 2xx means the root was processed without its hash being validated"
+        },
+        {
+          "outcome": "silent_drop",
+          "detail": "§4.11's FIRST named failure. SCORED SEPARATELY from the bare close."
+        },
+        {
+          "outcome": "bare_close",
+          "detail": "§4.11's SECOND named failure. SCORED SEPARATELY. ⛔ This outcome was ACCEPTED by a sibling instrument until 2026-09-16 (F77), which is why it is spelled out as its own refuse row rather than folded into a generic failure."
+        }
+      ],
+      "witness": [
+        {
+          "field": "status_and_code",
+          "detail": "RECORDED AND EVALUATED UNDER `contested`, NOT SCORED. See the block below."
+        },
+        {
+          "field": "correlated_by_request_id",
+          "detail": "RECORDED, NOT SCORED. §4.11 asks for correlation \"where the id is available\". Whether an id inside a frame the peer refused AT HASH-VALIDATION TIME — before it had reason to read the data — counts as available is not settled by the pinned text. Asserting it either way would be inventing a requirement."
+        },
+        {
+          "field": "closed_after_answer",
+          "detail": "RECORDED, NEVER SCORED — §4.11 makes it the peer's own choice"
+        }
+      ]
+    },
+    {
+      "name": "negative_control_truthful_root_hash",
+      "kind": "negative-control",
+      "given": "a fresh TCP connection, no frames previously sent on it",
+      "why": [
+        "The SAME hello with the ONE thing under test corrected: a truthful root content_hash. The",
+        "peer must ANSWER AFFIRMATIVELY. Without this arm, a peer that refuses everything — or one",
+        "that rejects our hello for a reason that has nothing to do with the hash, a malformed",
+        "`peer_id`, a `protocols` list it cannot intersect — produces the same observation as a peer",
+        "correctly refusing a mis-hashed root, and the probe cannot tell them apart.",
+        "",
+        "⛔ AN AFFIRMATIVE 2xx IS THE BAR. `any response` would accept the exact refusal that voids",
+        "the probe."
+      ],
+      "step": [
+        {
+          "op": "send_frame",
+          "detail": "the identical hello envelope with a truthful root content_hash"
+        },
+        {
+          "op": "read_frame",
+          "detail": "one answer"
+        }
+      ],
+      "accept": [
+        {
+          "outcome": "hello_answered",
+          "status": 200,
+          "detail": "EXECUTE_RESPONSE, 2xx"
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "control_void",
+          "detail": "anything else — the requirement's row becomes SKIP with `peer_attributable: false` and the reason attached"
+        }
+      ]
+    }
+  ],
+
+  "contested": {
+    "about": "whether the pinned snapshot assigns a (status, code) to a root-entity content_hash mismatch",
+    "requirement_file_says": [
+      "ECP-R3 `reading`: \"⚠ THE CODE IS STILL NOT PINNED, AND THIS FILE MUST NOT INVENT ONE",
+      "(prohibition 2). §4.11's cause table has no root-hash row and arch's ruling says so",
+      "deliberately ... ⇒ ANY status and code satisfies this file; the FRAME is what is asserted.\""
+    ],
+    "this_suite_reads": [
+      "The pinned v0.8.2.26 DOES assign one — `400 hash_mismatch` — and the file's premise is",
+      "contradicted by §4.11's own text in the same snapshot."
+    ],
+    "evidence": [
+      "(1) §6.5's dispatch chain, verbatim in the pinned snapshot:",
+      "      +- Validate root entity hash",
+      "      |   -> 400 hash_mismatch, coded frame; MAY then close (§4.11, §5.2a)",
+      "    That is a code, assigned to THIS arm, in the declared snapshot. ECP-R3's own",
+      "    `Read range` names §6.5.",
+      "",
+      "(2) §4.11 (0.8.2.26): \"A cause absent from this table is a cause whose code is assigned by",
+      "    ITS OWN SECTION, never a refusal exempt from answering.\" §6.5 is that section, and §1.8",
+      "    item 1 additionally routes its dispositions to §5.2a.",
+      "",
+      "(3) ⛔ §4.11's rationale says the omission was NOT deliberate, in terms: \"a corrupted",
+      "    root-entity-hash refusal meets the class definition verbatim while appearing in no row,",
+      "    and four peers were measured bare-closing or silently dropping it while scoring PASS,",
+      "    because AN OMISSION FROM AN ENUMERATION IS INDISTINGUISHABLE FROM A DELIBERATE SCOPE",
+      "    LIMIT.\" The requirement file asserts precisely the deliberate scope limit that sentence",
+      "    says cannot be inferred from an omission.",
+      "",
+      "(4) §5.2a corollary 1's 0.8.2.25 scoping does NOT carve the root out. It excludes \"bytes",
+      "    that were never hashed\", and DEFINES those in the same sentence: \"a frame that does not",
+      "    decode into an Envelope at all is 400 invalid_request\". This probe's frame decodes into",
+      "    an Envelope and its bytes were hashed, so the carve-out does not reach it."
+    ],
+    "why_it_is_not_acted_on_here": [
+      "Prohibition 2. A requirement we invented is a requirement nobody agreed to. The scored",
+      "verdict stays on the frame obligation — which both readings assert — and the code evaluation",
+      "rides alongside as data, keyed to the requirement id, so the architecture seat can adjudicate",
+      "a well-posed question instead of a rerun."
+    ],
+    "routed_as": [
+      "(a) a requirement-file defect for this repo: ECP-R3's `reading` should be re-authored against",
+      "    §6.5 and §4.11's 0.8.2.26 rationale, and its `conformant` arm gains a (status, code).",
+      "(b) a question for the architecture seat: confirm §6.5's assignment is normative for this",
+      "    cause, and add the row to §4.11's table so the next reader does not re-derive this."
+    ]
+  },
+
+  "measured": [
+    "First run 2026-09-17 against `entity-core-go` (posture grants=bootstrap-default).",
+    "",
+    "CONTROL HELD — 200 EXECUTE_RESPONSE to the truthful hello.",
+    "PROBE: `bare_close`. The peer closed with no coded frame. §4.11's SECOND named failure.",
+    "",
+    "⛔ THE CONTESTED CODE QUESTION IS UNDECIDED BY THIS RUN AND MUST NOT BE REPORTED AS DECIDED.",
+    "core-go emits NO code on this surface at all, so nothing here distinguishes the two readings.",
+    "The disagreement is only decidable against a peer that answers with a code, and no such peer",
+    "was run this session."
+  ]
+}

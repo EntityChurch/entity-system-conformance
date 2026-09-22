@@ -1,0 +1,158 @@
+{
+  "header": [
+    "ECP-R7-P1 — rs-conformance's OBSERVER for included-entity hash validation.",
+    "",
+    "⛔⛔ THIS ITEM SCORES NOBODY, AND THAT IS A RULING RATHER THAN A LIMITATION OF THIS SUITE.",
+    "§1.8 item 1 at 0.8.2.26, verbatim: \"A uniform verdict on an UNREFERENCED `included` entry is",
+    "mechanism-shaped and MUST NOT be required [MUST] ... A conformance check MUST NOT assert a",
+    "refusal on this input: asserting one votes mechanism (a) and makes (b) — which this item",
+    "blesses — unimplementable.\"",
+    "",
+    "This probe's entry is unreferenced BY DESIGN — that is how §3.1's \"EACH included entity\" is",
+    "reached rather than the weaker \"each one the handler uses\". So the very property that makes",
+    "the probe reach the obligation is the property that makes its result unscoreable. The",
+    "observation is recorded; `peer_attributable` is false on every row it produces.",
+    "",
+    "⚠ AND A GAP IN THE FORMATS, REPORTED RATHER THAN WORKED AROUND. Neither the item format's arm",
+    "vocabulary (`conformant` · `negative-control` · `non-conformant`) nor the suite contract's",
+    "verdict vocabulary (`PASS` · `WARN` · `FAIL` · `SKIP`) has a value meaning OBSERVED, NOT",
+    "SCOREABLE. The arm below is `conformant` because §1.8 says both mechanisms ARE conformant on",
+    "this input, which is the closest true statement available; the emitted verdict is `SKIP`,",
+    "which [ADR-0012] counts as a failure — the wrong accounting for a row the SPECIFICATION",
+    "forbids scoring. Both vocabularies need a witness value."
+  ],
+
+  "id": "ECP-R7-P1",
+  "author": "rs-conformance",
+  "class": "validate-peer check",
+  "class_basis": [
+    "GUIDE-CONFORMANCE §7.0's first class by construction — it is driven over the wire against a",
+    "running peer — even though it yields no verdict. The class names WHAT DRIVES the item, not",
+    "whether the item scores: an observation taken over the wire is still a wire observation, and",
+    "filing it as anything else would misdescribe how it was obtained."
+  ],
+  "drives": [
+    "entity-core-protocol/ECP-R7"
+  ],
+  "surface": "wire",
+  "status": "disputed",
+  "snapshot": "entity-core-protocol/v0.8.2.26",
+
+  "preconditions": {
+    "posture": "pre-handshake-floor",
+    "connection_state": "not_established",
+    "grants": "none — the vehicle is a hello on §4.2's sole pre-authorized path",
+    "identities": "none",
+    "connection_reuse": "none; a fresh TCP connection per arm"
+  },
+
+  "arm": [
+    {
+      "name": "both_mechanisms_are_conformant_observe_only",
+      "kind": "conformant",
+      "given": "a fresh TCP connection, no frames previously sent on it",
+      "why": [
+        "§3.1: \"On the wire, implementations MUST validate each included entity's content_hash",
+        "individually per entity fidelity (§1.8).\" §6.5 orders it right after the root hash.",
+        "",
+        "⛔ BUT §1.8 ITEM 1 (0.8.2.26) FORBIDS ASSERTING A REFUSAL ON THIS PARTICULAR INPUT.",
+        "Mechanism (a) inspects every entry as the map is accepted, so an unreferenced mis-keyed",
+        "entry is refused. Mechanism (b) discards wire keys at the decode boundary, so it \"has no",
+        "wire key to inspect and no entry to reach\" and the same input is \"NOT REPRESENTED AT ALL",
+        "in the peer's decoded form\". \"Both are conformant, and the observable difference is a",
+        "property of the mechanism rather than of the peer's correctness.\"",
+        "",
+        "⇒ THERE IS NO ACCEPT ROW AND NO REFUSE ROW. Writing one would vote for mechanism (a) and",
+        "make mechanism (b) — which the specification blesses — unimplementable. The arm carries a",
+        "witness table and nothing else, which is exactly what it is entitled to carry.",
+        "",
+        "WHAT WOULD MAKE IT SCOREABLE, stated so the next session does not re-derive it: the same",
+        "obligation over a REFERENCED entry — one the peer must resolve to do its job — where both",
+        "mechanisms must reach it, because mechanism (b) addresses entities by a `content_hash`",
+        "validated under item 1's first half. ⬜ THAT PROBE IS NOT BUILT AND IS NOT A RENAME OF THIS",
+        "ONE: a hello's `included` map may carry no entry the peer is OBLIGED to resolve, so the",
+        "referenced surface may need an authenticated EXECUTE — which reintroduces the posture",
+        "confound the hello was chosen to avoid. A real design question, left open rather than",
+        "guessed at, and it is legitimate unclaimed work."
+      ],
+      "step": [
+        {
+          "op": "send_frame",
+          "detail": "envelope { root: valid hello EXECUTE, included: { K => entity } } where the entity is a well-formed `primitive/any` the hello has no use for, K equals the hash of its ORIGINAL data, the entity's own carried content_hash also equals that hash, and the data was then changed — so the entry is both self-inconsistent and mis-keyed, and `content_hash({type,data})` of what arrives equals neither"
+        },
+        {
+          "op": "read_frame",
+          "detail": "one answer, or the absence of one"
+        }
+      ],
+      "witness": [
+        {
+          "field": "observed_shape",
+          "detail": "one of coded_response / bare_close / silent_drop / unreadable. RECORDED, NOT SCORED."
+        },
+        {
+          "field": "status_and_code",
+          "detail": "RECORDED, NOT SCORED. Of standing interest because §4.11's cause table row 3 pins `400 hash_mismatch` for resolution integrity while ENTITY-CBOR-ENCODING §5.4 scopes `400 non_canonical_ecf` to tag-policy violations, and this frame carries no tag. A peer answering `non_canonical_ecf` here is using a code for a condition it does not name — but on THIS input that observation is cohort data, not a verdict."
+        },
+        {
+          "field": "root_and_params_validity",
+          "detail": "both truthful, so any refusal is attributable to the included entry and not to ECP-R3's surface"
+        },
+        {
+          "field": "closed_after_answer",
+          "detail": "RECORDED, NEVER SCORED (§4.11)"
+        }
+      ]
+    },
+    {
+      "name": "negative_control_wellformed_included_entry",
+      "kind": "negative-control",
+      "given": "a fresh TCP connection, no frames previously sent on it",
+      "why": [
+        "⛔ THE CONTROL RUNS EVEN THOUGH NOTHING IS SCORED, and that is deliberate. An observation",
+        "taken against a peer that refuses everything is not an observation — it is noise recorded",
+        "as cohort data, and cohort data is exactly what this row is FOR. Skipping the control",
+        "because 'we are only witnessing' would put unattributable rows into the one output this",
+        "item is allowed to produce.",
+        "",
+        "The corrected input carries the SAME included entity, correctly keyed and self-consistent."
+      ],
+      "step": [
+        {
+          "op": "send_frame",
+          "detail": "the identical envelope with the included entity's data unmutated, so key == carried hash == content_hash({type,data})"
+        },
+        {
+          "op": "read_frame",
+          "detail": "one answer"
+        }
+      ],
+      "accept": [
+        {
+          "outcome": "hello_answered",
+          "status": 200,
+          "detail": "EXECUTE_RESPONSE, 2xx — the peer accepts a well-formed envelope carrying a well-formed unreferenced entry"
+        }
+      ],
+      "refuse": [
+        {
+          "outcome": "control_void",
+          "detail": "anything else — the observation is discarded rather than recorded, and the row says COULD NOT LOOK"
+        }
+      ]
+    }
+  ],
+
+  "measured": [
+    "First run 2026-09-17 against `entity-core-go` (posture grants=bootstrap-default).",
+    "",
+    "CONTROL HELD — 200 EXECUTE_RESPONSE to the well-formed included entry, so the peer does not",
+    "refuse an unreferenced entry as such.",
+    "OBSERVED: `bare_close` on the mutated entry. NOT A VERDICT. Not routed as a peer finding.",
+    "",
+    "⭐ It is worth recording that this observation was reached by an instrument that shares no",
+    "code, no codec, no crypto and no language with the instrument that recorded the same shape",
+    "for this peer previously. Two instruments agreeing on an OBSERVATION is worth more than one,",
+    "even where neither may score it."
+  ]
+}

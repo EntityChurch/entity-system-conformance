@@ -1,0 +1,157 @@
+{
+  "header": [
+    "PEERS.diag — the peer set rs-conformance declares. ADR-0003 §7: membership is a RULE, not a",
+    "hand-typed list, and a verdict records a peer's IDENTITY rather than its name.",
+    "",
+    "⛔ THE NESTING CONDITION IS UNRESOLVED AND IS DELIBERATELY NOT GAMED HERE. ADR-0003 §7.3",
+    "refuses two suites whose peer sets are identical or nested. Suite 1 declares the whole",
+    "keystone roster, so EVERY set this suite could declare over keystone peers is nested inside",
+    "it, by arithmetic rather than by choice. The brief's instruction is explicit — raise it, do",
+    "not quietly shrink either side to make a gate go green — so the set below is chosen on its",
+    "own argument and the condition is declared as an open ask, not engineered away.",
+    "",
+    "⚠⚠ AND A CONTRADICTION IN THE BRIEF, REPORTED RATHER THAN RESOLVED BY GUESSING. The brief's",
+    "§6 tells this session to read a note called `suite_2_note`, which lives inside suite 1's own",
+    "peer-set declaration. The brief's §2 forbids opening ANY FILE of suite 1, because reading it",
+    "makes this suite a copy of it. The peer-binding tool's diversity lint points a reader at the",
+    "same note. THE NOTE WAS NOT READ, and the two instructions cannot both be followed.",
+    "Whatever argument it makes about forced nesting is therefore absent from this file, and the",
+    "rationale below was reached independently from ADR-0003 §7.3 and the roster alone. If that",
+    "note already answers this question, the answer was unreachable from inside the authoring",
+    "seat — which is itself the finding, and is reported."
+  ],
+
+  "suite": "rs-conformance",
+
+  "rationale": [
+    "THE SET IS CHOSEN TO BE DIFFERENT IN KIND, NOT MERELY SMALLER.",
+    "",
+    "Three instruments now exist and all three are written in imperative, C-descended languages:",
+    "the reference oracle in Go, suite 1 in Python, this suite in Rust. AGENTS.md's own founding",
+    "argument is that a shared language is shared idioms. That argument does not stop at the",
+    "instrument — it applies to the PEER as well. A peer written in the same family as the",
+    "instrument scoring it is the peer where a shared-idiom defect is LEAST visible, because both",
+    "sides make the same assumption and agree for a reason that has nothing to do with the",
+    "protocol. Suite 1's Go-era ancestor is the worked example: it refused every CBOR float and",
+    "skipped 20 corpus vectors for reasons that were about Go (AP-10).",
+    "",
+    "So this set privileges peers whose language paradigm is FURTHEST from all three instrument",
+    "languages: lazy-functional, ML-family, Lisp, logic, object-message, declarative-query,",
+    "dataflow, assembly, and a legacy business language. A CBOR or hashing assumption that three",
+    "C-descended instruments share is most likely to be contradicted by a peer whose language",
+    "offers it no idiom to borrow.",
+    "",
+    "⛔ AND GO, PYTHON AND RUST PEERS ARE EXCLUDED ON PURPOSE (see `exclusions`). Not because they",
+    "are bad peers — they are the best-maintained ones. Because THIS suite scoring THOSE peers is",
+    "the measurement least able to detect the failure this suite exists to detect.",
+    "",
+    "⚠ WHAT THIS SET IS NOT: it is not a claim of coverage, and it is not the full matrix. The",
+    "target is every peer against every other; where the full matrix is too expensive the pairs",
+    "actually run are DECLARED. This is that declaration, and it is a sample chosen by an argument",
+    "rather than by convenience."
+  ],
+
+  "sources": [
+    {
+      "source": "keystone",
+      "peers": [
+        "haskell",
+        "lean",
+        "ocaml",
+        "common-lisp",
+        "prolog",
+        "smalltalk",
+        "sql",
+        "cobol",
+        "asm-x86_64",
+        "forth"
+      ],
+      "note": [
+        "Ten of the roster's forty-six. Paradigm coverage, one per family where the roster allows:",
+        "lazy-functional (haskell) · dependent-typed (lean) · ML (ocaml) · Lisp (common-lisp) ·",
+        "logic (prolog) · object-message (smalltalk) · declarative-query (sql) · legacy-business",
+        "(cobol) · assembly (asm-x86_64) · concatenative-stack (forth).",
+        "",
+        "⚠ IDENTITY, NOT NAME. Each of these resolves through keystone's own roster and report at",
+        "the moment of use; nothing about a peer is stored in this file. 3 of 46 peers carry a",
+        "contract certification, so most rows will read `contract_certified: absent`, and that is",
+        "the honest value rather than an omission."
+      ]
+    },
+    {
+      "source": "core-go",
+      "peers": [
+        "core-go"
+      ],
+      "note": [
+        "The reference implementation, included DESPITE the language-distance rule above and for",
+        "the opposite reason: it is the peer whose behaviour has most shaped the cohort, so a",
+        "disagreement between this suite and the oracle ON THIS PEER is the single most",
+        "informative row either instrument can produce. Its identity is recorded as a PIN",
+        "(`peer_tree` / `image_id`) with `certified_by_contract: false` — a pin says WHICH BYTES,",
+        "a certification says they were CHECKED, and conflating the two is not available here."
+      ]
+    }
+  ],
+
+  "exclusions": [
+    {
+      "peers": [
+        "go",
+        "python",
+        "rust"
+      ],
+      "reason": [
+        "DELIBERATE, ARGUED, AND NOT A CONVENIENCE. These three are the languages of the three",
+        "existing instruments (oracle: Go · suite 1: Python · this suite: Rust). A shared-idiom",
+        "defect between an instrument and a peer of the same language is invisible by",
+        "construction: both sides inherit the same codec habit, the same integer-width",
+        "assumption, the same float posture, and they agree. Excluding them makes this set's",
+        "agreements mean more, not less.",
+        "",
+        "⚠ THIS IS AN EXCLUSION FROM THIS SUITE'S DECLARED SET, NOT A CLAIM THEY ARE UNIMPORTANT.",
+        "Suite 1 declares the whole roster and reaches all three. Joint coverage is the point:",
+        "`suite A reaches X, suite B reaches Y, together Z`. A peer nobody reaches would be a",
+        "gap; a peer one suite reaches is coverage."
+      ]
+    }
+  ],
+
+  "open_asks": [
+    {
+      "id": "RSC-PEERS-1",
+      "ask": "Does ADR-0003 §7.3's nested-set refusal bind when the outer set is the WHOLE roster — i.e. when nesting is forced by arithmetic and no choice of subset can avoid it?",
+      "owner": "entity-system-architecture, with entity-system-conformance",
+      "state": "OPEN. Not routed by this session; raised here so the next session does not re-derive it. ⭐ `lint-peer-diversity` DOES fire now — the brief recorded that it could not, and declaring this set made it. It reports clause 3 against the `core-go` source.",
+      "not_done": "This suite did NOT shrink its set, and did NOT propose shrinking suite 1's, to make the condition go away. Either would answer a design question with a gate edit."
+    },
+    {
+      "id": "RSC-PEERS-3",
+      "ask": "ADR-0003 §7.3 clause 3 refuses two suites declaring identical peer sets for one source. Is it satisfiable AT ALL for a source that contains exactly one peer?",
+      "owner": "entity-system-architecture, with entity-system-conformance",
+      "state": [
+        "OPEN, and found by declaring this set rather than by review. The `core-go` source has ONE",
+        "member. Two suites that both test it necessarily declare identical sets for it, so clause 3",
+        "fires; the only way to silence it is for one suite to stop testing the reference",
+        "implementation — which is the peer whose behaviour has most shaped the cohort and therefore",
+        "the one a second opinion is most valuable about.",
+        "",
+        "⛔ The clause is well-aimed at a multi-member source, where an identical set really is one",
+        "instrument wearing two names. On a singleton it inverts: it penalises exactly the overlap",
+        "that makes a cross-instrument comparison possible. A disagreement between two suites is",
+        "only observable ON A PEER BOTH RAN.",
+        "",
+        "⇒ Suggested shape of an answer, not adopted here: clause 3 keys on sources with more than",
+        "one member, or the finding is downgraded to a note for singleton sources."
+      ],
+      "not_done": "core-go was NOT dropped from this declaration to make `make lint` green. It was run against, and it produced this session's most informative result; declaring a set smaller than the set actually run is the undeclared-sample defect this whole file exists to prevent."
+    },
+    {
+      "id": "RSC-PEERS-2",
+      "ask": "What is the generator's peer set, by name, for a suite that must declare it as data?",
+      "owner": "entity-system-conformance",
+      "state": "NOT ENUMERATED by this session and therefore DECLARED ABSENT rather than guessed. `entity-system-generator`'s `tools/host-launch CLIENT=` slot is named in AGENTS.md as one of the two standardized ways to reach the cohort, and this file should carry a `generator` source. Writing peer names this session did not verify would put an unresolvable name in the one artifact whose job is to make the input auditable.",
+      "not_done": "no `generator` source block was invented"
+    }
+  ]
+}

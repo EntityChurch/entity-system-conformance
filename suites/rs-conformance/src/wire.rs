@@ -46,7 +46,6 @@ pub struct Frame {
     /// ENTITY-CBOR-ENCODING §6.3 forbids CBOR tags on data fields. If a peer's own answer
     /// carries one that is an observation about the peer, recorded here.
     pub answer_carried_tag: bool,
-    pub correlated: bool,
 }
 
 pub struct Conn {
@@ -270,6 +269,5 @@ fn parse_envelope(v: &Value) -> Result<Frame, String> {
         message,
         closed_after: false,
         answer_carried_tag: false,
-        correlated: false,
     })
 }

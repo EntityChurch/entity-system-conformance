@@ -69,6 +69,14 @@ glob     = "docs/status/TRACKER-*.md"
 internal = true            # durable AND must never publish: what is open with one counterpart
 
 [[living]]
+path     = "docs/status/FINDINGS-FROM-AUTHORING.md"
+internal = true
+# Undated on purpose — it is appended to as authoring proceeds and a row leaves it only when the
+# finding has been routed AND answered, so a date on the filename would be a date on the first
+# batch and wrong from the second. Declared so that "durable" is a statement rather than the
+# absence of a date, and internal because every row names a counterpart and a packet.
+
+[[living]]
 glob     = "docs/agents/memory/*.md"
 internal = true
 # ⚠ WHY MEMORY IS INTERNAL HERE, stated because the standard's example publishes it and we do not.
@@ -100,6 +108,31 @@ path  = "CHANGELOG.md"
 title = "Changelog"
 blurb = "What has landed, in Keep a Changelog form."
 group = "Overview"
+
+# ── Taking part ───────────────────────────────────────────────────────────────────
+# ⛔ ALSO LOOSE TOP-LEVEL PROSE, AND THESE THREE WERE ABSENT FROM THIS REPOSITORY ENTIRELY
+# until the first release was prepared. They are the files a reader looks for before they decide
+# whether to send anything here — how to contribute, what is expected of people, and how to report
+# a security problem privately rather than in public. They are the project's, identical wherever
+# they appear, and are not rewritten per repository.
+
+[[doc]]
+path  = "CONTRIBUTING.md"
+title = "Contributing"
+blurb = "How to propose a change, and the DCO sign-off the project requires."
+group = "Taking part"
+
+[[doc]]
+path  = "CODE_OF_CONDUCT.md"
+title = "Code of Conduct"
+blurb = "What we expect of each other."
+group = "Taking part"
+
+[[doc]]
+path  = "SECURITY.md"
+title = "Security"
+blurb = "How to report a vulnerability privately."
+group = "Taking part"
 
 [[doc]]
 path  = "docs/CLI.md"

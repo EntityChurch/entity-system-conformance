@@ -1,5 +1,11 @@
 [package]
 name = "rs-conformance"
+# ⭐ THIS SUITE'S OWN NUMBER, NOT THE REPOSITORY'S — declared in `/.version-scope` at the root so
+# that the difference is a statement rather than a discrepancy. A suite is an independent
+# instrument: it can be rewritten or retired without the requirement corpus moving, and the corpus
+# moves constantly without touching it. ⚠ And this is NOT how the suite is identified in a result.
+# A verdict names the instrument by a digest over these sources, because that is the half a reader
+# can check for themselves; nothing joins on the string below.
 version = "0.1.0"
 edition = "2021"
 description = "Suite 2 of the entity-core conformance instrument. Rust, std only, zero dependencies."

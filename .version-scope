@@ -1,0 +1,17 @@
+# .version-scope — the places in this tree whose version number is NOT this repository's.
+#
+# This repository has one release version, and it is the number in `VERSION`. Everything not
+# listed below carries that number and must agree with it.
+#
+# One path per line. Blank lines and `#` comments are ignored. A directory prefix covers
+# everything under it; globs work. This is a statement about what a number MEANS, not a way of
+# switching a check off: a disagreement outside this list is still a defect.
+
+# Each suite is an independent instrument with its own lifecycle — a new one can be built,
+# rewritten or retired without the requirement corpus moving, and the corpus can move without a
+# suite changing at all. So a suite's package version tracks that suite, not the repository.
+#
+# It is also not how a suite is identified. A verdict document names the instrument that produced
+# it by a digest over the suite's own sources, because that is the half a reader can check; a
+# version string is a label anyone can type. Nothing joins on the number below.
+suites/rs-conformance/Cargo.toml

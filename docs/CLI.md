@@ -103,9 +103,10 @@ make lint-requirements   lint-items        lint-sources       lint-spec-data
 make lint-suite-independence   lint-suite-slot   lint-suite-constants
 make lint-peer-diversity lint-implements   lint-control-set
 make lint-ignored        lint-inbox        lint-codec-agreement
+make lint-version        (its control set is `make lint-version-selftest`)
 ```
 
-Two are worth naming to anyone building a suite:
+Three are worth naming — two to anyone building a suite, and one to anyone reading a number here:
 
 - **`lint-suite-independence`** — no suite may be written in the reference oracle's language, and no
   suite may take a dependency the cohort already shares. A shared language is shared idioms; a
@@ -114,6 +115,14 @@ Two are worth naming to anyone building a suite:
   are compared on every run. They disagreed on the corpus's own map-key ordering rule for this
   repo's entire life and nothing compared them. **Before adding a third implementation of anything,
   add the comparison first.**
+- **`lint-version`** — `VERSION` is this repository's release number, and anywhere else in the tree
+  that states a version either states the same one or is named in `.version-scope` as versioning on
+  its own axis. **It checks that every axis is declared, not that every number matches**, because
+  they legitimately do not: a suite is an independent instrument and carries its own. What it is
+  out of scope for is said in its own output — it cannot know whether a number is the right one,
+  whether it has been used before, or whether a change is breaking. And it prints
+  `status=CLEAN | FINDING | COULD-NOT-LOOK` rather than relying on an exit code, because `make`
+  flattens every recipe failure into one.
 
 ## 5. The suite interface
 

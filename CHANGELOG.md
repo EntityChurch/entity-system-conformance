@@ -5,6 +5,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+**The first public release of this repository.** Nothing below has been published before, so all
+of it is new to anyone outside it.
+
+**Breaking:** no — this is the first public release. There is no earlier version of this repository
+for anything to have been built against, and nothing that was public has been withdrawn. The answer
+is written down rather than left to be inferred, because *"nothing can break when nothing exists
+yet"* is the one release where the question never gets asked, and it is only worth anything if the
+surface it is about has been named. It has: see **The public surface** in `AGENTS.md`. The short
+form is that **a requirement id is the commitment** — allocated once, never renumbered, never
+reused — and that the suite invocation contract is **declared and not yet ratified**, which is
+stated as a limitation and not as a promise.
+
+**What a version number here does not mean.** It does not track the specification's version, and
+it is not a claim about how much of the protocol is covered. The coverage figures and the four
+ratchets are printed on every run and move independently of it; a release that lowers one of them
+has not broken anything. Each suite carries its own package version for its own lifecycle, declared
+at the repository root so the difference is a statement rather than a discrepancy.
+
 ### Added
 
 - **`requirements/` — the deliverable.** 50 requirement files over `entity-core-protocol`, each one
@@ -37,6 +55,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`make fmt`** — a Tier-1 verb that reformats nothing and prints the complete list of why. It
   says so out loud rather than exiting quietly, because a verb that prints nothing and succeeds
   cannot be told apart from one that ran and found no work.
+- **`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `SECURITY.md`** — how to propose a change and the
+  sign-off it needs, what is expected of people here, and how to report a security problem
+  privately instead of in a public issue. They had never been written in this repository, which
+  nothing noticed until the first release was prepared.
+- **The repository states its own public surface** — what a version number here is a promise about
+  and what it is not, in `AGENTS.md`. Without it, "breaking" has no referent.
 
 ### Changed
 

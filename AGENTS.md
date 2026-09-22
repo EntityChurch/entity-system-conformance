@@ -294,6 +294,31 @@ figure and `make lint` prints all four every run; none is restated here, because
 into an injected file is stale the moment it is copied and reads as current forever.** **Lowered
 only by doing the work, never by editing the number.**
 
+## The public surface — what a version number here is a promise about
+
+> ⭐ **IN: requirement ids** (`<PREFIX>-R<n>`, allocated once, **never renumbered and never
+> reused**) · **the requirement file's field names and their meanings** · **the verdict document's
+> field names**, `requirement_id` above all, since it is the only join between two instruments ·
+> **a suite executable's flags and its exit codes** · **the schemas of the files we read as
+> declared data** — postures, `PEERS.diag`, `IMPLEMENTS`, `CONTROL-SET.diag` · **the Tier-1 `make`
+> verbs and `SUITE=`**.
+> ⛔ **OUT: everything inside a suite** — its check names, modules, language and build · the
+> fixture corpora · the `lint-*` sub-targets · report and document prose · the ratchet figures ·
+> and **`spec-data/`, which is upstream's text and carries upstream's version, never ours**.
+
+**Why that line and not a longer one: "breaking" is undefined until the surface is named**, so
+every version argument about this repo before this sentence existed was an opinion.
+
+- ⭐ **A requirement id is the one hard commitment, and it is the whole point.** Two instruments
+  join on it, a disagreement is addressed by it, and a consumer's baseline is keyed to it. Renaming
+  one silently re-scores every result anybody holds. **An id is retired in place, never reissued.**
+- ⚠ **The suite contract is declared and NOT ratified** (`docs/DESIGN-THE-SUITE-CONTRACT.md` says so
+  in its own header, and three other seats have to agree it). At `0.x` its field names are what we
+  will keep still *where we can*, not a guarantee — and the changelog says which way each release
+  went, rather than leaving a reader to diff for it.
+- **Numbers are never surface.** Coverage counts and the four ratchets move on purpose, downward,
+  and a release that lowers one is not breaking anything.
+
 ## Publication
 
 ⭐ **THIS REPO PUBLISHES.** `CANONICAL-DOCS.toml` is the whole interface — we declare, the release

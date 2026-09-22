@@ -1,0 +1,15 @@
+# .release-removals — paths this repository used to publish and deliberately no longer does.
+#
+# If a file you could once fetch from here has gone, the reason belongs in this file: what moved,
+# and where to look for it now. A removal is not forbidden; an unexplained one is, because from
+# outside there is no way to tell a deliberate withdrawal from a mistake.
+#
+# One path or path-prefix per line. Blank lines and `#` comments are ignored.
+
+# ⭐ NOTHING IS LISTED, AND THAT IS A MEASUREMENT RATHER THAN AN OVERSIGHT.
+# No version of this repository has been published yet, so there is no earlier public tree for
+# anything to have disappeared from. The first release adds files and withdraws none.
+#
+# Two things worth knowing if you are the next person here: a path that stops being published is
+# just as invisible to a reader as a path that is deleted, so both belong above; and if you
+# de-version a filename — `…-v1.<ext>` to `…-<ext>` — assume something out there pins the old one.

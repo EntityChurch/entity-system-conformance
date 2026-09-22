@@ -11,7 +11,7 @@
 # (`entity-system-generator` ADR-0001): host python is stdlib-only; anything needing a third-party
 # library runs in a container. `lint` stays containerised so the interpreter version is pinned.
 
-.PHONY: help build corpus test fmt lint lint-native lint-ignored lint-sources lint-spec-data lint-requirements lint-items check clean \
+.PHONY: help build corpus test fmt lint lint-native lint-version lint-version-selftest lint-ignored lint-sources lint-spec-data lint-requirements lint-items check clean \
         install-probe require-suite require-peers peers peer-identity inbox lint-inbox lint-suite-slot lint-codec-agreement \
         keystone-suite generator-suite core-go-suite \
         keystone-s1 keystone-oracle generator-s1 generator-oracle core-go-s1 core-go-oracle differential \
@@ -73,7 +73,7 @@ help:
 	@echo "  the lint parts, each runnable alone and each with a --self-test:"
 	@echo "    lint-requirements lint-items lint-sources lint-spec-data lint-suite-independence"
 	@echo "    lint-suite-slot lint-suite-constants lint-peer-diversity lint-implements lint-control-set"
-	@echo "    lint-ignored lint-inbox lint-codec-agreement"
+	@echo "    lint-ignored lint-inbox lint-codec-agreement lint-version"
 	@echo
 	@echo "  substrate-go   build the reference image via $(SUBSTRATE_GO)'s own 'make build'"
 	@echo "  peer-up        run $(GO_IMAGE) entity-peer as $(PEER_NAME) on network $(NET)"
@@ -347,7 +347,134 @@ differential:
 
 # <<< RUN PATH — end of the suite-generic region ────────────────────────────────────────────────
 
-lint: lint-ignored lint-suite-independence lint-suite-slot lint-codec-agreement lint-suite-constants lint-sources lint-spec-data lint-requirements lint-items lint-peer-diversity lint-implements lint-control-set lint-inbox
+lint: lint-version-selftest lint-version lint-ignored lint-suite-independence lint-suite-slot lint-codec-agreement lint-suite-constants lint-sources lint-spec-data lint-requirements lint-items lint-peer-diversity lint-implements lint-control-set lint-inbox
+
+# ⭐ THE ENFORCEMENT POINT FOR "NO UNDECLARED VERSION AXIS". `VERSION` is this repository's release
+# number. Anywhere else in the tree that states a version either states the same one, or is named
+# in `.version-scope` as versioning on its own axis. Undeclared disagreement is the defect.
+#
+# ⚠ WHY THAT QUESTION AND NOT "do all the numbers match". They legitimately do not: a suite is an
+# independent instrument with its own lifecycle, and `suites/rs-conformance` is declared out of
+# scope for exactly that reason. A gate demanding equality would be wrong about this tree, and one
+# that took the exclusions and then compared what was left would, right now, compare NOTHING and
+# print a pass — which is the shape this repository refuses everywhere else. Asking instead whether
+# every axis is *declared* has content in every tree, including this one: add a second crate at a
+# different number without saying so and this fires.
+#
+# ⚠ AND WHAT IT STILL DOES NOT DO, stated rather than left to inference. It does not know whether
+# the number is the RIGHT one, whether it has been used before, or whether a change is breaking —
+# none of those is answerable from inside the tree. It reads `Cargo.toml`, `pyproject.toml` and
+# `package.json` only, so a version-bearing file of some other kind is invisible to it; the scan
+# count prints on every run so that bound is visible rather than assumed.
+#
+# ⛔ FAIL-CLOSED ON ITS OWN INPUTS: an absent `VERSION`, a `VERSION` that does not read as a release
+# number, a manifest with a package table but no version in it, and a `.version-scope` that exists
+# and cannot be read are each COULD-NOT-LOOK — never a pass. A declaration that cannot be read is
+# not an empty one.
+#
+# ⭐ AND THE OUTCOME IS PRINTED AS A TOKEN, not left to the exit code, because `make` collapses
+# every recipe failure to its own exit 2. Inside a recipe, "a finding" and "could not look" are
+# indistinguishable to any caller through that boundary — so `status=CLEAN|FINDING|COULD-NOT-LOOK`
+# is the observable, and it is what the self-test asserts. Encoding the distinction only in an exit
+# code nothing can read would have been a distinction on paper.
+#
+# ⭐ `VSROOT` IS WHAT MAKES IT TESTABLE — the tree it reads, defaulting to this one. `make
+# lint-version-selftest` points it at planted trees and asserts each refusal, which is this
+# repository's floor for a gate: a check that cannot be made to fail has not been shown to measure
+# anything, and that applies to the checks as hard as it applies to the requirements.
+VSROOT ?= .
+
+lint-version:
+	@set -e; cd $(VSROOT) 2>/dev/null || { echo "lint-version: status=COULD-NOT-LOOK — $(VSROOT) is not a readable directory" >&2; exit 2; }; \
+	 cnl() { echo "lint-version: status=COULD-NOT-LOOK — $$1" >&2; exit 2; }; \
+	 test -f VERSION || cnl "VERSION is absent"; \
+	 v=$$(head -n1 VERSION | tr -d '[:space:]'); \
+	 case "$$v" in [0-9]*.[0-9]*.[0-9]*) ;; \
+	   *) cnl "VERSION does not read as a release number: '$$v'";; esac; \
+	 pats=''; \
+	 if [ -e .version-scope ]; then \
+	   [ -r .version-scope ] || cnl ".version-scope exists and cannot be read"; \
+	   pats=$$(sed 's/#.*//' .version-scope | tr -s '[:space:]' '\n' | grep . || true); \
+	 fi; \
+	 files=$$(find . -path ./.git -prune -o -path ./$(OUT) -prune -o -path ./scratch -prune -o \
+	          -path './suites/*/target' -prune -o -type f \
+	          \( -name Cargo.toml -o -name pyproject.toml -o -name package.json \) -print \
+	          | sed 's|^\./||' | sort); \
+	 scanned=0; declared=0; bad=0; hit=''; \
+	 for f in $$files; do \
+	   scanned=$$((scanned+1)); \
+	   case "$$f" in \
+	     *.json) fv=$$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$$f" | head -n1); tbl=1;; \
+	     *) tbl=$$(grep -cE '^[[:space:]]*\[(package|project|tool\.poetry|workspace\.package)\][[:space:]]*$$' "$$f" || true); \
+	        fv=$$(awk '/^[[:space:]]*\[/{t=$$0;sub(/^[[:space:]]*\[/,"",t);sub(/\].*$$/,"",t)} \
+	                   /^[[:space:]]*version[[:space:]]*=/{ \
+	                     if(t=="package"||t=="project"||t=="tool.poetry"||t=="workspace.package"){ \
+	                       s=$$0; sub(/^[^"]*"/,"",s); sub(/".*$$/,"",s); print s; exit}}' "$$f");; \
+	   esac; \
+	   if [ "$$tbl" != "0" ] && [ -z "$$fv" ]; then \
+	     echo "lint-version: $$f declares a package table and no version could be read from it" >&2; bad=2; continue; \
+	   fi; \
+	   [ -n "$$fv" ] || continue; \
+	   inscope=0; \
+	   for p in $$pats; do \
+	     case "$$f" in "$$p"|"$$p"/*) inscope=1; hit="$$hit $$p";; \
+	       *) case "$$f" in $$p) inscope=1; hit="$$hit $$p";; esac;; esac; \
+	   done; \
+	   if [ "$$inscope" = 1 ]; then \
+	     declared=$$((declared+1)); \
+	     echo "lint-version:   out of scope per .version-scope — $$f ($$fv), its own axis"; \
+	   elif [ "$$fv" != "$$v" ]; then \
+	     echo "lint-version: $$f is $$fv, VERSION is $$v, and .version-scope does not name it. Either bump it with the release, or declare the axis it is really on" >&2; bad=1; \
+	   fi; \
+	 done; \
+	 for p in $$pats; do \
+	   case " $$hit " in *" $$p "*) ;; \
+	     *) echo "lint-version: ⚠ .version-scope names '$$p', which matched no file — a declaration that has stopped describing the tree. Reported, not refused.";; esac; \
+	 done; \
+	 if [ "$$bad" = 2 ]; then echo "lint-version: status=COULD-NOT-LOOK — a manifest above could not be read for a version, so this run did not cover the tree" >&2; exit 2; fi; \
+	 if [ "$$bad" = 1 ]; then echo "lint-version: status=FINDING — an undeclared version axis, above" >&2; exit 1; fi; \
+	 echo "lint-version: status=CLEAN — $$v, $$scanned manifest(s) scanned, $$declared on a declared separate axis, 0 undeclared disagreement(s)"
+
+# The self-test. Each case plants ONE defect in an otherwise clean tree and asserts the STATUS the
+# gate reports, because the three outcomes have to stay distinguishable: CLEAN · FINDING · COULD
+# NOT LOOK. The control at the end is the one that matters — the clean tree must still pass, or
+# every refusal above is being produced by something other than the defect.
+#
+# ⚠ It re-enters through `$${MAKE:-make}` rather than `$(MAKE)` on purpose: `make` treats a literal
+# `$(MAKE)` as a recursive call and runs the line even under `-n`, so a dry run of `lint` executed
+# this whole self-test in dry-run mode and reported a failure that was an artifact of `-n`.
+lint-version-selftest:
+	@set -e; T=$$(mktemp -d); trap 'chmod -R u+rwX "$$T" 2>/dev/null; rm -rf "$$T"' EXIT; \
+	 mk() { d="$$T/$$1"; mkdir -p "$$d/sub"; printf '0.4.0\n' > "$$d/VERSION"; \
+	        printf '[package]\nname = "x"\nversion = "0.4.0"\n' > "$$d/sub/Cargo.toml"; }; \
+	 want() { set +e; got=$$($${MAKE:-make} -s lint-version VSROOT="$$T/$$1" 2>&1 | sed -n 's/.*status=\([A-Z-]*\).*/\1/p' | tail -n1); set -e; \
+	          if [ "$$got" != "$$2" ]; then echo "lint-version-selftest: FAIL — $$1 reported '$$got', wanted '$$2'" >&2; exit 1; fi; \
+	          echo "  ok  $$1 -> $$2  ($$3)"; }; \
+	 mk absent-version; rm "$$T/absent-version/VERSION"; \
+	 mk unreadable-version; printf 'nightly\n' > "$$T/unreadable-version/VERSION"; \
+	 mk unreadable-scope; printf 'sub/Cargo.toml\n' > "$$T/unreadable-scope/.version-scope"; \
+	   chmod 000 "$$T/unreadable-scope/.version-scope"; \
+	 mk no-version-in-table; printf '[package]\nname = "x"\n' > "$$T/no-version-in-table/sub/Cargo.toml"; \
+	 mk undeclared-disagreement; printf '[package]\nname = "x"\nversion = "9.9.9"\n' > "$$T/undeclared-disagreement/sub/Cargo.toml"; \
+	 mk declared-disagreement; printf '[package]\nname = "x"\nversion = "9.9.9"\n' > "$$T/declared-disagreement/sub/Cargo.toml"; \
+	   printf '# its own axis\nsub/Cargo.toml\n' > "$$T/declared-disagreement/.version-scope"; \
+	 mk declared-by-prefix; printf '[package]\nname = "x"\nversion = "9.9.9"\n' > "$$T/declared-by-prefix/sub/Cargo.toml"; \
+	   printf 'sub\n' > "$$T/declared-by-prefix/.version-scope"; \
+	 mk declared-by-glob; printf '[package]\nname = "x"\nversion = "9.9.9"\n' > "$$T/declared-by-glob/sub/Cargo.toml"; \
+	   printf '*/Cargo.toml\n' > "$$T/declared-by-glob/.version-scope"; \
+	 mk rotted-scope; printf 'long/gone/Cargo.toml\n' > "$$T/rotted-scope/.version-scope"; \
+	 mk clean; \
+	 want absent-version           COULD-NOT-LOOK "absent input is never a pass"; \
+	 want unreadable-version       COULD-NOT-LOOK "a VERSION that is not a release number is could-not-look"; \
+	 want unreadable-scope         COULD-NOT-LOOK "a declaration that cannot be read is not an empty one"; \
+	 want no-version-in-table      COULD-NOT-LOOK "a package table whose version cannot be read is could-not-look"; \
+	 want undeclared-disagreement  FINDING "the defect this gate exists for"; \
+	 want declared-disagreement    CLEAN "a declared separate axis is not a disagreement"; \
+	 want declared-by-prefix       CLEAN "a directory prefix covers everything under it"; \
+	 want declared-by-glob         CLEAN "a glob matches"; \
+	 want rotted-scope             CLEAN "an entry matching nothing is reported, never a refusal"; \
+	 want clean                    CLEAN "the control — a clean tree still passes"; \
+	 echo "lint-version self-test: OK — 10 case(s), 4 refusals and 1 finding each produced by ONE planted defect"
 
 # ⭐ THE ENFORCEMENT POINT FOR SUITE=, without which it is a convention and decays back into a
 # constant on the first hurried edit. Between the RUN PATH markers, no recipe may name a suite
